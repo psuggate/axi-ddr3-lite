@@ -277,9 +277,8 @@ module ddr3_axi_ctrl_tb;
   );
 
 
-  //-----------------------------------------------------------------
-  // axi_store: Perform write transfer (128-bit)
-  //-----------------------------------------------------------------
+  // -- Perform write transfer (128-bit) -- //
+
   task axi_store;
     input [ASB:0] addr;
     input [127:0] data;
@@ -325,9 +324,8 @@ module ddr3_axi_ctrl_tb;
   endtask  // axi_fetch
 
 
-  //-----------------------------------------------------------------
-  // axi_fetch: Perform read transfer (128-bit)
-  //-----------------------------------------------------------------
+  // -- Perform read transfer (128-bit) -- //
+
   task axi_fetch;
     input [ASB:0] addr;
     output [127:0] data;
@@ -362,63 +360,6 @@ module ddr3_axi_ctrl_tb;
       @(posedge clock);
     end
   endtask  // axi_fetch
-
-
-// -- Another Module Yet Not Under Test -- //
-
-`ifdef __amynut
-  assign store = |wr_mask;
-
-  ddr3_axi_pmem ddr3_axi_pmem_inst (
-      .clock(clock),
-      .reset(reset),
-
-      .axi_awvalid_i(awvalid),
-      .axi_awready_o(awready),
-      .axi_awaddr_i(awaddr),
-      .axi_awid_i(awid),
-      .axi_awlen_i(awlen),
-      .axi_awburst_i(awburst),
-
-      .axi_wvalid_i(wvalid),
-      .axi_wready_o(wready),
-      .axi_wlast_i (wlast),
-      .axi_wstrb_i (wstrb),
-      .axi_wdata_i (wdata),
-
-      .axi_bvalid_o(bvalid),
-      .axi_bready_i(bready),
-      .axi_bresp_o(bresp),
-      .axi_bid_o(bid),
-
-      .axi_arvalid_i(arvalid),
-      .axi_arready_o(arready),
-      .axi_araddr_i(araddr),
-      .axi_arid_i(arid),
-      .axi_arlen_i(arlen),
-      .axi_arburst_i(arburst),
-
-      .axi_rvalid_o(rvalid),
-      .axi_rready_i(rready),
-      .axi_rlast_o(rlast),
-      .axi_rresp_o(rresp),
-      .axi_rid_o(rid),
-      .axi_rdata_o(rdata),
-
-      .ram_accept_i(accept),
-      .ram_error_i (error),
-      .ram_req_id_o(reqid),
-      .ram_addr_o  (maddr),
-
-      .ram_wr_o(wr_mask),
-      .ram_write_data_o(wr_data),
-
-      .ram_rd_o (fetch),
-      .ram_ack_i(rd_valid),
-      .ram_resp_id_i(respi),
-      .ram_read_data_i(rd_data)
-  );
-`endif
 
 
 endmodule  // ddr3_axi_ctrl_tb
