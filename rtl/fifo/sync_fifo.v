@@ -14,7 +14,7 @@ module sync_fifo (
 
   // Skid-buffer for the output data, so that registered-output SRAM's can be
   // used; e.g., Xilinx Block SRAMs, or GoWin BSRAMs.
-  parameter OUTREG = 1; // 0, 1, or 2
+  parameter OUTREG = 1;  // 0, 1, or 2
 
   parameter WIDTH = 8;
   localparam MSB = WIDTH - 1;

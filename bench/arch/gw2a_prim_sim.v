@@ -9,57 +9,61 @@ module GSR;
 
 endmodule  // GSR
 
-module IDDR(Q0, Q1, D, CLK);
+module IDDR (
+    Q0,
+    Q1,
+    D,
+    CLK
+);
 
-input D;
-input CLK;
-output Q0;
-output Q1;
+  input D;
+  input CLK;
+  output Q0;
+  output Q1;
 
-parameter Q0_INIT = 1'b0;
-parameter Q1_INIT = 1'b0;
+  parameter Q0_INIT = 1'b0;
+  parameter Q1_INIT = 1'b0;
 
-wire gsrt = GSR.GSRO;
+  wire gsrt = GSR.GSRO;
 
-reg Q0_oreg, Q1_oreg,Q0_reg, Q1_reg;
+  reg Q0_oreg, Q1_oreg, Q0_reg, Q1_reg;
 
-initial begin
-  Q0_reg = Q0_INIT;
-  Q1_reg = Q1_INIT;
-  Q0_oreg = Q0_INIT;
-  Q1_oreg = Q1_INIT;
-end
-
-assign Q0 = Q0_reg;
-assign Q1 = Q1_reg;
-
-always @(gsrt) begin
-  if(!gsrt) begin
-    assign Q0_reg = Q0_INIT;
-    assign Q1_reg = Q1_INIT;
-    assign Q0_oreg = Q0_INIT;
-    assign Q1_oreg = Q1_INIT;
+  initial begin
+    Q0_reg  = Q0_INIT;
+    Q1_reg  = Q1_INIT;
+    Q0_oreg = Q0_INIT;
+    Q1_oreg = Q1_INIT;
   end
-  else begin
-    deassign Q0_reg;
-    deassign Q1_reg;
-    deassign Q0_oreg;
-    deassign Q1_oreg;
+
+  assign Q0 = Q0_reg;
+  assign Q1 = Q1_reg;
+
+  always @(gsrt) begin
+    if (!gsrt) begin
+      assign Q0_reg = Q0_INIT;
+      assign Q1_reg = Q1_INIT;
+      assign Q0_oreg = Q0_INIT;
+      assign Q1_oreg = Q1_INIT;
+    end else begin
+      deassign Q0_reg;
+      deassign Q1_reg;
+      deassign Q0_oreg;
+      deassign Q1_oreg;
+    end
   end
-end
 
-always @(posedge CLK) begin
-  Q0_oreg <= D;
-  Q0_reg <= Q0_oreg;
-  Q1_reg <= Q1_oreg;
+  always @(posedge CLK) begin
+    Q0_oreg <= D;
+    Q0_reg  <= Q0_oreg;
+    Q1_reg  <= Q1_oreg;
 
-end
+  end
 
-always @(negedge CLK) begin
-  Q1_oreg <= D;
-end
+  always @(negedge CLK) begin
+    Q1_oreg <= D;
+  end
 
-endmodule //IDDR (ddr input)
+endmodule  //IDDR (ddr input)
 
 module ODDR (
     Q0,

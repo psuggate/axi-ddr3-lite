@@ -381,9 +381,9 @@ OSER4
           .Q1_INIT(1'b1)
       ) dql_iddr_inst[(ii+1)*8-1:(ii*8)] (
           .CLK(clk_src[ii]),
-          .D(ddr3_dq_io[(ii+1)*8-1:(ii*8)]),
-          .Q0(dq_lo[(ii+1)*8-1:(ii*8)]),
-          .Q1(dq_hi[(ii+1)*8-1:(ii*8)])
+          .D  (ddr3_dq_io[(ii+1)*8-1:(ii*8)]),
+          .Q0 (dq_lo[(ii+1)*8-1:(ii*8)]),
+          .Q1 (dq_hi[(ii+1)*8-1:(ii*8)])
       );
 
     end

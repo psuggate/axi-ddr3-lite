@@ -1,6 +1,6 @@
 `timescale 1ns / 100ps
 module gowin_rpll (
-    clkout, // 120 MHz by default
+    clkout,  // 120 MHz by default
     lock,
     clkin
 );

@@ -3,11 +3,8 @@
  * Converts simple memory-controller commands into DFI commands.
  * 
  * Notes:
- *  - assumes that the AXI4 interface converts write-data into 128-bit chunks,
- *    padding as required;
- *  - read data will also be a (continuous) stream of 128-bit chunks, so the
- *    AXI4 interface will have to drop any (unwanted) trailing data, if not
- *    required;
+ *  - handles device- and mode- specific timings;
+ *  - no flow-control, nor buffering -- as this belongs at higher layers;
  *  - assumes that the memory controller and the AXI4 bus are within the same
  *    clock-domain;
  * 
@@ -19,6 +16,8 @@ module ddr3_dfi (  /*AUTOARG*/);
   parameter DDR_FREQ_MHZ = 100;
   parameter DDR_WR_LATENCY = 6;
   parameter DDR_RD_LATENCY = 5;
+
+  // A DDR3 burst has length of 8 transfers (DDR), so four clock/memory cycles
   localparam DDR_BURST_LEN = 4;
 
   localparam DDR_BANK_BITS = 3;
@@ -40,7 +39,9 @@ module ddr3_dfi (  /*AUTOARG*/);
 
   // From/to DDR3 Controller
   input enable_i;
+  input request_i;
   input [3:0] command_i;
+  input autopre_i;
   output accept_o;
   input [BSB:0] bank_i;
   input [RSB:0] addr_i;
@@ -58,7 +59,7 @@ module ddr3_dfi (  /*AUTOARG*/);
   output rdlast_o;  // todo: a good idea ??
   output [MSB:0] rddata_o;
 
-  // DDR3 PHY Interface (-ish)
+  // (Pseudo-) DDR3 PHY Interface (-ish)
   output dfi_cke_o;
   output dfi_reset_n_o;
   output dfi_cs_n_o;
@@ -77,6 +78,31 @@ module ddr3_dfi (  /*AUTOARG*/);
   input dfi_valid_i;
   input [MSB:0] dfi_data_i;
   input [1:0] dfi_rddata_dnv_i;  // ??
+
+
+  // -- Constants -- //
+
+  localparam TACTIVATE = 4;
+  localparam TREFRESH = 16;
+  localparam TPRECHARGE = 4;
+
+  // localparam REFRESH_CYCLES =
+
+  // DDR3 Commands: {CS#, RAS#, CAS#, WE#}
+  localparam DDR3_NOOP = 4'b0111;
+  localparam DDR3_ZQCL = 4'b0110;
+  localparam DDR3_READ = 4'b0101;
+  localparam DDR3_WRIT = 4'b0100;
+  localparam DDR3_ACTV = 4'b0011;
+  localparam DDR3_PREC = 4'b0010;
+  localparam DDR3_REFR = 4'b0001;
+  localparam DDR3_MODE = 4'b0000;
+
+  localparam DDR3_PREA = 4'bxxxx;
+
+
+  reg [3:0] cmd_prev_q, cmd_curr_q;
+  wire [3:0] cmd_next_w;
 
 
   // -- Connect FIFO's to the DDR IOB's -- //
@@ -99,6 +125,61 @@ module ddr3_dfi (  /*AUTOARG*/);
       cke_q <= 1'b0;
     end else begin
       cke_q <= enable_i;
+    end
+  end
+
+
+  // todo:
+  //  - (row) activate delays
+  //  - read sequencing
+  //  - write sequencing
+  //  - read -> read sequencing
+  //  - read -> write sequencing
+  //  - write -> write sequencing
+  //  - write -> read sequencing
+  //  - (row) precharge delays
+  //  - refresh delays
+  //  - precharge -> refresh sequencing
+  //  - mode-register read & write sequencing
+
+  localparam ST_IDLE = 4'b0000;
+  localparam ST_ACTV = 4'b0001;
+  localparam ST_READ = 4'b0010;
+  localparam ST_WRIT = 4'b0011;
+  localparam ST_PREC = 4'b1101;
+  localparam ST_PREA = 4'b1110;
+  localparam ST_REFR = 4'b1111;
+
+  reg [3:0] state;
+
+  // todo: needs one of these per-bank ??
+  always @(posedge clock) begin
+    if (reset) begin
+      state <= ST_IDLE;
+    end else begin
+      case (state)
+        ST_IDLE: begin
+          // transitions:
+          //  - REFR
+          //  - ACTV
+        end
+
+        ST_ACTV: begin
+          // Activated banks & rows
+        end
+
+        ST_PREC: begin
+          // Wait until timer has elapsed
+        end
+
+        ST_PREA: begin
+          // Wait until timer has elapsed
+        end
+
+        ST_REFR: begin
+          // Wait until timer has elapsed
+        end
+      endcase
     end
   end
 

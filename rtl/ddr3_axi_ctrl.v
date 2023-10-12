@@ -102,9 +102,9 @@ module ddr3_axi_ctrl (
   parameter DATA_FIFO_BLOCK = 1;
   localparam DBITS = $clog2(DATA_FIFO_DEPTH);
 
-// If the memory controller is idle (and both datapaths), send any request
-// straight to the memory-controller (if 'FAST_PATH_ENABLE == 1')
-parameter FAST_PATH_ENABLE = 1;
+  // If the memory controller is idle (and both datapaths), send any request
+  // straight to the memory-controller (if 'FAST_PATH_ENABLE == 1')
+  parameter FAST_PATH_ENABLE = 1;
 
 
   input clock;
@@ -165,8 +165,8 @@ parameter FAST_PATH_ENABLE = 1;
   // todo: this is but a sketch ...
   localparam COMMAND_WIDTH = 4 + 1 + WIDTH;
 
-localparam TRANS = 4;
-localparam TSB = TRANS - 1;
+  localparam TRANS = 4;
+  localparam TSB = TRANS - 1;
 
 
   // -- Turn AXI4 Commands into Memory-Controller Commands -- //
@@ -178,23 +178,23 @@ localparam TSB = TRANS - 1;
   // assign axi_awready_o = awready;
   // assign axi_arready_o = arready;
 
-localparam ST_IDLE = 4'b0000;
-localparam ST_BUSY = 4'b1000;
+  localparam ST_IDLE = 4'b0000;
+  localparam ST_BUSY = 4'b1000;
 
-reg [3:0] state = ST_IDLE;
+  reg [  3:0] state = ST_IDLE;
 
-// Current, Next, Read, Write (Transaction ID's)
-reg [TSB:0] trid;
-wire [TSB:0] ctrid, ntrid, rtrid, wtrid;
+  // Current, Next, Read, Write (Transaction ID's)
+  reg [TSB:0] trid;
+  wire [TSB:0] ctrid, ntrid, rtrid, wtrid;
 
-assign ntrid = trid + 1;
+  assign ntrid = trid + 1;
 
-always @(posedge clock) begin
-  if (reset) begin
-    trid <= {TRANS{1'b0}};
-    state <= ST_IDLE;
-  end else begin
-    case (state)
+  always @(posedge clock) begin
+    if (reset) begin
+      trid  <= {TRANS{1'b0}};
+      state <= ST_IDLE;
+    end else begin
+      case (state)
         ST_IDLE: begin
         end
 
@@ -206,9 +206,9 @@ always @(posedge clock) begin
           $error("AX:%10t: CTRL state machine failure!", $time);
           $fatal;
         end
-    endcase
+      endcase
+    end
   end
-end
 
 
   // -- Write Requests -- //
@@ -398,10 +398,10 @@ end
   wire trf_empty_n, trf_full_n, trf_push, trf_pop;
   wire [ISB:0] trid_a, trid_w;
 
-  assign trid_a = rd_fetch ? rd_reqid : (wr_store ? wr_reqid : {AXI_ID_WIDTH{1'bx}}) ;
+  assign trid_a   = rd_fetch ? rd_reqid : (wr_store ? wr_reqid : {AXI_ID_WIDTH{1'bx}});
 
   assign trf_push = (mem_fetch_o | mem_store_o) & mem_accept_i;
-  assign trf_pop = (axi_rvalid_o & axi_rready_i & axi_rlast_o) | (axi_bvalid_o & axi_bready_i) ;
+  assign trf_pop  = (axi_rvalid_o & axi_rready_i & axi_rlast_o) | (axi_bvalid_o & axi_bready_i);
 
 
   // todo: store the transaction ID of each request that is sent to the memory
@@ -413,8 +413,8 @@ end
       .ABITS (CBITS),
       .OUTREG(CTRL_FIFO_BLOCK)
   ) response_fifo_inst (
-      .clock  (clock),
-      .reset  (reset),
+      .clock(clock),
+      .reset(reset),
 
       .valid_i(trf_push),
       .ready_o(trf_full_n),
