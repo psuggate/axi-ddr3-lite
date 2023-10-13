@@ -208,9 +208,19 @@ module axi_ddr3_lite;
 
   // -- DDR3 Simulation Model from Micron -- //
 
+  // DFI <-> PHY
+  wire dfi_rst_n, dfi_cke, dfi_cs_n, dfi_ras_n, dfi_cas_n, dfi_we_n;
+  wire dfi_odt, dfi_wren, dfi_rden, dfi_valid;
+  wire [  2:0] dfi_bank;
+  wire [ 13:0] dfi_addr;
+  wire [SSB:0] dfi_mask;
+  wire [MSB:0] dfi_wdata, dfi_rdata;
+
+  // PHY <-> DDR3
   wire ddr_ck_p, ddr_ck_n;
   wire ddr_rst_n, ddr_cke, ddr_cs_n, ddr_ras_n, ddr_cas_n, ddr_we_n;
-  wire [ 2:0] ddr_ba;
+  wire ddr_odt;
+  wire [2:0] ddr_ba;
   wire [13:0] ddr_a;
   wire [1:0] ddr_dm, ddr_dqs_p, ddr_dqs_n;
   wire [15:0] ddr_dq;
@@ -264,41 +274,38 @@ module axi_ddr3_lite;
       .dfi_we_n_i(dfi_we_n),
       .dfi_odt_i(dfi_odt),
       .dfi_bank_i(dfi_bank),
-      .dfi_addr_i(dfi_address),
+      .dfi_addr_i(dfi_addr),
 
-      .dfi_wren_i(dfi_wrdata_en),
-      .dfi_mask_i(dfi_wrdata_mask),
-      .dfi_data_i(dfi_wrdata),
+      .dfi_wren_i(dfi_wren),
+      .dfi_mask_i(dfi_mask),
+      .dfi_data_i(dfi_wdata),
 
-      .dfi_rden_i (dfi_rddata_en),
-      .dfi_valid_o(dfi_rddata_valid),
-      .dfi_data_o (dfi_rddata),
-      // .dfi_rddata_dnv_o(dfi_rddata_dnv),
+      .dfi_rden_i (dfi_rden),
+      .dfi_valid_o(dfi_valid),
+      .dfi_data_o (dfi_rdata),
 
-      .ddr3_ck_p_o(ddr3_ck_p_w),
-      .ddr3_ck_n_o(ddr3_ck_n_w),
-      .ddr3_cke_o(ddr3_cke_w),
-      .ddr3_reset_n_o(ddr3_reset_n_w),
-      .ddr3_cs_n_o(ddr3_cs_n_w),
-      .ddr3_ras_n_o(ddr3_ras_n_w),
-      .ddr3_cas_n_o(ddr3_cas_n_w),
-      .ddr3_we_n_o(ddr3_we_n_w),
-      .ddr3_odt_o(ddr3_odt_w),
-      .ddr3_ba_o(ddr3_ba_w),
-      .ddr3_a_o(ddr3_addr_w),
-      .ddr3_dm_o(ddr3_dm_w),
-      .ddr3_dqs_p_io(ddr3_dqs_p_w),
-      .ddr3_dqs_n_io(ddr3_dqs_n_w),
-      .ddr3_dq_io(ddr3_dq_w)
+      .ddr3_ck_p_o(ddr_ck_p_w),
+      .ddr3_ck_n_o(ddr_ck_n_w),
+      .ddr3_cke_o(ddr_cke_w),
+      .ddr3_reset_n_o(ddr_reset_n_w),
+      .ddr3_cs_n_o(ddr_cs_n_w),
+      .ddr3_ras_n_o(ddr_ras_n_w),
+      .ddr3_cas_n_o(ddr_cas_n_w),
+      .ddr3_we_n_o(ddr_we_n_w),
+      .ddr3_odt_o(ddr_odt_w),
+      .ddr3_ba_o(ddr_ba_w),
+      .ddr3_a_o(ddr_addr_w),
+      .ddr3_dm_o(ddr_dm_w),
+      .ddr3_dqs_p_io(ddr_dqs_p_w),
+      .ddr3_dqs_n_io(ddr_dqs_n_w),
+      .ddr3_dq_io(ddr_dq_w)
   );
 `endif
 
 
-  //----------------------------------------------------------------------------
   //
-  //  DDR Core Under Test
-  //
-  //----------------------------------------------------------------------------
+  //  DDR Core Under New Test
+  ///
 
   axi_ddr3_lite #(
       .DDR_FREQ_MHZ(DDR_FREQUENCY_MHZ),
@@ -339,21 +346,21 @@ module axi_ddr3_lite;
       .axi_rid_o(rid),
       .axi_rdata_o(rdata),
 
-      .ddr_ck_po(ddr_ck_p),
-      .ddr_ck_no(ddr_ck_n),
-      .ddr_cke_o(ddr_cke),
-      .ddr_rst_no(ddr_rst_n),
-      .ddr_cs_no(ddr_cs_n),
-      .ddr_ras_no(ddr_ras_n),
-      .ddr_cas_no(ddr_cas_n),
-      .ddr_we_no(ddr_we_n),
-      .ddr_odt_o(ddr_odt),
-      .ddr_ba_o(ddr_ba),
-      .ddr_a_o(ddr_a),
-      .ddr_dm_o(ddr_dm),
-      .ddr_dqs_pio(ddr_dqs_p),
-      .ddr_dqs_nio(ddr_dqs_n),
-      .ddr_dq_io(ddr_dq)
+      .dfi_rst_no (dfi_rst_n),
+      .dfi_cke_o  (dfi_cke),
+      .dfi_cs_no  (dfi_cs_n),
+      .dfi_ras_no (dfi_ras_n),
+      .dfi_cas_no (dfi_cas_n),
+      .dfi_we_no  (dfi_we_n),
+      .dfi_odt_o  (dfi_odt),
+      .dfi_bank_o (dfi_bank),
+      .dfi_addr_o (dfi_addr),
+      .dfi_wren_o (dfi_wren),
+      .dfi_mask_o (dfi_mask),
+      .dfi_data_o (dfi_wdata),
+      .dfi_rden_o (dfi_rden),
+      .dfi_valid_i(dfi_valid),
+      .dfi_data_i (dfi_rdata)
   );
 
 

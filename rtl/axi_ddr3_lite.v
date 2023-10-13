@@ -36,8 +36,6 @@ module axi_ddr3_lite (
     axi_rdata_o,
 
     dfi_rst_no,
-    dfi_ck_po,
-    dfi_ck_no,
     dfi_cke_o,
     dfi_cs_no,
     dfi_ras_no,
@@ -58,9 +56,10 @@ module axi_ddr3_lite (
   parameter DDR_FREQ_MHZ = 100;
   parameter DDR_CL = 6;
   parameter DDR_CWL = 6;
+  parameter DDR_DLL_OFF = 1;
 
   // Size of bursts from memory controller perspective
-  parameter DDR_BURSTLEN = 4;
+  parameter PHY_BURSTLEN = 4;
 
   // Address widths
   parameter DDR_ROW_BITS = 15;
@@ -113,32 +112,41 @@ module axi_ddr3_lite (
   output [ISB:0] axi_rid_o;
   output axi_rlast_o;
 
-output     dfi_rst_no;
-output     dfi_ck_po;
-output     dfi_ck_no;
-output     dfi_cke_o;
-output     dfi_cs_no;
-output     dfi_ras_no;
-output     dfi_cas_no;
-output     dfi_we_no;
-output     dfi_odt_o;
-output [2:0]    dfi_bank_o;
-output [RSB:0]    dfi_addr_o;
-output     dfi_wren_o;
-output [SSB:0]    dfi_mask_o;
-output [MSB:0]    dfi_data_o;
-output     dfi_rden_o;
-input     dfi_valid_i;
-input [MSB:0]    dfi_data_i;
+  output dfi_rst_no;
+  output dfi_ck_po;
+  output dfi_ck_no;
+  output dfi_cke_o;
+  output dfi_cs_no;
+  output dfi_ras_no;
+  output dfi_cas_no;
+  output dfi_we_no;
+  output dfi_odt_o;
+  output [2:0] dfi_bank_o;
+  output [RSB:0] dfi_addr_o;
+  output dfi_wren_o;
+  output [SSB:0] dfi_mask_o;
+  output [MSB:0] dfi_data_o;
+  output dfi_rden_o;
+  input dfi_valid_i;
+  input [MSB:0] dfi_data_i;
 
 
   wire [MSB:0] dfi_wdata, dfi_rdata, mem_rdata;
-  wire mem_fetch, mem_store, mem_accept;
+
+  // AXI <-> FSM signals
+  wire fsm_fetch, fsm_store, fsm_accept, fsm_error;
+  wire [ASB:0] fsm_maddr;
+
+  // AXI <-> {FSM, DDL} signals
+  wire wr_valid, wr_ready, wr_last;
+  wire rd_valid, rd_ready, rd_last;
+  wire [SSB:0] wr_mask;
+  wire [MSB:0] wr_data, rd_data;
 
 
-assign dfi_data_o = dfi_wdata;
+  assign dfi_data_o = dfi_wdata;
 
-assign dfi_rdata = dfi_data_i;
+  assign dfi_rdata  = dfi_data_i;
 
 
   // -- AXI Requests to DDR3 Requests -- //
@@ -181,14 +189,33 @@ assign dfi_rdata = dfi_data_i;
       .axi_rid_o(axi_rid_o),
       .axi_rdata_o(axi_rdata_o),
 
-      .mem_store_o (mem_store),
-      .mem_fetch_o (mem_fetch),
-      .mem_accept_i(mem_accept),
-      .mem_rddata_i(mem_rdata)
+      .mem_store_o (fsm_store),
+      .mem_fetch_o (fsm_fetch),
+      .mem_accept_i(fsm_accept),
+      .mem_error_i (fsm_error),
+      .mem_req_id_o(fsm_reqid),
+      .mem_addr_o  (fsm_maddr),
+
+      .mem_valid_o (wr_valid),
+      .mem_ready_i (wr_ready),
+      .mem_last_o  (wr_last),
+      .mem_wrmask_o(wr_mask),
+      .mem_wrdata_o(wr_data),
+
+      .mem_valid_i(rd_valid),
+      .mem_ready_o(rd_ready),
+      .mem_last_i(rd_last),
+      .mem_resp_id_i(rd_respi),
+      .mem_rddata_i(rd_data)
   );
 
 
   // -- DDR3 Memory Controller -- //
+
+  wire ddl_req, ddl_rdy, ddl_ref;
+  wire [2:0] ddl_cmd, ddl_ba;
+  wire [ISB:0] ddl_tid;
+  wire [RSB:0] ddl_adr;
 
   ddr3_fsm #(
       .DDR_BURSTLEN(DDR_BURSTLEN),
@@ -199,8 +226,25 @@ assign dfi_rdata = dfi_data_i;
       .clock(clock),
       .reset(reset),
 
-      .dfi_wdata_o(dfi_wdata),
-      .dfi_rdata_i(dfi_rdata)
+      .mem_wrreq_i(fsm_wrreq),
+      .mem_wrack_o(fsm_wrack),
+      .mem_wrerr_o(fsm_wrerr),
+      .mem_wrtid_i(fsm_wrtid),
+      .mem_wradr_i(fsm_wradr),
+
+      .mem_rdreq_i(fsm_rdreq),
+      .mem_rdack_o(fsm_rdack),
+      .mem_rderr_o(fsm_rderr),
+      .mem_rdtid_i(fsm_rdtid),
+      .mem_rdadr_i(fsm_rdadr),
+
+      .ddl_req_o(ddl_req),
+      .ddl_rdy_i(ddl_rdy),
+      .ddl_ref_i(ddl_ref),
+      .ddl_cmd_o(ddl_cmd),
+      .ddl_tid_o(ddl_tid),
+      .ddl_ba_o (ddl_ba),
+      .ddl_adr_o(ddl_adr)
   );
 
 
@@ -217,20 +261,41 @@ assign dfi_rdata = dfi_data_i;
       .clock(clock),
       .reset(reset),
 
-      .mem_store_i(mem_store),
-      .mem_fetch_i(mem_fetch),
-      .mem_agree_o(),
-      .mem_valid_o(),
-      .mem_error_o(),
-      .mem_reqid_i(),
-      .mem_bresp_o(),
-      .mem_taddr_i(),
-      .mem_wmask_i(),
-      .mem_wdata_i(),
-      .mem_rdata_o(),
+      .ctl_req_o(ddl_req),
+      .ctl_rdy_i(ddl_rdy),
+      .ctl_ref_i(ddl_ref),
+      .ctl_cmd_o(ddl_cmd),
+      .ctl_tid_o(ddl_tid),
+      .ctl_ba_o (ddl_ba),
+      .ctl_adr_o(ddl_adr),
 
-      .dfi_data_i(dfi_wdata),
-      .dfi_data_o(dfi_rdata)
+      .mem_wvalid_i(wr_valid),
+      .mem_wready_o(wr_ready),
+      .mem_wlast_i (wr_last),
+      .mem_wrmask_o(wr_mask),
+      .mem_wrdata_o(wr_data),
+
+      .mem_rvalid_i(rd_valid),
+      .mem_rready_o(rd_ready),
+      .mem_rlast_i (rd_last),
+      .mem_respid_i(rd_respi),
+      .mem_rddata_i(rd_data),
+
+      .dfi_rst_no (dfi_rst_no),
+      .dfi_cke_o  (dfi_cke_o),
+      .dfi_cs_no  (dfi_cs_no),
+      .dfi_ras_no (dfi_ras_no),
+      .dfi_cas_no (dfi_cas_no),
+      .dfi_we_no  (dfi_we_no),
+      .dfi_odt_o  (dfi_odt_o),
+      .dfi_bank_o (dfi_bank_o),
+      .dfi_addr_o (dfi_addr_o),
+      .dfi_wren_o (dfi_wren_o),
+      .dfi_mask_o (dfi_mask_o),
+      .dfi_data_o (dfi_data_o),
+      .dfi_rden_o (dfi_rden_o),
+      .dfi_valid_i(dfi_valid_i),
+      .dfi_data_i (dfi_data_o)
   );
 
 

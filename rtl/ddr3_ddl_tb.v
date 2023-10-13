@@ -30,8 +30,8 @@ module ddr3_ddl_tb;
   // -- Simulation Data -- //
 
   initial begin
-    $dumpfile("ddr3_dfi_tb.vcd");
-    $dumpvars(0, ddr3_dfi_tb);
+    $dumpfile("ddr3_ddl_tb.vcd");
+    $dumpvars();
 
     #800 $finish;  // todo ...
   end
