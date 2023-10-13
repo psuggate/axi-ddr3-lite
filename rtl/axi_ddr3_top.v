@@ -35,7 +35,21 @@ module axi_ddr3_top (
     axi_rid_o,
     axi_rdata_o,
 
-    ddr_cke_o
+    ddr_ck_p_o,
+    ddr_ck_n_o,
+    ddr_cke_o,
+    ddr_rst_n_o,
+    ddr_cs_n_o,
+    ddr_ras_n_o,
+    ddr_cas_n_o,
+    ddr_we_n_o,
+    ddr_odt_o,
+    ddr_ba_o,
+    ddr_a_o,
+    ddr_dm_o,
+    ddr_dqs_p_io,
+    ddr_dqs_n_io,
+    ddr_dq_io
 );
 
   // Settings for DLL=off mode
@@ -100,7 +114,8 @@ module axi_ddr3_top (
   output ddr_cke_o;
 
 
-  wire [MSB:0] wdata, rdata;
+  wire [MSB:0] dfi_wdata, dfi_rdata, mem_rdata;
+  wire mem_fetch, mem_store, mem_accept;
 
 
   // -- AXI Requests to DDR3 Requests -- //
@@ -161,8 +176,8 @@ module axi_ddr3_top (
       .clock(clock),
       .reset(reset),
 
-      .dfi_wdata_o(wdata),
-      .dfi_rdata_i(rdata)
+      .dfi_wdata_o(dfi_wdata),
+      .dfi_rdata_i(dfi_rdata)
   );
 
 
@@ -179,10 +194,20 @@ module axi_ddr3_top (
       .clock(clock),
       .reset(reset),
 
-      .ddr_cke_o(ddr_cke_o),
+      .mem_store_i(),
+      .mem_fetch_i(),
+      .mem_agree_o(),
+      .mem_valid_o(),
+      .mem_error_o(),
+      .mem_reqid_i(),
+      .mem_bresp_o(),
+      .mem_taddr_i(),
+      .mem_wmask_i(),
+      .mem_wdata_i(),
+      .mem_rdata_o(),
 
-      .dfi_data_i(wdata),
-      .dfi_data_o(rdata)
+      .dfi_data_i(dfi_wdata),
+      .dfi_data_o(dfi_rdata)
   );
 
 
@@ -201,9 +226,24 @@ module axi_ddr3_top (
       .reset(reset),
 
       .ddr_cke_o(ddr_cke_o),
+      .ddr_ck_p_o(ddr_ck_po),
+      .ddr_ck_no(ddr_ck_no),
+      .ddr_cke_o(ddr_cke_o),
+      .ddr_reset_no(ddr_reset_no),
+      .ddr_cs_no(ddr_cs_no),
+      .ddr_ras_no(ddr_ras_no),
+      .ddr_cas_no(ddr_cas_no),
+      .ddr_we_no(ddr_we_no),
+      .ddr_odt_o(ddr_odt_o),
+      .ddr_ba_o(ddr_ba_o),
+      .ddr_a_o(ddr_addr_o),
+      .ddr_dm_o(ddr_dm_o),
+      .ddr_dqs_pio(ddr_dqs_pio),
+      .ddr_dqs_nio(ddr_dqs_nio),
+      .ddr_dq_io(ddr_dq_io),
 
-      .dfi_data_i(wdata),
-      .dfi_data_o(rdata)
+      .dfi_data_i(dfi_wdata),
+      .dfi_data_o(dfi_rdata)
   );
 
 
