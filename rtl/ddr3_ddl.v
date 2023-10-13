@@ -23,6 +23,19 @@ module ddr3_ddl (  /*AUTOARG*/);
   parameter DDR_FREQ_MHZ = 100;
   localparam TCK = 1000 / DDR_FREQ_MHZ;  // in ns (nanoseconds)
 
+  // Data-path and address settings
+  parameter DDR_COL_BITS = 10;
+  localparam CSB = DDR_COL_BITS - 1;
+  parameter DDR_ROW_BITS = 13;
+  localparam RSB = DDR_ROW_BITS - 1;
+
+  parameter DDR_DATA_WIDTH = 32;
+  localparam MSB = DDR_DATA_WIDTH - 1;
+
+  parameter DDR_DQM_WIDTH = DDR_DATA_WIDTH / 8;
+  localparam SSB = DDR_DQM_WIDTH - 1;
+
+
   // Minimum period in DLL=off mode is 8 ns (or, max freq of 125 MHz)
   parameter DDR_CL = 6;  // DLL=off mode settings
   parameter DDR_CWL = 6;
@@ -40,7 +53,7 @@ module ddr3_ddl (  /*AUTOARG*/);
   // DDR3-800E (6-6-6) speed bin parameters (from pp. 157)
   parameter DDR_TAAMIN = 15;  // min time (ns) for internal-read -> data
   parameter DDR_TAAMAX = 20;  // max time (ns) for internal-read -> data
-  parameter DDR_TWR = 15;  // post-WRITE, AUTO-PRECHARGE time, in ns
+  parameter DDR_TWR = 15;  // post-WRITE recovery time, in ns
   parameter DDR_TRP = 15;  // min time (ns) for PRE command
   parameter DDR_TRCD = 15;  // min time (ns) for ACT -> internal rd/wr
   parameter DDR_TRC = 52.5;  // min ACT -> {ACT, REF} command period
@@ -57,16 +70,47 @@ module ddr3_ddl (  /*AUTOARG*/);
   parameter DDR_CRRD = 4;  // min ACT -> ACT
 
 
-  parameter DDR_COL_BITS = 10;
-  localparam CSB = DDR_COL_BITS - 1;
-  parameter DDR_ROW_BITS = 13;
-  localparam RSB = DDR_ROW_BITS - 1;
+  localparam WR_CYCLES = (TWR + TCK - 1) / TCK;
+  localparam CWL_CYCLES = 6;  // DLL=off
 
-  parameter DDR_DATA_WIDTH = 32;
-  localparam MSB = DDR_DATA_WIDTH - 1;
 
-  parameter DDR_DQM_WIDTH = DDR_DATA_WIDTH / 8;
-  localparam SSB = DDR_DQM_WIDTH - 1;
+  // Mode Registers:
+  localparam PPD = 1'b0;  // Slow exit (PRE PD), for DLL=off
+  localparam [2:0] WRC = WR_CYCLES == 6 ? 3'b010 : (WR_CYCLES == 5 ? 3'b001 : 3'b000);
+  localparam DLLR = 1'b0;  // No DLL reset, for DLL=off
+  localparam [3:0] CAS = 4'b0100;  // CL=6 for DLL=off
+  localparam [1:0] BLEN = 2'b00;  // BL8
+  localparam [12:0] MR0 = {PPD, WRC, DLLR, 1'b0, CAS[3:1], 1'b0, CAS[0], BLEN};
+
+  localparam QOFF = 1'b0;
+  localparam DLLE = 1'b1;  // DLL=off
+  localparam [1:0] DIC = 2'b00;  // Driver Impedance Control
+  localparam [2:0] RTT = 3'b000;  // Nom, nom, nom, ...
+  localparam [1:0] AL = 2'b00;  // Additive Latency disabled; todo: CL-1 ??
+  localparam WLE = 1'b0;  // Write Leveling Enable is off
+  localparam TDQS = 1'b0;  // Only applies to x8 memory
+  localparam [12:0] MR1 = {
+    QOFF, TDQS, 1'b0, RTT[2], 1'b0, WLE, RTT[1], DIC[1], AL, RTT[0], DIC[0], DLLE
+  };
+
+  localparam [1:0] RTTWR = 2'b00;  // Dynamic ODT off
+  localparam SRT = 1'b0;  // Normal temperature for self-refresh
+  localparam ASR = 1'b0;  // Manual self-refresh reference
+  localparam [2:0] CWL = DLLE == 1'b0 ? CWL_CYCLES - 5 : 3'b001;  // DLL=off, so CWL=6
+  localparam [2:0] PASR = 3'b000;  // Full Array
+  localparam [12:0] MR2 = {2'b00, RTTWR, 1'b0, SRT, ASR, CWL, PASR};
+
+  localparam [12:0] MR3 = {13'h0000};
+
+
+  // Refresh settings
+  localparam CREFI = (TREFI - 1) / TCK;  // cycles(TREFI) - 1
+  localparam CBITS = $clog2(CREFI);
+  localparam CSB = CBITS - 1;
+  localparam [CSB:0] CZERO = {CBITS{1'b0}};
+
+  reg [CSB:0] refresh_counter;
+  reg [2:0] refresh_pending;
 
 
   // -- PHY Settings -- //

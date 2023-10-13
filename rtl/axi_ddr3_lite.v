@@ -248,7 +248,7 @@ module axi_ddr3_lite (
   );
 
 
-  // -- Generic DDR3 to PHY Interface -- //
+  // -- Coordinate with the DDR3 to PHY Interface -- //
 
   ddr3_ddl #(
       .DDR_BURSTLEN(DDR_BURSTLEN),
