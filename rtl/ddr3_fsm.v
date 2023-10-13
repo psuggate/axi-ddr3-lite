@@ -85,12 +85,18 @@ module ddr3_fsm (  /*AUTOARG*/);
   output [ISB:0] mem_req_id_o;
   output [MSB:0] mem_rddata_o;
 
-  // DDR control signals
-  // Note: all state-transitions are gated by the 'ddr_rdy_i' signal
-  input ddr_rdy_i;
-  input ddr_rfc_i;  // refresh-complete
-  output ddr_req_o;
-  output [2:0] ddr_cmd_o;
+  // DDR Data-Layer control signals
+  // Note: all state-transitions are gated by the 'ddl_rdy_i' signal
+  output ddl_req_o;
+  input ddl_rdy_i;
+input ddl_ref_i; // refresh-request
+  output [2:0] ddl_cmd_o;
+output [2:0] ddl_ba_o;
+output [RSB:0] ddl_adr_o;
+
+// output [SSB:0] ddl_stb_o;
+// output [MSB:0] ddl_dat_o;
+// input [MSB:0] ddl_dat_i;
 
 
   // todo:

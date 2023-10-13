@@ -1,6 +1,7 @@
 `timescale 1ns / 100ps
 /**
- * Converts simple memory-controller commands into DFI commands.
+ * DDR3 "Data-Link" layer converts simple memory-controller commands into DFI
+ * commands.
  *
  * Notes:
  *  - handles device- and mode- specific timings;
@@ -11,10 +12,10 @@
  * Copyright 2023, Patrick Suggate.
  *
  */
-module ddr3_dfi (  /*AUTOARG*/);
+module ddr3_ddl (  /*AUTOARG*/);
 
   //
-  //  DFI Settings
+  //  DDL Settings
   ///
 
   // -- DDR3 SDRAM Timings and Parameters -- //
@@ -93,6 +94,20 @@ module ddr3_dfi (  /*AUTOARG*/);
   output accept_o;
   input [2:0] bank_i;
   input [RSB:0] addr_i;
+
+
+// DDR Data-Layer control signals
+// Note: all state-transitions are gated by the 'ddl_rdy_i' signal
+input ddl_req_i;
+output ddl_rdy_o;
+output ddl_ref_o; // refresh-request
+input [2:0] ddl_cmd_i;
+input [2:0] ddl_ba_i;
+input [RSB:0] ddl_adr_i;
+// input [SSB:0] ddl_stb_i;
+// input [MSB:0] ddl_dat_i;
+// output [MSB:0] ddl_dat_o;
+
 
   // AXI4-ish write and read ports (in order to de-/en- queue data from/to FIFOs,
   // efficiently)
@@ -372,4 +387,4 @@ module ddr3_dfi (  /*AUTOARG*/);
   end
 
 
-endmodule  // ddr3_dfi
+endmodule  // ddr3_ddl

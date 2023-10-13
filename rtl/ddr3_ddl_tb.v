@@ -1,5 +1,5 @@
 `timescale 1ns / 100ps
-module ddr3_dfi_tb;
+module ddr3_ddl_tb;
 
   // -- Simulation Settings -- //
 
@@ -105,7 +105,7 @@ module ddr3_dfi_tb;
 
   // -- Module Under Test -- //
 
-  ddr3_dfi #(
+  ddr3_ddl #(
       .DDR_FREQ_MHZ(100)
   ) ddr3_dfi_inst (
       .clock(clock),
@@ -213,4 +213,4 @@ module ddr3_dfi_tb;
   endtask  // ddr_read
 
 
-endmodule  // ddr3_dfi_tb
+endmodule  // ddr3_ddl_tb
