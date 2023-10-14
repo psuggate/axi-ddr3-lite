@@ -9,11 +9,11 @@ module generic_ddr3_phy (
     cfg_data_i,
 
     dfi_cke_i,
-    dfi_reset_n_i,
-    dfi_cs_n_i,
-    dfi_ras_n_i,
-    dfi_cas_n_i,
-    dfi_we_n_i,
+    dfi_rst_ni,
+    dfi_cs_ni,
+    dfi_ras_ni,
+    dfi_cas_ni,
+    dfi_we_ni,
     dfi_odt_i,
     dfi_bank_i,
     dfi_addr_i,
@@ -69,11 +69,11 @@ module generic_ddr3_phy (
   input [31:0] cfg_data_i;
 
   input dfi_cke_i;
-  input dfi_reset_n_i;
-  input dfi_cs_n_i;
-  input dfi_ras_n_i;
-  input dfi_cas_n_i;
-  input dfi_we_n_i;
+  input dfi_rst_ni;
+  input dfi_cs_ni;
+  input dfi_ras_ni;
+  input dfi_cas_ni;
+  input dfi_we_ni;
   input dfi_odt_i;
 
   input [2:0] dfi_bank_i;
@@ -107,8 +107,8 @@ module generic_ddr3_phy (
   reg dqs_t, dq_t;
   reg [QSB:0] dqs_p, dqs_n, dm_q;
   reg [MSB:0] dq_q;
-  reg cke_q, reset_n_q, cs_n_q;
-  reg ras_n_q, cas_n_q, we_n_q, odt_q;
+  reg cke_q, rst_nq, cs_nq;
+  reg ras_nq, cas_nq, we_nq, odt_q;
   reg [2:0] ba_q;
 
   reg valid_q;
@@ -128,11 +128,11 @@ module generic_ddr3_phy (
   assign ddr3_ck_no   = clock;
 
   assign ddr3_cke_o   = cke_q;
-  assign ddr3_rst_no  = reset_n_q;
-  assign ddr3_cs_no   = cs_n_q;
-  assign ddr3_ras_no  = ras_n_q;
-  assign ddr3_cas_no  = cas_n_q;
-  assign ddr3_we_no   = we_n_q;
+  assign ddr3_rst_no  = rst_nq;
+  assign ddr3_cs_no   = cs_nq;
+  assign ddr3_ras_no  = ras_nq;
+  assign ddr3_cas_no  = cas_nq;
+  assign ddr3_we_no   = we_nq;
   assign ddr3_odt_o   = odt_q;
   assign ddr3_ba_o    = ba_q;
   assign ddr3_a_o     = addr_q;
@@ -168,25 +168,25 @@ module generic_ddr3_phy (
   // todo: polarities of the 'n' signals?
   always @(posedge clock) begin
     if (reset) begin
-      cke_q     <= 1'b0;
-      reset_n_q <= 1'b0;
-      cs_n_q    <= 1'b0;  // todo: 1'b1 ??
-      ras_n_q   <= 1'b0;  // todo: 1'b1 ??
-      cas_n_q   <= 1'b0;  // todo: 1'b1 ??
-      we_n_q    <= 1'b0;  // todo: 1'b1 ??
-      ba_q      <= 3'b0;
-      addr_q    <= {ADDR_BITS{1'b0}};
-      odt_q     <= 1'b0;
+      cke_q  <= 1'b0;
+      rst_nq <= 1'b0;
+      cs_nq  <= 1'b0;  // todo: 1'b1 ??
+      ras_nq <= 1'b0;  // todo: 1'b1 ??
+      cas_nq <= 1'b0;  // todo: 1'b1 ??
+      we_nq  <= 1'b0;  // todo: 1'b1 ??
+      ba_q   <= 3'b0;
+      addr_q <= {ADDR_BITS{1'b0}};
+      odt_q  <= 1'b0;
     end else begin
-      cke_q     <= dfi_cke_i;
-      reset_n_q <= dfi_reset_n_i;
-      cs_n_q    <= dfi_cs_n_i;
-      ras_n_q   <= dfi_ras_n_i;
-      cas_n_q   <= dfi_cas_n_i;
-      we_n_q    <= dfi_we_n_i;
-      odt_q     <= dfi_odt_i;
-      ba_q      <= dfi_bank_i;
-      addr_q    <= dfi_addr_i;
+      cke_q  <= dfi_cke_i;
+      rst_nq <= dfi_rst_ni;
+      cs_nq  <= dfi_cs_ni;
+      ras_nq <= dfi_ras_ni;
+      cas_nq <= dfi_cas_ni;
+      we_nq  <= dfi_we_ni;
+      odt_q  <= dfi_odt_i;
+      ba_q   <= dfi_bank_i;
+      addr_q <= dfi_addr_i;
     end
   end
 

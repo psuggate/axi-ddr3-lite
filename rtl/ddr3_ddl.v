@@ -16,25 +16,25 @@ module ddr3_ddl (  /*AUTOARG*/
     clock,
     reset,
 
-    ctl_req_i,
+    ctl_req_i, // Memory controller signals
     ctl_rdy_o,
     ctl_ref_o,
     ctl_cmd_i,
     ctl_ba_i,
     ctl_adr_i,
 
-    mem_wvalid_i,
+    mem_wvalid_i, // WRITE data-path
     mem_wready_o,
     mem_wlast_i,
     mem_wrmask_i,
     mem_wrdata_i,
 
-    mem_rvalid_o,
+    mem_rvalid_o, // READ data-path
     mem_rready_i,
     mem_rlast_o,
     mem_rddata_o,
 
-    dfi_rst_no,
+    dfi_rst_no, // DDL <-> PHY signals
     dfi_cke_o,
     dfi_cs_no,
     dfi_ras_no,
@@ -48,8 +48,7 @@ module ddr3_ddl (  /*AUTOARG*/
     dfi_data_o,
     dfi_rden_o,
     dfi_valid_i,
-    dfi_data_i,
-    dfi_rddata_dnv_i
+    dfi_data_i
 );
 
   //
@@ -70,8 +69,8 @@ module ddr3_ddl (  /*AUTOARG*/
   parameter DFI_DATA_WIDTH = 32;
   localparam MSB = DFI_DATA_WIDTH - 1;
 
-  parameter DFI_DQM_WIDTH = DFI_DATA_WIDTH / 8;
-  localparam SSB = DFI_DQM_WIDTH - 1;
+  parameter DFI_MASK_WIDTH = DFI_DATA_WIDTH / 8;
+  localparam SSB = DFI_MASK_WIDTH - 1;
 
 
   // Minimum period in DLL=off mode is 8 ns (or, max freq of 125 MHz)
@@ -196,7 +195,6 @@ module ddr3_ddl (  /*AUTOARG*/
   output dfi_rden_o;
   input dfi_valid_i;
   input [MSB:0] dfi_data_i;
-  input [1:0] dfi_rddata_dnv_i;  // ??
 
 
   // -- Constants -- //
@@ -206,7 +204,7 @@ module ddr3_ddl (  /*AUTOARG*/
   localparam TPRECHARGE = 4;
 
 
-  // -- DDR Command Dispatch Periods -- //
+  // -- DDR Command Dispatch Delay Constraints -- //
 
   // Minimum cycles between same bank ACT -> ACT
   localparam CYCLES_ACT_TO_ACT = (DDR_TRC + TCK - 1) / TCK;  // both of these must
@@ -272,6 +270,7 @@ module ddr3_ddl (  /*AUTOARG*/
   reg [2:0] refresh_pending;
 
   reg ready;
+  reg rst_nq, cke_q, cs_nq;
 
   reg [3:0] cmd_prev_q, cmd_curr_q;
   wire [3:0] cmd_next_w;
@@ -280,6 +279,9 @@ module ddr3_ddl (  /*AUTOARG*/
   assign ctl_rdy_o = ready;
 
   assign dfi_rst_no = 1'bx;  // toods ...
+  assign dfi_cke_o = cke_q;
+assign dfi_cs_no = cs_nq;
+assign dfi_odt_o = 1'b0;
 
 
   // -- Connect FIFO's to the DDR IOB's -- //
@@ -292,10 +294,6 @@ module ddr3_ddl (  /*AUTOARG*/
 
 
   // -- Chip Enable -- //
-
-  reg cke_q;
-
-  assign dfi_cke_o = cke_q;
 
   always @(posedge clock) begin
     if (reset) begin
@@ -380,11 +378,52 @@ module ddr3_ddl (  /*AUTOARG*/
   reg [3:0] sinit;
   reg ddr_awake;
 
+localparam CMODES = 4*(DDR_CMRD + DDR_CMOD) + 2;
+localparam UNSTABLE = (600000 + TCK - 1) / TCK;
+localparam STABLE = COUNTER_INIT - UNSTABLE;
+localparam COUNTER_INIT =  + CMODES + DDR_CZQINIT + 2;
+localparam COUNTER_BITS = $clog2(COUNTER_INIT);
+localparam XSB = COUNTER_BITS - 1;
+
+reg [XSB:0] count;
+
   always @(posedge clock) begin
     if (reset) begin
       sinit <= SI_REST;
       ddr_awake <= 1'b0;
+      rst_nq <= 1'b0;
+      cke_q <= 1'b0;
+      cs_nq <= 1'b1;
+      count <= COUNTER_INIT;
     end else begin
+      case (sinit)
+          SI_REST: begin
+            // Allow for power supply to stablise
+            rst_nq <= 1'b0;
+
+            if (count < STABLE) begin
+              sinit <= SI_CKE1;
+              cke_q <= 1'b1;
+            end
+          end
+
+          SI_CKE1: begin
+            // After > 5 ticks, deassert RESET#
+          end
+
+          SI_ZQCL: begin
+            // Wait for the DDR3 device to calibrate the impedance of its data-
+            // output drivers
+            if (count == 0) begin
+              sinit <= SI_DONE;
+            end
+          end
+
+          SI_DONE: begin
+            // Chill here until RESET# asserts ...
+          end
+      endcase
+
       if (refresh_pending != 3'b000) begin
         ddr_awake <= 1'b1;
       end

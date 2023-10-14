@@ -162,10 +162,10 @@ module ddr3_axi_ctrl_tb;
     end else begin
       if (store && accept) begin
         wr_ready <= 1'b1;
-        wr_addr  <= waddr[MBITS+1:2];
+        wr_addr  <= wraddr[MBITS+1:2];
 
-        if (waddr[1:0] != 2'b00) begin
-          $error("TB:%10t: Unaligned WRITE not supported, LSBs: %02b", $time, waddr[1:0]);
+        if (wraddr[1:0] != 2'b00) begin
+          $error("TB:%10t: Unaligned WRITE not supported, LSBs: %02b", $time, wraddr[1:0]);
           $fatal;
         end
       end else if (wr_valid && wr_ready && wr_last) begin
@@ -197,11 +197,11 @@ module ddr3_axi_ctrl_tb;
     end else begin
       if (fetch && accept) begin
         rd_valid <= 1'b1;
-        rd_addr  <= raddr[MBITS+1:2];
+        rd_addr  <= rdaddr[MBITS+1:2];
         rd_count <= 2'd3;
 
-        if (raddr[1:0] != 2'b00) begin
-          $error("TB:%10t: Unaligned WRITE not supported, LSBs: %02b", $time, raddr[1:0]);
+        if (rdaddr[1:0] != 2'b00) begin
+          $error("TB:%10t: Unaligned WRITE not supported, LSBs: %02b", $time, rdaddr[1:0]);
           $fatal;
         end
       end else if (rd_valid && rd_ready && rd_last) begin
@@ -273,7 +273,7 @@ module ddr3_axi_ctrl_tb;
       .axi_rdata_o(rdata),
 
       .mem_wrreq_o(store),   // WRITE requests to FSM
-      .mem_wrack_i(accept),
+      .mem_wrack_i(accept & store),
       .mem_wrerr_i(1'b0),
       .mem_wrtid_o(wreqid),
       .mem_wradr_o(wraddr),
@@ -285,7 +285,7 @@ module ddr3_axi_ctrl_tb;
       .mem_wdata_o(wr_data),
 
       .mem_rdreq_o(fetch),   // READ requests to FSM
-      .mem_rdack_i(accept),
+      .mem_rdack_i(accept & fetch),
       .mem_rderr_i(1'b0),
       .mem_rdtid_o(rreqid),
       .mem_rdadr_o(rdaddr),

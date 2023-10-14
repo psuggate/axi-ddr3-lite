@@ -289,8 +289,8 @@ module axi_ddr3_lite (
       .mem_wvalid_i(wr_valid),
       .mem_wready_o(wr_ready),
       .mem_wlast_i (wr_last),
-      .mem_wrmask_o(wr_mask),
-      .mem_wrdata_o(wr_data),
+      .mem_wrmask_i(wr_mask),
+      .mem_wrdata_i(wr_data),
 
       .mem_rvalid_o(rd_valid),
       .mem_rready_i(rd_ready),

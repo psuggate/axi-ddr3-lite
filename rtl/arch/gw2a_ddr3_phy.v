@@ -24,11 +24,11 @@ module gw2a_ddr3_phy (
     cfg_data_i,
 
     dfi_cke_i,
-    dfi_reset_n_i,
-    dfi_cs_n_i,
-    dfi_ras_n_i,
-    dfi_cas_n_i,
-    dfi_we_n_i,
+    dfi_rst_ni,
+    dfi_cs_ni,
+    dfi_ras_ni,
+    dfi_cas_ni,
+    dfi_we_ni,
     dfi_odt_i,
     dfi_bank_i,
     dfi_addr_i,
@@ -39,21 +39,21 @@ module gw2a_ddr3_phy (
     dfi_valid_o,
     dfi_data_o,
 
-    ddr3_ck_p_o,
-    ddr3_ck_n_o,
-    ddr3_cke_o,
-    ddr3_reset_n_o,
-    ddr3_cs_n_o,
-    ddr3_ras_n_o,
-    ddr3_cas_n_o,
-    ddr3_we_n_o,
-    ddr3_odt_o,
-    ddr3_ba_o,
-    ddr3_a_o,
-    ddr3_dm_o,
-    ddr3_dqs_p_io,
-    ddr3_dqs_n_io,
-    ddr3_dq_io
+    ddr_ck_po,
+    ddr_ck_no,
+    ddr_cke_o,
+    ddr_rst_no,
+    ddr_cs_no,
+    ddr_ras_no,
+    ddr_cas_no,
+    ddr_we_no,
+    ddr_odt_o,
+    ddr_ba_o,
+    ddr_a_o,
+    ddr_dm_o,
+    ddr_dqs_pio,
+    ddr_dqs_nio,
+    ddr_dq_io
 );
 
   parameter DDR3_WIDTH = 16;
@@ -81,11 +81,11 @@ module gw2a_ddr3_phy (
   input [31:0] cfg_data_i;
 
   input dfi_cke_i;
-  input dfi_reset_n_i;
-  input dfi_cs_n_i;
-  input dfi_ras_n_i;
-  input dfi_cas_n_i;
-  input dfi_we_n_i;
+  input dfi_rst_ni;
+  input dfi_cs_ni;
+  input dfi_ras_ni;
+  input dfi_cas_ni;
+  input dfi_we_ni;
   input dfi_odt_i;
 
   input [2:0] dfi_bank_i;
@@ -99,21 +99,21 @@ module gw2a_ddr3_phy (
   output dfi_valid_o;
   output [DSB:0] dfi_data_o;
 
-  output ddr3_ck_p_o;
-  output ddr3_ck_n_o;
-  output ddr3_cke_o;
-  output ddr3_reset_n_o;
-  output ddr3_cs_n_o;
-  output ddr3_ras_n_o;
-  output ddr3_cas_n_o;
-  output ddr3_we_n_o;
-  output ddr3_odt_o;
-  output [2:0] ddr3_ba_o;
-  output [ASB:0] ddr3_a_o;
-  output [QSB:0] ddr3_dm_o;
-  inout [QSB:0] ddr3_dqs_p_io;
-  inout [QSB:0] ddr3_dqs_n_io;
-  inout [MSB:0] ddr3_dq_io;
+  output ddr_ck_po;
+  output ddr_ck_no;
+  output ddr_cke_o;
+  output ddr_rst_no;
+  output ddr_cs_no;
+  output ddr_ras_no;
+  output ddr_cas_no;
+  output ddr_we_no;
+  output ddr_odt_o;
+  output [2:0] ddr_ba_o;
+  output [ASB:0] ddr_a_o;
+  output [QSB:0] ddr_dm_o;
+  inout [QSB:0] ddr_dqs_pio;
+  inout [QSB:0] ddr_dqs_nio;
+  inout [MSB:0] ddr_dq_io;
 
 
   wire dqs_t, dqs_s;
@@ -124,8 +124,8 @@ module gw2a_ddr3_phy (
 
   reg [QSB:0] dqs_p, dqs_n, dm_q;
   reg [MSB:0] dq_q;
-  reg cke_q, reset_n_q, cs_n_q;
-  reg ras_n_q, cas_n_q, we_n_q, odt_q;
+  reg cke_q, rst_nq, cs_nq;
+  reg ras_nq, cas_nq, we_nq, odt_q;
   reg [2:0] ba_q;
 
   reg valid_q;
@@ -135,29 +135,29 @@ module gw2a_ddr3_phy (
 
   // -- DFI Read-Data Signal Assignments -- //
 
-  assign dfi_valid_o    = valid_q;
-  assign dfi_data_o     = data_q;
+  assign dfi_valid_o = valid_q;
+  assign dfi_data_o  = data_q;
 
 
   // -- DDR3 Signal Assignments -- //
 
-  assign ddr3_ck_p_o    = ~clock;
-  assign ddr3_ck_n_o    = clock;
+  assign ddr_ck_po   = ~clock;
+  assign ddr_ck_no   = clock;
 
-  assign ddr3_cke_o     = cke_q;
-  assign ddr3_reset_n_o = reset_n_q;
-  assign ddr3_cs_n_o    = cs_n_q;
-  assign ddr3_ras_n_o   = ras_n_q;
-  assign ddr3_cas_n_o   = cas_n_q;
-  assign ddr3_we_n_o    = we_n_q;
-  assign ddr3_odt_o     = odt_q;
-  assign ddr3_ba_o      = ba_q;
-  assign ddr3_a_o       = addr_q;
+  assign ddr_cke_o   = cke_q;
+  assign ddr_rst_no  = rst_nq;
+  assign ddr_cs_no   = cs_nq;
+  assign ddr_ras_no  = ras_nq;
+  assign ddr_cas_no  = cas_nq;
+  assign ddr_we_no   = we_nq;
+  assign ddr_odt_o   = odt_q;
+  assign ddr_ba_o    = ba_q;
+  assign ddr_a_o     = addr_q;
 
-  assign ddr3_dqs_p_io  = dqs_t ? {DDR3_MASKS{1'bz}} : dqs_p;
-  assign ddr3_dqs_n_io  = dqs_s ? {DDR3_MASKS{1'bz}} : dqs_n;
-  assign ddr3_dm_o      = dm_w;
-  assign ddr3_dq_io     = dq_t ? {DDR3_WIDTH{1'bz}} : dq_w;
+  assign ddr_dqs_pio = dqs_t ? {DDR3_MASKS{1'bz}} : dqs_p;
+  assign ddr_dqs_nio = dqs_s ? {DDR3_MASKS{1'bz}} : dqs_n;
+  assign ddr_dm_o    = dm_w;
+  assign ddr_dq_io   = dq_t ? {DDR3_WIDTH{1'bz}} : dq_w;
 
 
   // -- IOB DDR Register Settings -- //
@@ -172,25 +172,25 @@ module gw2a_ddr3_phy (
   // todo: polarities of the 'n' signals?
   always @(posedge clock) begin
     if (reset) begin
-      cke_q     <= 1'b0;
-      reset_n_q <= 1'b0;
-      cs_n_q    <= 1'b0;  // todo: 1'b1 ??
-      ras_n_q   <= 1'b0;  // todo: 1'b1 ??
-      cas_n_q   <= 1'b0;  // todo: 1'b1 ??
-      we_n_q    <= 1'b0;  // todo: 1'b1 ??
-      ba_q      <= 3'b0;
-      addr_q    <= {ADDR_BITS{1'b0}};
-      odt_q     <= 1'b0;
+      cke_q  <= 1'b0;
+      rst_nq <= 1'b0;
+      cs_nq  <= 1'b0;  // todo: 1'b1 ??
+      ras_nq <= 1'b0;  // todo: 1'b1 ??
+      cas_nq <= 1'b0;  // todo: 1'b1 ??
+      we_nq  <= 1'b0;  // todo: 1'b1 ??
+      ba_q   <= 3'b0;
+      addr_q <= {ADDR_BITS{1'b0}};
+      odt_q  <= 1'b0;
     end else begin
-      cke_q     <= dfi_cke_i;
-      reset_n_q <= dfi_reset_n_i;
-      cs_n_q    <= dfi_cs_n_i;
-      ras_n_q   <= dfi_ras_n_i;
-      cas_n_q   <= dfi_cas_n_i;
-      we_n_q    <= dfi_we_n_i;
-      odt_q     <= dfi_odt_i;
-      ba_q      <= dfi_bank_i;
-      addr_q    <= dfi_addr_i;
+      cke_q  <= dfi_cke_i;
+      rst_nq <= dfi_rst_ni;
+      cs_nq  <= dfi_cs_ni;
+      ras_nq <= dfi_ras_ni;
+      cas_nq <= dfi_cas_ni;
+      we_nq  <= dfi_we_ni;
+      odt_q  <= dfi_odt_i;
+      ba_q   <= dfi_bank_i;
+      addr_q <= dfi_addr_i;
     end
   end
 
@@ -333,7 +333,7 @@ OSER4
 
   // -- Source-Synchronous Data-Capture Clocks -- //
 
-  wire [QSB:0] dqs_p_i0, dqs_p_i1, dqs_n_i0, dqs_n_i1;
+  wire [QSB:0] dqs_pi0, dqs_pi1, dqs_ni0, dqs_ni1;
 
   // One set of these DQS signals will be used for source-synchronous data-
   // capture.
@@ -342,19 +342,19 @@ OSER4
       .Q1_INIT(1'b1)
   ) dqs_p_iddr_inst[QSB:0] (
       .CLK(clk_ddr),
-      .D  (ddr3_dqs_p_io),
-      .Q0 (dqs_p_i0),
-      .Q1 (dqs_p_i1)
+      .D  (ddr_dqs_pio),
+      .Q0 (dqs_pi0),
+      .Q1 (dqs_pi1)
   );
 
   IDDR #(
       .Q0_INIT(1'b1),
       .Q1_INIT(1'b1)
-  ) dqs_n_iddr_inst[QSB:0] (
+  ) dqs_niddr_inst[QSB:0] (
       .CLK(clk_ddr),
-      .D  (ddr3_dqs_n_io),
-      .Q0 (dqs_n_i0),
-      .Q1 (dqs_n_i1)
+      .D  (ddr_dqs_nio),
+      .Q0 (dqs_ni0),
+      .Q1 (dqs_ni1)
   );
 
 
@@ -368,8 +368,8 @@ OSER4
 
   // Choose a source-clock for source-synchronous data-capture
   wire [QSB:0] clk_src = SOURCE_CLOCK[1] == 1'b0
-             ? (SOURCE_CLOCK[0] == 1'b0 ? dqs_p_i0 : dqs_p_i1)
-             : (SOURCE_CLOCK[0] == 1'b0 ? dqs_n_i0 : dqs_n_i1)
+             ? (SOURCE_CLOCK[0] == 1'b0 ? dqs_pi0 : dqs_pi1)
+             : (SOURCE_CLOCK[0] == 1'b0 ? dqs_ni0 : dqs_ni1)
              ;
 
   genvar ii;
@@ -381,7 +381,7 @@ OSER4
           .Q1_INIT(1'b1)
       ) dql_iddr_inst[(ii+1)*8-1:(ii*8)] (
           .CLK(clk_src[ii]),
-          .D  (ddr3_dq_io[(ii+1)*8-1:(ii*8)]),
+          .D  (ddr_dq_io[(ii+1)*8-1:(ii*8)]),
           .Q0 (dq_lo[(ii+1)*8-1:(ii*8)]),
           .Q1 (dq_hi[(ii+1)*8-1:(ii*8)])
       );
