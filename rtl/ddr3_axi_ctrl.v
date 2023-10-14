@@ -50,23 +50,27 @@ module ddr3_axi_ctrl (
     axi_rid_o,
     axi_rdata_o,
 
-    mem_store_o,
-    mem_fetch_o,
-    mem_accept_i,
-    mem_error_i,
-    mem_req_id_o,
-    mem_addr_o,
+    mem_wrreq_o,  // WRITE requests to CTRL
+    mem_wrack_i,
+    mem_wrerr_i,
+    mem_wrtid_o,
+    mem_wradr_o,
 
-    mem_valid_o,
+    mem_valid_o,  // WRITE data to DFI
     mem_ready_i,
-    mem_last_o,
+    mem_wlast_o,
     mem_wmask_o,
     mem_wdata_o,
 
-    mem_valid_i,
+    mem_rdreq_o,  // READ requests to CTRL
+    mem_rdack_i,
+    mem_rderr_i,
+    mem_rdtid_o,
+    mem_rdadr_o,
+
+    mem_valid_i,  // READ data from DFI
     mem_ready_o,
     mem_rlast_i,
-    mem_reqid_i,
     mem_rdata_i
 );
 
@@ -81,9 +85,9 @@ module ddr3_axi_ctrl (
   parameter AXI_ID_WIDTH = 4;
   localparam ISB = AXI_ID_WIDTH - 1;
 
-  parameter MEM_ID_WIDTH = 4 + AXI_ID_WIDTH;
+  parameter MEM_ID_WIDTH = 4;
   localparam TSB = MEM_ID_WIDTH - 1;
-
+  localparam TZERO = {MEM_ID_WIDTH{1'b0}};
 
   // Byte-address width, in bits -- lower bits will (typ) be ignored, and upper
   // bits may be ignored as well, if they lie outside of address-range
@@ -182,12 +186,12 @@ module ddr3_axi_ctrl (
 
   localparam ADDR_ZERO_BITS = $clog2(MASKS);
 
-  localparam REQ_ID_BITS = MEM_ID_WIDTH - AXI_ID_WIDTH;
-  localparam RSB = RBITS - 1;
-  localparam RZERO = {REQ_ID_BITS{1'b0}};
+  localparam REQ_ID_WIDTH = MEM_ID_WIDTH + AXI_ID_WIDTH;
+  localparam RSB = REQ_ID_WIDTH - 1;
+  localparam RZERO = {REQ_ID_WIDTH{1'b0}};
 
 
-  reg [RSB:0] req_id;
+  reg [TSB:0] req_id;
   wire wr_accept, rd_accept, issued, rd_finish;
 
 
@@ -202,7 +206,7 @@ module ddr3_axi_ctrl (
 
   always @(posedge clock) begin
     if (reset) begin
-      req_id <= RZERO;
+      req_id <= TZERO;
     end else begin
       if (issued) begin
         req_id <= req_id + 1;
@@ -216,7 +220,7 @@ module ddr3_axi_ctrl (
   // Order-ID's are concatenated with AXI transaction ID's, so that relative
   // ordering of AXI transactions is known -- even though reads and writes may
   // be re-ordered by the scheduler.
-  wire [TSB:0] wr_resp_id, wr_req_id, aw_req_id;
+  wire [RSB:0] wr_resp_id, wr_req_id, aw_req_id;
 
   assign aw_req_id   = {req_id, axi_awid_i};  // concatenated ID's
   assign mem_wrtid_o = wr_req_id[RSB:AXI_ID_WIDTH];  // Mem. ID subrange
@@ -226,7 +230,7 @@ module ddr3_axi_ctrl (
       .ADDRS(ADDRS),
       .WIDTH(WIDTH),
       .MASKS(MASKS),
-      .AXI_ID_WIDTH(MEM_ID_WIDTH),
+      .AXI_ID_WIDTH(REQ_ID_WIDTH),
       .CTRL_FIFO_DEPTH(CTRL_FIFO_DEPTH),
       .DATA_FIFO_DEPTH(DATA_FIFO_DEPTH)
   ) axi_wr_path_inst (
@@ -270,7 +274,7 @@ module ddr3_axi_ctrl (
       .ADDRS(ADDRS),
       .WIDTH(WIDTH),
       .MASKS(MASKS),
-      .AXI_ID_WIDTH(REQ_ID_BITS),
+      .AXI_ID_WIDTH(MEM_ID_WIDTH),
       .CTRL_FIFO_DEPTH(CTRL_FIFO_DEPTH),
       .DATA_FIFO_DEPTH(DATA_FIFO_DEPTH)
   ) axi_rd_path_inst (
@@ -299,7 +303,7 @@ module ddr3_axi_ctrl (
       .mem_valid_i(mem_valid_i),
       .mem_ready_o(mem_ready_o),
       .mem_last_i (mem_rlast_i),  // todo: ...
-      .mem_reqid_i(RZERO),
+      .mem_reqid_i(TZERO),
       .mem_data_i (mem_rdata_i)
   );
 

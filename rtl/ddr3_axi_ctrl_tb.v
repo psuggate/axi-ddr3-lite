@@ -12,6 +12,13 @@ module ddr3_axi_ctrl_tb;
   parameter MASKS = WIDTH / 8;
   localparam SSB = MASKS - 1;
 
+  // AXI4 interconnect properties
+  parameter AXI_ID_WIDTH = 4;
+  localparam ISB = AXI_ID_WIDTH - 1;
+
+  parameter MEM_ID_WIDTH = 4;
+  localparam TSB = AXI_ID_WIDTH - 1;
+
 
   // -- Simulation Data -- //
 
@@ -53,12 +60,13 @@ module ddr3_axi_ctrl_tb;
   reg [7:0] awlen, arlen;
   reg [1:0] awburst, arburst;
   reg [ASB:0] awaddr, araddr;
-  // reg [MSB:0] rd_data;
+
+  wire [ASB:0] raddr, waddr;
   reg [SSB:0] wstrb;
+
   wire awready, wready, bvalid, arready, rvalid, rlast, fetch, store, rd_ready, wr_valid, wr_last;
   wire [3:0] bid, rid, reqid;
   wire [1:0] bresp, rresp;
-  wire [ASB:0] maddr;
   wire [SSB:0] wr_mask;
   wire [MSB:0] rdata, rd_data, wr_data;
 
@@ -154,10 +162,10 @@ module ddr3_axi_ctrl_tb;
     end else begin
       if (store && accept) begin
         wr_ready <= 1'b1;
-        wr_addr  <= maddr[MBITS+1:2];
+        wr_addr  <= waddr[MBITS+1:2];
 
-        if (maddr[1:0] != 2'b00) begin
-          $error("TB:%10t: Unaligned WRITE not supported, LSBs: %02b", $time, maddr[1:0]);
+        if (waddr[1:0] != 2'b00) begin
+          $error("TB:%10t: Unaligned WRITE not supported, LSBs: %02b", $time, waddr[1:0]);
           $fatal;
         end
       end else if (wr_valid && wr_ready && wr_last) begin
@@ -189,18 +197,16 @@ module ddr3_axi_ctrl_tb;
     end else begin
       if (fetch && accept) begin
         rd_valid <= 1'b1;
-        rd_addr <= maddr[MBITS+1:2];
+        rd_addr  <= raddr[MBITS+1:2];
         rd_count <= 2'd3;
-        respi <= reqid;
 
-        if (maddr[1:0] != 2'b00) begin
-          $error("TB:%10t: Unaligned WRITE not supported, LSBs: %02b", $time, maddr[1:0]);
+        if (raddr[1:0] != 2'b00) begin
+          $error("TB:%10t: Unaligned WRITE not supported, LSBs: %02b", $time, raddr[1:0]);
           $fatal;
         end
       end else if (rd_valid && rd_ready && rd_last) begin
         rd_valid <= 1'b0;
-        rd_last <= 1'b0;
-        respi <= 4'hx;
+        rd_last  <= 1'b0;
       end else if (rd_valid && rd_ready) begin
         rd_addr <= rd_addr + 1;
 
@@ -216,10 +222,20 @@ module ddr3_axi_ctrl_tb;
 
   // -- Module Under Test -- //
 
+  parameter CTRL_FIFO_DEPTH = 16;
+  parameter DATA_FIFO_DEPTH = 512;  // Default: 2kB SRAM block
+
+  wire [ISB:0] wreqid, rreqid;
+  wire [ASB:0] wraddr, rdaddr;
+
   ddr3_axi_ctrl #(
       .WIDTH(WIDTH),
       .MASKS(MASKS),
-      .ADDRS(ADDRS)
+      .ADDRS(ADDRS),
+      .AXI_ID_WIDTH(AXI_ID_WIDTH),
+      .MEM_ID_WIDTH(MEM_ID_WIDTH),
+      .CTRL_FIFO_DEPTH(CTRL_FIFO_DEPTH),
+      .DATA_FIFO_DEPTH(DATA_FIFO_DEPTH)
   ) ddr3_axi_ctrl_inst (
       .clock(clock),
       .reset(reset),
@@ -256,24 +272,28 @@ module ddr3_axi_ctrl_tb;
       .axi_rid_o(rid),
       .axi_rdata_o(rdata),
 
-      .mem_store_o (store),
-      .mem_fetch_o (fetch),
-      .mem_accept_i(accept),
-      .mem_error_i (error),
-      .mem_req_id_o(reqid),
-      .mem_addr_o  (maddr),
+      .mem_wrreq_o(store),   // WRITE requests to FSM
+      .mem_wrack_i(accept),
+      .mem_wrerr_i(1'b0),
+      .mem_wrtid_o(wreqid),
+      .mem_wradr_o(wraddr),
 
-      .mem_valid_o (wr_valid),
-      .mem_ready_i (wr_ready),
-      .mem_last_o  (wr_last),
-      .mem_wrmask_o(wr_mask),
-      .mem_wrdata_o(wr_data),
+      .mem_valid_o(wr_valid),  // WRITE data to DFI
+      .mem_ready_i(wr_ready),
+      .mem_wlast_o(wr_last),
+      .mem_wmask_o(wr_mask),
+      .mem_wdata_o(wr_data),
 
-      .mem_valid_i(rd_valid),
+      .mem_rdreq_o(fetch),   // READ requests to FSM
+      .mem_rdack_i(accept),
+      .mem_rderr_i(1'b0),
+      .mem_rdtid_o(rreqid),
+      .mem_rdadr_o(rdaddr),
+
+      .mem_valid_i(rd_valid),  // READ data from DFI
       .mem_ready_o(rd_ready),
-      .mem_last_i(rd_last),
-      .mem_resp_id_i(respi),
-      .mem_rddata_i(rd_data)
+      .mem_rlast_i(rd_last),
+      .mem_rdata_i(rd_data)
   );
 
 

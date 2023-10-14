@@ -202,25 +202,25 @@ module axi_ddr3_lite (
       .axi_rid_o(axi_rid_o),
       .axi_rdata_o(axi_rdata_o),
 
-      .mem_wrreq_o(fsm_wrreq), // WRITE requests to FSM
+      .mem_wrreq_o(fsm_wrreq),  // WRITE requests to FSM
       .mem_wrack_i(fsm_wrack),
       .mem_wrerr_i(fsm_wrerr),
       .mem_wrtid_o(fsm_wrtid),
       .mem_wradr_o(fsm_wradr),
 
-      .mem_valid_o(wr_valid), // WRITE data to DFI
+      .mem_valid_o(wr_valid),  // WRITE data to DFI
       .mem_ready_i(wr_ready),
       .mem_wlast_o(wr_last),
       .mem_wmask_o(wr_mask),
       .mem_wdata_o(wr_data),
 
-      .mem_rdreq_o(fsm_rdreq), // READ requests to FSM
+      .mem_rdreq_o(fsm_rdreq),  // READ requests to FSM
       .mem_rdack_i(fsm_rdack),
       .mem_rderr_i(fsm_rderr),
       .mem_rdtid_o(fsm_rdtid),
       .mem_rdadr_o(fsm_rdadr),
 
-      .mem_valid_i(rd_valid), // READ data from DFI
+      .mem_valid_i(rd_valid),  // READ data from DFI
       .mem_ready_o(rd_ready),
       .mem_rlast_i(rd_last),
       .mem_rdata_i(rd_data)
@@ -292,11 +292,10 @@ module axi_ddr3_lite (
       .mem_wrmask_o(wr_mask),
       .mem_wrdata_o(wr_data),
 
-      .mem_rvalid_i(rd_valid),
-      .mem_rready_o(rd_ready),
-      .mem_rlast_i (rd_last),
-      .mem_respid_i(rd_respi),
-      .mem_rddata_i(rd_data),
+      .mem_rvalid_o(rd_valid),
+      .mem_rready_i(rd_ready),
+      .mem_rlast_o (rd_last),
+      .mem_rddata_o(rd_data),
 
       .dfi_rst_no (dfi_rst_no),
       .dfi_cke_o  (dfi_cke_o),

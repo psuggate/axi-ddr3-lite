@@ -24,20 +24,20 @@ module generic_ddr3_phy (
     dfi_valid_o,
     dfi_data_o,
 
-    ddr3_ck_p_o,
-    ddr3_ck_n_o,
+    ddr3_ck_po,
+    ddr3_ck_no,
     ddr3_cke_o,
-    ddr3_reset_n_o,
-    ddr3_cs_n_o,
-    ddr3_ras_n_o,
-    ddr3_cas_n_o,
-    ddr3_we_n_o,
+    ddr3_rst_no,
+    ddr3_cs_no,
+    ddr3_ras_no,
+    ddr3_cas_no,
+    ddr3_we_no,
     ddr3_odt_o,
     ddr3_ba_o,
     ddr3_a_o,
     ddr3_dm_o,
-    ddr3_dqs_p_io,
-    ddr3_dqs_n_io,
+    ddr3_dqs_pio,
+    ddr3_dqs_nio,
     ddr3_dq_io
 );
 
@@ -87,20 +87,20 @@ module generic_ddr3_phy (
   output dfi_valid_o;
   output [DSB:0] dfi_data_o;
 
-  output ddr3_ck_p_o;
-  output ddr3_ck_n_o;
+  output ddr3_ck_po;
+  output ddr3_ck_no;
   output ddr3_cke_o;
-  output ddr3_reset_n_o;
-  output ddr3_cs_n_o;
-  output ddr3_ras_n_o;
-  output ddr3_cas_n_o;
-  output ddr3_we_n_o;
+  output ddr3_rst_no;
+  output ddr3_cs_no;
+  output ddr3_ras_no;
+  output ddr3_cas_no;
+  output ddr3_we_no;
   output ddr3_odt_o;
   output [2:0] ddr3_ba_o;
   output [ASB:0] ddr3_a_o;
   output [QSB:0] ddr3_dm_o;
-  inout [QSB:0] ddr3_dqs_p_io;
-  inout [QSB:0] ddr3_dqs_n_io;
+  inout [QSB:0] ddr3_dqs_pio;
+  inout [QSB:0] ddr3_dqs_nio;
   inout [MSB:0] ddr3_dq_io;
 
 
@@ -118,29 +118,29 @@ module generic_ddr3_phy (
 
   // -- DFI Read-Data Signal Assignments -- //
 
-  assign dfi_valid_o    = valid_q;
-  assign dfi_data_o     = data_q;
+  assign dfi_valid_o  = valid_q;
+  assign dfi_data_o   = data_q;
 
 
   // -- DDR3 Signal Assignments -- //
 
-  assign ddr3_ck_p_o    = ~clock;
-  assign ddr3_ck_n_o    = clock;
+  assign ddr3_ck_po   = ~clock;
+  assign ddr3_ck_no   = clock;
 
-  assign ddr3_cke_o     = cke_q;
-  assign ddr3_reset_n_o = reset_n_q;
-  assign ddr3_cs_n_o    = cs_n_q;
-  assign ddr3_ras_n_o   = ras_n_q;
-  assign ddr3_cas_n_o   = cas_n_q;
-  assign ddr3_we_n_o    = we_n_q;
-  assign ddr3_odt_o     = odt_q;
-  assign ddr3_ba_o      = ba_q;
-  assign ddr3_a_o       = addr_q;
+  assign ddr3_cke_o   = cke_q;
+  assign ddr3_rst_no  = reset_n_q;
+  assign ddr3_cs_no   = cs_n_q;
+  assign ddr3_ras_no  = ras_n_q;
+  assign ddr3_cas_no  = cas_n_q;
+  assign ddr3_we_no   = we_n_q;
+  assign ddr3_odt_o   = odt_q;
+  assign ddr3_ba_o    = ba_q;
+  assign ddr3_a_o     = addr_q;
 
-  assign ddr3_dqs_p_io  = dqs_t ? {DDR3_MASKS{1'bz}} : dqs_p;
-  assign ddr3_dqs_n_io  = dqs_t ? {DDR3_MASKS{1'bz}} : dqs_n;
-  assign ddr3_dm_o      = dm_q;
-  assign ddr3_dq_io     = dq_t ? {DDR3_WIDTH{1'bz}} : dq_q;
+  assign ddr3_dqs_pio = dqs_t ? {DDR3_MASKS{1'bz}} : dqs_p;
+  assign ddr3_dqs_nio = dqs_t ? {DDR3_MASKS{1'bz}} : dqs_n;
+  assign ddr3_dm_o    = dm_q;
+  assign ddr3_dq_io   = dq_t ? {DDR3_WIDTH{1'bz}} : dq_q;
 
 
   // -- DFI Configuration -- //
@@ -304,14 +304,14 @@ module generic_ddr3_phy (
     data_q <= {data_h, data_l};
   end
 
-  always @(posedge ddr3_ck_p_o) begin
-    if (ddr3_dqs_p_io) begin
+  always @(posedge ddr3_ck_po) begin
+    if (ddr3_dqs_pio) begin
       data_n <= ddr3_dq_io;
     end
   end
 
-  always @(posedge ddr3_ck_n_o) begin
-    if (ddr3_dqs_n_io) begin
+  always @(posedge ddr3_ck_no) begin
+    if (ddr3_dqs_nio) begin
       data_h <= ddr3_dq_io;
     end
   end

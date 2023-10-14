@@ -190,7 +190,7 @@ module ddr3_fsm (  /*AUTOARG*/);
         ST_PREC: begin
           // PRECHARGE-delay, following an auto-PRECHARGE ??
           // todo: this pattern shows up alot, make moar-betterer ?!
-          if (!ddr_rdy_i) begin
+          if (!ddl_rdy_i) begin
             state <= state;
           end else if (cmd_next_q == DDR_READ) begin
             state <= ST_READ;
@@ -203,7 +203,7 @@ module ddr3_fsm (  /*AUTOARG*/);
 
         ST_PREA: begin
           // PRECHARGE ALL banks (usually preceding a self-REFRESH)
-          if (!ddr_rdy_i) begin
+          if (!ddl_rdy_i) begin
             state <= state;
           end else if (refresh_pending != 3'b000) begin
             state <= ST_REFR;
@@ -214,7 +214,7 @@ module ddr3_fsm (  /*AUTOARG*/);
 
         ST_REFR: begin
           // Wait for all outstanding self-REFRESH operations to complete
-          if (!ddr_rdy_i) begin
+          if (!ddl_rdy_i) begin
             state <= state;
           end else if (refresh_pending == 3'b000) begin
             state <= ST_IDLE;
@@ -235,26 +235,26 @@ module ddr3_fsm (  /*AUTOARG*/);
 
   // -- Command-Queuing -- //
 
-  reg [2:0] ddr_cmd_q, ddr_bank_q;
-  reg [RSB:0] ddr_row_q;
+  reg [2:0] ddl_cmd_q, ddl_bank_q;
+  reg [RSB:0] ddl_row_q;
 
   generate
     if (DFI_GATING) begin : g_no_queuing
 
       // Slightly smaller core
-      assign ddr_cmd_o = ddr_cmd_q;
+      assign ddl_cmd_o = ddl_cmd_q;
 
     end else begin : g_cmd_queues
 
-      wire cmd_queue, cmd_ready, ddr_valid;
-      wire [DDR_ROW_BITS + 5:0] cmd_yummy;
+      wire cmd_queue, cmd_ready, ddl_valid;
+      wire [DDL_ROW_BITS + 5:0] cmd_yummy;
 
-      assign cmd_yummy = {ddr_cmd_q, ddr_bank_q, ddr_row_q};
+      assign cmd_yummy = {ddl_cmd_q, ddl_bank_q, ddl_row_q};
 
       // Queues up to '1 << ABITS' commands, and these are consumed by the DFI in
       // accordance to the timings of the DDR3 PHY.
       sync_fifo #(
-          .WIDTH (3 + 3 + DDR_ROW_BITS),
+          .WIDTH (3 + 3 + DDL_ROW_BITS),
           .ABITS (4),
           .OUTREG(1)
       ) dfi_cmd_fifo_inst (
@@ -263,9 +263,9 @@ module ddr3_fsm (  /*AUTOARG*/);
           .valid_i(cmd_queue),
           .ready_o(cmd_ready),
           .data_i (cmd_yummy),
-          .valid_o(ddr_valid),
-          .ready_i(ddr_rdy_i),
-          .data_o (ddr_cmd_o)
+          .valid_o(ddl_valid),
+          .ready_i(ddl_rdy_i),
+          .data_o (ddl_cmd_o)
       );
 
     end  // g_cmd_queues

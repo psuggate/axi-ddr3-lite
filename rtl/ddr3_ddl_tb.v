@@ -88,7 +88,7 @@ module ddr3_ddl_tb;
 
   initial begin : STIMULATE
     ddr_actv(0, 0);
-    ddr_read(0, 0, data);
+    ddr_read(0, 0);
   end  // STIMULATE
 
 
@@ -105,42 +105,48 @@ module ddr3_ddl_tb;
 
   // -- Module Under Test -- //
 
+  wire rfc, rdy;
+
   ddr3_ddl #(
-      .DDR_FREQ_MHZ(100)
-  ) ddr3_dfi_inst (
+      .DDR_FREQ_MHZ  (100),
+      .DDR_ROW_BITS  (DDR3_ROW_BITS),
+      .DDR_COL_BITS  (DDR3_COL_BITS),
+      .DFI_DATA_WIDTH(WIDTH)
+  ) ddr3_ddl_inst (
       .clock(clock),
       .reset(reset),
 
-      .enable_i(en),
-      .request_i(req),
-      .command_i(cmd),
-      .autopre_i(pre),
-      .accept_o(accept),
-      .bank_i(ba),
-      .addr_i(ad),
+      .ctl_req_i(req),
+      .ctl_rdy_o(rdy),
+      .ctl_ref_o(rfc),
+      .ctl_cmd_i(cmd),
+      .ctl_ba_i (ba),
+      .ctl_adr_i(ad),
 
-      .dfi_cke_o(dfi_cke),
-      .dfi_reset_n_o(dfi_rst_n),
-      .dfi_cs_n_o(dfi_cs_n),
-      .dfi_ras_n_o(dfi_ras_n),
-      .dfi_cas_n_o(dfi_cas_n),
-      .dfi_we_n_o(dfi_we_n),
-      .dfi_odt_o(),
-      .dfi_bank_o(dfi_bank),
-      .dfi_addr_o(dfi_addr),
-      .dfi_wren_o(dfi_wren),
-      .dfi_mask_o(dfi_mask),
-      .dfi_data_o(dfi_wdata),
-      .dfi_rden_o(dfi_rden),
+      .dfi_rst_no (dfi_rst_n),
+      .dfi_cke_o  (dfi_cke),
+      .dfi_cs_no  (dfi_cs_n),
+      .dfi_ras_no (dfi_ras_n),
+      .dfi_cas_no (dfi_cas_n),
+      .dfi_we_no  (dfi_we_n),
+      .dfi_odt_o  (),
+      .dfi_bank_o (dfi_bank),
+      .dfi_addr_o (dfi_addr),
+      .dfi_wren_o (dfi_wren),
+      .dfi_mask_o (dfi_mask),
+      .dfi_data_o (dfi_wdata),
+      .dfi_rden_o (dfi_rden),
       .dfi_valid_i(dfi_valid),
-      .dfi_data_i(dfi_rdata)
+      .dfi_data_i (dfi_rdata)
   );
 
 
   // -- PHY for the DDR3 -- //
 
   generic_ddr3_phy #(
-      .DDR_FREQ_MHZ(DDR_FREQ_MHZ)
+      .DDR3_WIDTH(16),
+      .DDR3_MASKS(2),
+      .ADDR_BITS (13)
   ) generic_ddr3_phy_inst (
       .clock(clock),
       .reset(reset),
@@ -148,18 +154,18 @@ module ddr3_ddl_tb;
       .dfi_cke_i (dfi_cke),
       .dfi_data_o(dfi_rdata),
 
-      .ddr_ck_p_o(ddr_ck_p),
-      .ddr_ck_n_o(ddr_ck_n),
-      .ddr_cke_o (ddr_cke),
+      .ddr3_ck_po(ddr_ck_p),
+      .ddr3_ck_no(ddr_ck_n),
+      .ddr3_cke_o(ddr_cke),
       // todo ...
-      .ddr_dq_io (ddr_dq)
+      .ddr3_dq_io(ddr_dq)
   );
 
 
   // -- Micron's DDR3 Simulation Module -- //
 
   ddr3 ddr3_inst (
-      .ck_p(ddr_ck_p),
+      .ck  (ddr_ck_p),
       .ck_n(ddr_ck_n),
       .cke (ddr_cke),
       // todo ...
@@ -180,7 +186,7 @@ module ddr3_ddl_tb;
       ad  <= row;
 
       @(posedge clock);
-      while (!accept) begin
+      while (!rdy) begin
         @(posedge clock);
       end
 
@@ -203,7 +209,7 @@ module ddr3_ddl_tb;
       ad  <= {4'h0, pre, col};  // todo:
 
       @(posedge clock);
-      while (!accept) begin
+      while (!rdy) begin
         @(posedge clock);
       end
 

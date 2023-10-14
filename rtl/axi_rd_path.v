@@ -19,12 +19,12 @@ module axi_rd_path (
 
     mem_fetch_o,
     mem_accept_i,
-    mem_rdid_o,
+    mem_reqid_o,
     mem_addr_o,
     mem_valid_i,
     mem_ready_o,
     mem_last_i,
-    mem_rdid_i,
+    mem_reqid_i,
     mem_data_i
 );
 
@@ -68,13 +68,13 @@ module axi_rd_path (
 
   output mem_fetch_o;
   input mem_accept_i;
-  output [ISB:0] mem_rdid_o;
+  output [ISB:0] mem_reqid_o;
   output [ASB:0] mem_addr_o;
 
   input mem_valid_i;
   output mem_ready_o;
   input mem_last_i;
-  input [ISB:0] mem_rdid_i;
+  input [ISB:0] mem_reqid_i;
   input [MSB:0] mem_data_i;
 
 
@@ -220,7 +220,7 @@ module axi_rd_path (
 
       .valid_o(rcf_valid),
       .ready_i(fetch & mem_accept_i),
-      .data_o ({mem_addr_o, mem_rdid_o})
+      .data_o ({mem_addr_o, mem_reqid_o})
   );
 
 
@@ -237,7 +237,7 @@ module axi_rd_path (
       .reset  (reset),
       .valid_i(fetch & mem_accept_i),
       .ready_o(),
-      .data_i (mem_rdid_o),
+      .data_i (mem_reqid_o),
       .valid_o(rrf_ready),
       .ready_i(axi_rvalid_o & axi_rready_i & axi_rlast_o),
       .data_o (axi_rid_o)
