@@ -60,50 +60,54 @@ module ddr3_axi_ctrl (
     mem_valid_o,
     mem_ready_i,
     mem_last_o,
-    mem_wrmask_o,
-    mem_wrdata_o,
+    mem_wmask_o,
+    mem_wdata_o,
 
     mem_valid_i,
     mem_ready_o,
-    mem_last_i,
-    mem_resp_id_i,
-    mem_rddata_i
+    mem_rlast_i,
+    mem_reqid_i,
+    mem_rdata_i
 );
 
-  parameter DDR_FREQ_MHZ = 100;
-  parameter DDR_WR_LATENCY = 6;
-  parameter DDR_RD_LATENCY = 5;
-  localparam DDR_BURST_LEN = 4;
+  // Sets the number of (full-width) AXI4 transfers for a burst transaction
+  // to/from the memory-controller
+  parameter MEM_BURST_LEN = 4;
 
-  localparam DDR_BANK_BITS = 3;
-  localparam BSB = DDR_BANK_BITS - 1;
-  parameter DDR_COL_BITS = 9;
-  localparam CSB = DDR_COL_BITS - 1;
-  parameter DDR_ROW_BITS = 15;
-  localparam RSB = DDR_ROW_BITS - 1;
+  // For people that want their lives to be difficult ...
+  parameter AXI_USES_SIZE = 0;
+  parameter AXI_UNALIGNED = 0;
 
+  parameter AXI_ID_WIDTH = 4;
+  localparam ISB = AXI_ID_WIDTH - 1;
+
+  parameter MEM_ID_WIDTH = 4 + AXI_ID_WIDTH;
+  localparam TSB = MEM_ID_WIDTH - 1;
+
+
+  // Byte-address width, in bits -- lower bits will (typ) be ignored, and upper
+  // bits may be ignored as well, if they lie outside of address-range
   parameter ADDRS = 32;
   localparam ASB = ADDRS - 1;
 
+  // Should be one of: {8, 16, 32, 64, 128, 256, 512, 1024}
   parameter WIDTH = 32;
   localparam MSB = WIDTH - 1;
 
   parameter MASKS = WIDTH / 8;
   localparam SSB = MASKS - 1;
 
-  parameter AXI_ID_WIDTH = 4;
-  localparam ISB = AXI_ID_WIDTH - 1;
-
   parameter CTRL_FIFO_DEPTH = 16;
-  parameter CTRL_FIFO_BLOCK = 0;
+  parameter CTRL_FIFO_BLOCK = 0;  // Defaults to using LUT-SRAM's
   localparam CBITS = $clog2(CTRL_FIFO_DEPTH);
 
-  parameter DATA_FIFO_DEPTH = 512;
-  parameter DATA_FIFO_BLOCK = 1;
+  parameter DATA_FIFO_DEPTH = 512;  // Default: 2kB SRAM block
+  parameter DATA_FIFO_BLOCK = 1;  // Defaults to using SRAM hard-IP blocks
   localparam DBITS = $clog2(DATA_FIFO_DEPTH);
 
   // If the memory controller is idle (and both datapaths), send any request
   // straight to the memory-controller (if 'FAST_PATH_ENABLE == 1')
+  // todo: this will require combinational outputs, limiting frequency ??
   parameter FAST_PATH_ENABLE = 1;
 
 
@@ -115,6 +119,7 @@ module ddr3_axi_ctrl (
   input [ASB:0] axi_awaddr_i;
   input [ISB:0] axi_awid_i;
   input [7:0] axi_awlen_i;
+  input [2:0] axi_awsize_i;
   input [1:0] axi_awburst_i;
   input axi_wvalid_i;  // AXI4 Write Data Port
   output axi_wready_o;
@@ -125,11 +130,13 @@ module ddr3_axi_ctrl (
   input axi_bready_i;
   output [1:0] axi_bresp_o;
   output [ISB:0] axi_bid_o;
+
   input axi_arvalid_i;  // AXI4 Read Address Port
   output axi_arready_o;
   input [ASB:0] axi_araddr_i;
   input [ISB:0] axi_arid_i;
   input [7:0] axi_arlen_i;
+  input [2:0] axi_arsize_i;
   input [1:0] axi_arburst_i;
   input axi_rready_i;  // AXI4 Read Data Port
   output axi_rvalid_o;
@@ -138,24 +145,32 @@ module ddr3_axi_ctrl (
   output [ISB:0] axi_rid_o;
   output axi_rlast_o;
 
-  output mem_store_o;
-  output mem_fetch_o;
-  input mem_accept_i;
-  input mem_error_i;
-  output [ISB:0] mem_req_id_o;
-  output [MSB:0] mem_addr_o;
+  // Write-request port (to controller)
+  output mem_wrreq_o;
+  input mem_wrack_i;
+  input mem_wrerr_i;
+  output [TSB:0] mem_wrtid_o;
+  output [ASB:0] mem_wradr_o;
 
+  // Write-data port (to datapath)
   output mem_valid_o;
   input mem_ready_i;
-  output mem_last_o;
-  output [SSB:0] mem_wrmask_o;
-  output [MSB:0] mem_wrdata_o;
+  output mem_wlast_o;
+  output [SSB:0] mem_wmask_o;
+  output [MSB:0] mem_wdata_o;
 
+  // Read-request port (to controller)
+  output mem_rdreq_o;
+  input mem_rdack_i;
+  input mem_rderr_i;
+  output [TSB:0] mem_rdtid_o;
+  output [ASB:0] mem_rdadr_o;
+
+  // Read-data port (from datapath)
   input mem_valid_i;
   output mem_ready_o;
-  input mem_last_i;
-  input [ISB:0] mem_resp_id_i;
-  input [MSB:0] mem_rddata_i;
+  input mem_rlast_i;
+  input [MSB:0] mem_rdata_i;
 
 
   // -- Constants -- //
@@ -165,157 +180,53 @@ module ddr3_axi_ctrl (
   // todo: this is but a sketch ...
   localparam COMMAND_WIDTH = 4 + 1 + WIDTH;
 
-  localparam TRANS = 4;
-  localparam TSB = TRANS - 1;
+  localparam ADDR_ZERO_BITS = $clog2(MASKS);
+
+  localparam REQ_ID_BITS = MEM_ID_WIDTH - AXI_ID_WIDTH;
+  localparam RSB = RBITS - 1;
+  localparam RZERO = {REQ_ID_BITS{1'b0}};
 
 
-  // -- Turn AXI4 Commands into Memory-Controller Commands -- //
-
-  reg awready, wready, wpending, arready;
-  wire wdf_ready, wrf_ready, cmd_ready, mem_store_w, mem_accept, mem_ready;
+  reg [RSB:0] req_id;
+  wire wr_accept, rd_accept, issued, rd_finish;
 
 
-  // assign axi_awready_o = awready;
-  // assign axi_arready_o = arready;
+  assign wr_accept = mem_wrreq_o & mem_wrack_i;
+  assign rd_accept = mem_rdreq_o & mem_rdack_i;
+  assign rd_finish = axi_rvalid_o & axi_rready_i & axi_rlast_o;
 
-  localparam ST_IDLE = 4'b0000;
-  localparam ST_BUSY = 4'b1000;
+  assign issued = wr_accept | rd_accept;
 
-  reg [  3:0] state = ST_IDLE;
 
-  // Current, Next, Read, Write (Transaction ID's)
-  reg [TSB:0] trid;
-  wire [TSB:0] ctrid, ntrid, rtrid, wtrid;
-
-  assign ntrid = trid + 1;
+  // -- Queue the AXI Requests by Arrival Ordering -- //
 
   always @(posedge clock) begin
     if (reset) begin
-      trid  <= {TRANS{1'b0}};
-      state <= ST_IDLE;
+      req_id <= RZERO;
     end else begin
-      case (state)
-        ST_IDLE: begin
-        end
-
-        ST_BUSY: begin
-          // Can not queue any more AXI requests
-        end
-
-        default: begin
-          $error("AX:%10t: CTRL state machine failure!", $time);
-          $fatal;
-        end
-      endcase
-    end
-  end
-
-
-  // -- Write Requests -- //
-
-  // todo: there are a bunch of different FSM's that are needed ??
-  // todo: add 'skid-buffers' to each channel ??
-  // todo: for unaligned writes, padding & masks will need to be inserted -- here
-  //   or in the memory controller ??
-  // todo: how to handle close-together read & write requests, since read/write
-  //   ordering may not be easy to determine (by AXI4 masters) ??
-  always @(posedge clock) begin
-    if (reset) begin
-      awready  <= 1'b0;
-      wpending <= 1'b0;
-      wready   <= 1'b0;
-    end else begin
-      // Can accept commands as long as there is space in both the command FIFO
-      // and the write-data FIFO.
-      // todo: handle simultaneous read & write requests
-      awready <= cmd_ready & wdf_ready;
-
-      // todo: unnecessarily restrictive -- does not allow for multiple writes
-      //   "in-flight" ??
-      if (awready && axi_awvalid_i) begin
-        wpending <= 1'b1;
-      end else if (wready && axi_wvalid_i && axi_wlast_i) begin
-        wpending <= 1'b0;
+      if (issued) begin
+        req_id <= req_id + 1;
       end
-
-      wready <= wpending & wdf_ready;
-    end
-  end
-
-
-  // -- Read Requests -- //
-
-  always @(posedge clock) begin
-    if (reset) begin
-      arready <= 1'b0;
-    end else begin
-      // Can accept commands as long as there is space in both the command FIFO
-      // and the read-data FIFO.
-      // todo: handle simultaneous read & write requests
-      arready <= cmd_ready & mem_ready;
-    end
-  end
-
-
-  // -- Queue the Commands to the Memory-Controller -- //
-
-  reg [3:0] req_id;
-  reg req_we, valid, store;
-  reg [ASB:0] req_ad;
-
-  wire cmd_valid, cmd_queued, mem_accept_w;
-  reg [COMMAND_WIDTH-1:0] command_q;
-  wire [COMMAND_WIDTH-1:0] command_w, command_a;
-
-
-  assign mem_req_id_o = command_a[COMMAND_WIDTH-1:COMMAND_WIDTH-3];
-
-  always @(posedge clock) begin
-    command_q <= command_w;
-  end
-
-
-  // Do not enqueue commands when the command-FIFO is full.
-  reg cmd_block;
-
-  assign command_w = {req_id, valid, store, req_ad};
-  assign cmd_valid = axi_awvalid_i || axi_arvalid_i;
-
-  always @(posedge clock) begin
-    if (reset) begin
-      cmd_block <= 1'b1;
-      // cmd_valid <= 1'b0;
-      // cmd_data  <= 'bx;
-    end else begin
-      cmd_block <= ~cmd_ready;
-      // if (axi_awvalid_i && cmd_ready) begin
     end
   end
 
 
   // -- AXI Interface to Memory Controller for Write-Data -- //
 
-  wire wr_store, wr_accept, wr_valid, wr_ready;
-  wire [ISB:0] wr_reqid;
-  wire [ASB:0] wr_addr;
+  // Order-ID's are concatenated with AXI transaction ID's, so that relative
+  // ordering of AXI transactions is known -- even though reads and writes may
+  // be re-ordered by the scheduler.
+  wire [TSB:0] wr_resp_id, wr_req_id, aw_req_id;
 
-  wire rd_fetch, rd_accept, rd_ready;
-  wire [ISB:0] rd_reqid;
-  wire [ASB:0] rd_addr;
-
-  assign mem_store_o = wr_store;
-  assign mem_fetch_o = rd_fetch;
-  assign mem_req_id_o = wr_store ? wr_reqid : rd_reqid;
-  assign mem_addr_o = wr_store ? wr_addr : rd_addr;
-
-  assign wr_accept = mem_accept_i & wr_store;
-  assign rd_accept = mem_accept_i & rd_fetch;
+  assign aw_req_id   = {req_id, axi_awid_i};  // concatenated ID's
+  assign mem_wrtid_o = wr_req_id[RSB:AXI_ID_WIDTH];  // Mem. ID subrange
+  assign axi_bid_o   = wr_resp_id[ISB:0];  // AXI ID subrange
 
   axi_wr_path #(
       .ADDRS(ADDRS),
       .WIDTH(WIDTH),
       .MASKS(MASKS),
-      .AXI_ID_WIDTH(AXI_ID_WIDTH),
+      .AXI_ID_WIDTH(MEM_ID_WIDTH),
       .CTRL_FIFO_DEPTH(CTRL_FIFO_DEPTH),
       .DATA_FIFO_DEPTH(DATA_FIFO_DEPTH)
   ) axi_wr_path_inst (
@@ -324,7 +235,7 @@ module ddr3_axi_ctrl (
 
       .axi_awvalid_i(axi_awvalid_i),  // AXI4 Write Address Port
       .axi_awready_o(axi_awready_o),
-      .axi_awid_i(axi_awid_i),
+      .axi_awid_i(aw_req_id),
       .axi_awlen_i(axi_awlen_i),
       .axi_awburst_i(axi_awburst_i),
       .axi_awaddr_i(axi_awaddr_i),
@@ -337,19 +248,19 @@ module ddr3_axi_ctrl (
 
       .axi_bvalid_o(axi_bvalid_o),  // AXI4 Write Response Port
       .axi_bready_i(axi_bready_i),
-      .axi_bid_o(axi_bid_o),
+      .axi_bid_o(wr_resp_id),
       .axi_bresp_o(axi_bresp_o),
 
-      .mem_store_o (wr_store),
-      .mem_accept_i(wr_accept),
-      .mem_wrid_o  (wr_reqid),
-      .mem_addr_o  (wr_addr),
+      .mem_store_o (mem_wrreq_o),
+      .mem_accept_i(mem_wrack_i),
+      .mem_wrid_o  (wr_req_id),
+      .mem_addr_o  (mem_wradr_o),
 
       .mem_valid_o(mem_valid_o),
       .mem_ready_i(mem_ready_i),
-      .mem_last_o (mem_last_o),
-      .mem_strb_o (mem_wrmask_o),
-      .mem_data_o (mem_wrdata_o)
+      .mem_last_o (mem_wlast_o),
+      .mem_strb_o (mem_wmask_o),
+      .mem_data_o (mem_wdata_o)
   );
 
 
@@ -359,7 +270,7 @@ module ddr3_axi_ctrl (
       .ADDRS(ADDRS),
       .WIDTH(WIDTH),
       .MASKS(MASKS),
-      .AXI_ID_WIDTH(AXI_ID_WIDTH),
+      .AXI_ID_WIDTH(REQ_ID_BITS),
       .CTRL_FIFO_DEPTH(CTRL_FIFO_DEPTH),
       .DATA_FIFO_DEPTH(DATA_FIFO_DEPTH)
   ) axi_rd_path_inst (
@@ -368,7 +279,7 @@ module ddr3_axi_ctrl (
 
       .axi_arvalid_i(axi_arvalid_i),
       .axi_arready_o(axi_arready_o),
-      .axi_arid_i(axi_arid_i),
+      .axi_arid_i(req_id),
       .axi_arlen_i(axi_arlen_i),
       .axi_arburst_i(axi_arburst_i),
       .axi_araddr_i(axi_araddr_i),
@@ -377,56 +288,53 @@ module ddr3_axi_ctrl (
       .axi_rready_i(axi_rready_i),
       .axi_rlast_o(axi_rlast_o),
       .axi_rresp_o(axi_rresp_o),
-      .axi_rid_o(axi_rid_o),
+      .axi_rid_o(),  // not used
       .axi_rdata_o(axi_rdata_o),
 
-      .mem_fetch_o (rd_fetch),
-      .mem_accept_i(rd_accept),
-      .mem_rdid_o  (rd_reqid),
-      .mem_addr_o  (rd_addr),
+      .mem_fetch_o (mem_rdreq_o),
+      .mem_accept_i(mem_rdack_i),
+      .mem_reqid_o (mem_rdtid_o),
+      .mem_addr_o  (mem_rdadr_o),
 
       .mem_valid_i(mem_valid_i),
       .mem_ready_o(mem_ready_o),
-      .mem_last_i(mem_last_i),  // todo: ...
-      .mem_rdid_i(mem_resp_id_i),
-      .mem_data_i(mem_rddata_i)
+      .mem_last_i (mem_rlast_i),  // todo: ...
+      .mem_reqid_i(RZERO),
+      .mem_data_i (mem_rdata_i)
   );
 
 
-  // -- AXI4 Transaction Response FIFO -- //
+  // -- AXI4 Read-Transaction Response FIFO -- //
 
-  wire trf_empty_n, trf_full_n, trf_push, trf_pop;
-  wire [ISB:0] trid_a, trid_w;
-
-  assign trid_a   = rd_fetch ? rd_reqid : (wr_store ? wr_reqid : {AXI_ID_WIDTH{1'bx}});
-
-  assign trf_push = (mem_fetch_o | mem_store_o) & mem_accept_i;
-  assign trf_pop  = (axi_rvalid_o & axi_rready_i & axi_rlast_o) | (axi_bvalid_o & axi_bready_i);
-
-
-  // todo: store the transaction ID of each request that is sent to the memory
-  //   controller, and when each request completes, generate the appropriate
-  //   AXI4 response.
-  // todo: perhaps this ordering should be left up to the memory controller ??
+  // Note: only memory-command ordering ID's are sent to the memory controller,
+  //   so this FIFO pairs the correct AXI response ID's with completed AXI read
+  //   transactions.
   sync_fifo #(
       .WIDTH (AXI_ID_WIDTH),
       .ABITS (CBITS),
       .OUTREG(CTRL_FIFO_BLOCK)
-  ) response_fifo_inst (
+  ) rd_resp_fifo_inst (
       .clock(clock),
       .reset(reset),
 
-      .valid_i(trf_push),
-      .ready_o(trf_full_n),
-      .data_i (trid_a),
+      .valid_i(rd_accept),
+      .ready_o(),
+      .data_i (axi_arid_i),
 
-      .valid_o(trf_empty_n),
-      .ready_i(trf_pop),
-      .data_o (trid_w)
+      .valid_o(),
+      .ready_i(rd_finish),
+      .data_o (axi_rid_o)
   );
 
 
+  //
+  //  Simulation Configuation & Sanity Checks
+  ///
+
 `ifdef __icarus
+  wire [7:0] rlanes = 1 << axi_arsize_i;
+  wire [7:0] wlanes = 1 << axi_awsize_i;
+
   always @(posedge clock) begin
     if (reset);
     else begin
@@ -436,6 +344,14 @@ module ddr3_axi_ctrl (
       end
       if (axi_arvalid_i && axi_arburst_i != BURST_INCR) begin
         $error("%10t: Only 'INCR' READ bursts are supported", $time);
+        $fatal;
+      end
+      if (AXI_USES_SIZE && axi_arvalid_i && rlanes != MASKS) begin
+        $error("%10t: Data-width resizing not supported", $time);
+        $fatal;
+      end
+      if (AXI_USES_SIZE && axi_awvalid_i && wlanes != MASKS) begin
+        $error("%10t: Data-width resizing not supported", $time);
         $fatal;
       end
     end

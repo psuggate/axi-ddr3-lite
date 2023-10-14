@@ -79,6 +79,9 @@ module axi_ddr3_lite (
   parameter AXI_ID_WIDTH = 4;
   localparam ISB = AXI_ID_WIDTH - 1;
 
+  parameter MEM_ID_WIDTH = 4;
+  localparam TSB = AXI_ID_WIDTH - 1;
+
 
   input clock;
   input reset;
@@ -134,8 +137,10 @@ module axi_ddr3_lite (
   wire [MSB:0] dfi_wdata, dfi_rdata, mem_rdata;
 
   // AXI <-> FSM signals
-  wire fsm_fetch, fsm_store, fsm_accept, fsm_error;
-  wire [ASB:0] fsm_maddr;
+  wire fsm_wrreq, fsm_wrack, fsm_wrerr;
+  wire fsm_rdreq, fsm_rdack, fsm_rderr;
+  wire [TSB:0] fsm_wrtid, fsm_rdtid;
+  wire [ASB:0] fsm_wradr, fsm_rdadr;
 
   // AXI <-> {FSM, DDL} signals
   wire wr_valid, wr_ready, wr_last;
@@ -152,7 +157,13 @@ module axi_ddr3_lite (
   // -- AXI Requests to DDR3 Requests -- //
 
   ddr3_axi_ctrl #(
-      .DDR_FREQ_MHZ(DDR_FREQ_MHZ)
+      .ADDRS(ADDRS),
+      .WIDTH(WIDTH),
+      .MASKS(MASKS),
+      .AXI_ID_WIDTH(AXI_ID_WIDTH),
+      .MEM_ID_WIDTH(MEM_ID_WIDTH),
+      .CTRL_FIFO_DEPTH(CTRL_FIFO_DEPTH),
+      .DATA_FIFO_DEPTH(DATA_FIFO_DEPTH)
   ) ddr3_axi_ctrl_inst (
       .clock(clock),
       .reset(reset),
@@ -162,6 +173,7 @@ module axi_ddr3_lite (
       .axi_awid_i(axi_awid_i),
       .axi_awlen_i(axi_awlen_i),
       .axi_awburst_i(axi_awburst_i),
+      .axi_awsize_i(3'b010),
       .axi_awaddr_i(axi_awaddr_i),
 
       .axi_wvalid_i(axi_wvalid_i),  // AXI4 Write Data Port
@@ -180,6 +192,7 @@ module axi_ddr3_lite (
       .axi_arid_i(axi_arid_i),
       .axi_arlen_i(axi_arlen_i),
       .axi_arburst_i(axi_arburst_i),
+      .axi_arsize_i(3'b010),
       .axi_araddr_i(axi_araddr_i),
 
       .axi_rvalid_o(axi_rvalid_o),
@@ -189,24 +202,28 @@ module axi_ddr3_lite (
       .axi_rid_o(axi_rid_o),
       .axi_rdata_o(axi_rdata_o),
 
-      .mem_store_o (fsm_store),
-      .mem_fetch_o (fsm_fetch),
-      .mem_accept_i(fsm_accept),
-      .mem_error_i (fsm_error),
-      .mem_req_id_o(fsm_reqid),
-      .mem_addr_o  (fsm_maddr),
+      .mem_wrreq_o(fsm_wrreq), // WRITE requests to FSM
+      .mem_wrack_i(fsm_wrack),
+      .mem_wrerr_i(fsm_wrerr),
+      .mem_wrtid_o(fsm_wrtid),
+      .mem_wradr_o(fsm_wradr),
 
-      .mem_valid_o (wr_valid),
-      .mem_ready_i (wr_ready),
-      .mem_last_o  (wr_last),
-      .mem_wrmask_o(wr_mask),
-      .mem_wrdata_o(wr_data),
+      .mem_valid_o(wr_valid), // WRITE data to DFI
+      .mem_ready_i(wr_ready),
+      .mem_wlast_o(wr_last),
+      .mem_wmask_o(wr_mask),
+      .mem_wdata_o(wr_data),
 
-      .mem_valid_i(rd_valid),
+      .mem_rdreq_o(fsm_rdreq), // READ requests to FSM
+      .mem_rdack_i(fsm_rdack),
+      .mem_rderr_i(fsm_rderr),
+      .mem_rdtid_o(fsm_rdtid),
+      .mem_rdadr_o(fsm_rdadr),
+
+      .mem_valid_i(rd_valid), // READ data from DFI
       .mem_ready_o(rd_ready),
-      .mem_last_i(rd_last),
-      .mem_resp_id_i(rd_respi),
-      .mem_rddata_i(rd_data)
+      .mem_rlast_i(rd_last),
+      .mem_rdata_i(rd_data)
   );
 
 

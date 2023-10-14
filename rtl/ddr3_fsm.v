@@ -73,7 +73,7 @@ module ddr3_fsm (  /*AUTOARG*/);
   input mem_wrreq_i;
   output mem_wrack_o;
   output mem_wrerr_o;
-  output [ISB:0] mem_wrtid_o;
+  input [ISB:0] mem_wrtid_i;
   input [ASB:0] mem_wradr_i;
 
   // Read-request port

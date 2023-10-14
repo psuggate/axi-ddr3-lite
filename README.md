@@ -22,3 +22,10 @@ Notes:
 + BUT, for scheduling, knowing the relative costs (when choosing the next command) needs to be known, to ensure good performance; e.g., WRITE -> READ delays are significant (14 cycles, when using: CWL=6, DLL=off, BL8), so alternating between READ & WRITE (for each BL8) will lower throughput by a lot.
 
 + [OPT] Needs to properly sequence reads and writes, when they refer to the same memory addresses -- this behaviour is not part of AXI4, so do not bother? Read-Before-Write (RBW), Write-Before-Read (WBR), and Write-Before-Write (WBW) are handled above the AXI4 interconnect abstraction layer?
+
+| `curr_state` | event                    | `next_state` |
+|:-------------|:-------------------------|:-------------|
+| `ST_INIT`    | `ddl_rdy`                | `ST_IDLE`    |
+| `ST_IDLE`    | `mem_wrreq OR mem_rdreq` | `ST_ACTV`    |
+| `ST_ACTV`    |                          | `ST_WRIT`    |
+|              |                          | `ST_READ`    |
