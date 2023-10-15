@@ -206,6 +206,9 @@ module axi_rd_path (
 
   localparam COMMAND_WIDTH = ADDRS + AXI_ID_WIDTH;
 
+  // todo: the output 'data_o' is combinational/async (by default), which could
+  //   become the critical-path, as a subsequent MUX is required to select the
+  //   actual address-bits, from: {wr_row, wr_col, rd_row, rd_col, mode_val} ??
   sync_fifo #(
       .WIDTH (COMMAND_WIDTH),
       .ABITS (CBITS),
@@ -228,6 +231,9 @@ module axi_rd_path (
 
   // todo: should this be in 'ddr3_axi_ctrl', so that it can be used for both
   //   READ & WRITE operations ??
+  // todo: there is another read-response FIFO in 'ddr3_axi_ctrl' already, to
+  //   handle the actual AXI ID's, whereas this one stores the memory-ordering
+  //   ID's -- combine these two FIFO's ??
   sync_fifo #(
       .WIDTH (AXI_ID_WIDTH),
       .ABITS (CBITS),

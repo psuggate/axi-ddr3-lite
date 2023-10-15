@@ -29,3 +29,51 @@ Notes:
 | `ST_IDLE`    | `mem_wrreq OR mem_rdreq` | `ST_ACTV`    |
 | `ST_ACTV`    |                          | `ST_WRIT`    |
 |              |                          | `ST_READ`    |
+
+## Fast-Path Reads
+
+Can fast-path a READ command if:
+ - requested row & bank match the previous row & bank
+ - read command FIFO is empty
+ - write command FIFO is "low priority"
+ - memory-controller is idle, or has just issued the previous read
+ - AXI address is appropriately aligned, and the burst-length is supported
+
+If row and bank do not match, then:
+ - looking up the bank in the bank-of-banks will be too slow
+ - same bank but different row requires PRECHARGE then ACTIVATE, so _not fast_
+
+Roughly:
+```verilog
+// Pre-calculate this
+always @(posedge clock) begin
+  fast_path_read_allowed <= mem_can_read && rcf_empty && wcf_empty;
+end
+
+assign addr_is_aligned = araddr[3:0] == 4'b0000; // todo
+assign bank_row_match = araddr[19:4] == {prev_bank, prev_row};
+
+always @(posedge clock) begin
+  if (arvalid && arready && fast_path_read_allowed && bank_row_match)
+  begin
+    // fast-path read
+  end
+end
+```
+which has a fan-in of around 37 (for 13-bit row addresses). A LUT4-based FPGA could use the following circuit:
+ - 8x LUT4's and a carry-chain, for the bank & row comparison;
+ - LUT4's to determine if a fast-path read is possible, and requested;
+ - LUT4 2:1 MUX with two inputs that determine the 'SEL' value; and
+ - DFF to capture the `A[12:0]`{.v} values.
+The critical path is through the comparator (approx 5 ns), then the LUT4 2:1 MUX into the DFF (approx 3 ns, including setup & hold times)? Therefore, 125 MHz is possible, which is also the limit of DDR3 DLL=off mode?
+
+What percentage of READ commands could this be useful for? For a soft-CPU, fast-path reads would be useful for instruction- and data- cache misses? Perhaps much more useful if wrapping-bursts are supported -- so that the cache receives the requested word first, as well?
+
+The READ response path may need to be optimised, for "fast-path responses." Bypassing the read-data FIFO will save two (or more) clock cycles?
+
+## Auto-PRECHARGE
+
+Conditions:
+ - burst READ or WRITE crosses a page boundary ?
+ - REFRESH imminent ?
+ - queued READ/WRITE requires a different row, from an active bank ?
