@@ -234,6 +234,10 @@ module axi_ddr3_lite (
   wire [ISB:0] ddl_tid;
   wire [RSB:0] ddl_adr;
 
+  wire cfg_req, cfg_run, cfg_rdy, cfg_ref;
+  wire [2:0] cfg_cmd, cfg_ba;
+  wire [RSB:0] cfg_adr;
+
   ddr3_fsm #(
       .DDR_BURSTLEN(DDR_BURSTLEN),
       .DDR_ROW_BITS(DDR_ROW_BITS),
@@ -243,7 +247,7 @@ module axi_ddr3_lite (
       .clock(clock),
       .reset(reset),
 
-      .mem_wrreq_i(fsm_wrreq),
+      .mem_wrreq_i(fsm_wrreq),  // Bus -> Controller requests
       .mem_wrack_o(fsm_wrack),
       .mem_wrerr_o(fsm_wrerr),
       .mem_wrtid_i(fsm_wrtid),
@@ -255,13 +259,40 @@ module axi_ddr3_lite (
       .mem_rdtid_i(fsm_rdtid),
       .mem_rdadr_i(fsm_rdadr),
 
-      .ddl_req_o(ddl_req),
+      .cfg_req_i(cfg_req),  // Configuration port
+      .cfg_rdy_o(cfg_rdy),
+      .cfg_cmd_i(cfg_cmd),
+      .cfg_ref_i(cfg_ref),
+      .cfg_ba_i (cfg_ba),
+      .cfg_adr_i(cfg_adr),
+
+      .ddl_req_o(ddl_req),  // Controller <-> DFI
       .ddl_rdy_i(ddl_rdy),
-      .ddl_ref_i(ddl_ref),
       .ddl_cmd_o(ddl_cmd),
       .ddl_tid_o(ddl_tid),
       .ddl_ba_o (ddl_ba),
       .ddl_adr_o(ddl_adr)
+  );
+
+
+  ddr3_cfg #(
+      .DDR_FREQ_MHZ(DDR_FREQ_MHZ),
+      .DDR_ROW_BITS(DDR_ROW_BITS),
+  ) ddr3_cfg_inst (
+      .clock(clock),
+      .reset(reset),
+      .cfg_valid_i(1'b0),
+      .cfg_data_i('bx),
+      .dfi_rst_no(),
+      .dfi_cke_o(),
+      .dfi_odt_o(),
+      .ctl_req_o(cfg_req),  // Memory controller signals
+      .ctl_run_o(cfg_run),  // When initialisation has completed
+      .ctl_rdy_i(cfg_rdy),
+      .ctl_cmd_o(cfg_cmd),
+      .ctl_ref_o(cfg_ref),
+      .ctl_ba_o(cfg_ba),
+      .ctl_adr_o(cfg_adr)
   );
 
 

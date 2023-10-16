@@ -37,7 +37,8 @@ Can fast-path a READ command if:
  - read command FIFO is empty
  - write command FIFO is "low priority"
  - memory-controller is idle, or has just issued the previous read
- - AXI address is appropriately aligned, and the burst-length is supported
+ - AXI address is appropriately aligned, and the burst-length is supported; OR
+ - provide a 'xuser' signal to explicitly request a fast-path operation?
 
 If row and bank do not match, then:
  - looking up the bank in the bank-of-banks will be too slow
@@ -70,6 +71,8 @@ The critical path is through the comparator (approx 5 ns), then the LUT4 2:1 MUX
 What percentage of READ commands could this be useful for? For a soft-CPU, fast-path reads would be useful for instruction- and data- cache misses? Perhaps much more useful if wrapping-bursts are supported -- so that the cache receives the requested word first, as well?
 
 The READ response path may need to be optimised, for "fast-path responses." Bypassing the read-data FIFO will save two (or more) clock cycles?
+
+A dedicated fast-path (user) signal may be useful in situations where multiple functional units share the same memory interface, and there is a clear priority difference between types of accesses. E.g., when the same memory controller provides redraw-data for a display, as well as servicing requests from a microprocessor. Fast-path requests could then allow queue-jumping, for good processor performance, whilst still supporting long burst-transactions, for high thoughput and utilisation.
 
 ## Auto-PRECHARGE
 
