@@ -1,11 +1,10 @@
 `timescale 1ns / 100ps
 `define __gowin_for_the_win
-
-module axi_ddr3_lite;
+module axi_ddr3_lite_tb;
 
   // -- Simulation Settings -- //
 
-  localparam DDR_FREQUENCY_MHZ = 100;
+  localparam DDR_FREQ_MHZ = 100;
 
 
   // -- Simulation Data -- //
@@ -308,7 +307,7 @@ module axi_ddr3_lite;
   ///
 
   axi_ddr3_lite #(
-      .DDR_FREQ_MHZ(DDR_FREQUENCY_MHZ),
+      .DDR_FREQ_MHZ(DDR_FREQ_MHZ),
       .USE_GENERIC_PHY(0)
   ) ddr_core_inst (
       .clock(clock),  // system clock

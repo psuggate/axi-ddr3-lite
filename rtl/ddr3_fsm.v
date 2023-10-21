@@ -10,20 +10,11 @@ module ddr3_fsm (  /*AUTOARG*/);
 
   // DDR3 SRAM Timings
   parameter DDR_FREQ_MHZ = 100;
-  localparam TCK = 1000 / DDR_FREQ_MHZ;
+  `include "ddr3_settings.vh"
 
   // Allows reads to be moved ahead of writes, and writes moved ahead of reads
   // (for same-bank accesses), in order to reduce turn-around costs
   parameter OUT_OF_ORDER = 0;
-
-  // Wait for the DFI to enable us to issue the next command; OR, queue up as many
-  // commands as possible?
-  // todo: does this have throughput consequences, or just pointless ??
-  parameter DFI_GATING = 1;  // todo: ??
-
-  // Could be useful, if 'BL8' transfers are not (always) useful, for some use-
-  // case, or memory configuration.
-  parameter BURST_CHOP = 0;  // todo: ??
 
   // Data-path and address settings
   parameter WIDTH = 32;
@@ -71,6 +62,7 @@ module ddr3_fsm (  /*AUTOARG*/);
 
   // Write-request port
   input mem_wrreq_i;
+input mem_wrlst_i; // If asserted, then LAST of burst
   output mem_wrack_o;
   output mem_wrerr_o;
   input [ISB:0] mem_wrtid_i;
@@ -78,10 +70,26 @@ module ddr3_fsm (  /*AUTOARG*/);
 
   // Read-request port
   input mem_rdreq_i;
+input mem_rdlst_i; // If asserted, then LAST of burst
   output mem_rdack_o;
   output mem_rderr_o;
   input [ISB:0] mem_rdtid_i;
   input [ASB:0] mem_rdadr_i;
+
+  // Bypass (fast-read) port
+  input byp_rdreq_i;
+input byp_rdlst_i; // If asserted, then LAST of burst
+  output byp_rdack_o;
+  output byp_rderr_o;
+  input [ISB:0] byp_rdtid_i;
+  input [ASB:0] byp_rdadr_i;
+
+  // Configuration port
+  input cfg_rdreq_i;
+  output cfg_rdack_o;
+  output cfg_rderr_o;
+  input [ISB:0] cfg_rdtid_i;
+  input [ASB:0] cfg_rdadr_i;
 
   // DDR Data-Layer control signals
   // Note: all state-transitions are gated by the 'ddl_rdy_i' signal
@@ -148,14 +156,20 @@ module ddr3_fsm (  /*AUTOARG*/);
   reg [7:0] bank_actv;  // '1' if activated
   reg [RSB:0] actv_rows[0:7];  // row-address for each active bank
 
+wire banks_active;
+
 
   // -- Main State Machine -- //
 
-  reg [3:0] state;
+  reg [3:0] state, snext;
+  reg autop;
+
+assign banks_active = |bank_actv;
 
   always @(posedge clock) begin
     if (reset) begin
       state <= ST_INIT;
+      snext <= 'bx;
     end else begin
       case (state)
         ST_INIT: begin
@@ -167,24 +181,59 @@ module ddr3_fsm (  /*AUTOARG*/);
           end else begin
             state <= state;
           end
+          snext <= 'bx;
         end
 
         ST_IDLE: begin
           // Wait for read-/write- requests -- refresh and precharging, as required
-          if (refresh_pending != 3'b000) begin
-            state <= ST_PREA;
+          if (ddl_ref_i) begin
+            if (banks_active) begin
+              state <= ST_PREA;
+              snext <= ST_REFR;
+            end else begin
+              state <= ST_REFR;
+              snext <= ST_IDLE;
+            end
           end else if (bank_switch) begin
+            // todo: don't PRE from IDLE ??
             state <= ST_PREC;
+            snext <= ST_IDLE;
+          end else if (byp_rdreq_i || mem_rdreq_i && !mem_wrreq_i) begin
+            state <= ST_ACTV;
+            snext <= ST_READ;
+          end else if (mem_wrreq_i) begin
+            state <= ST_ACTV;
+            snext <= ST_WRIT;
+          end else begin
+            state <= ST_IDLE;
+            snext <= 'bx;
           end
-          state <= ST_IDLE;
+        end
+
+        ST_ACTV: begin
+          // Row-activation command issued
+          if (ddl_rdy_i) begin
+            state <= snext;
+            if (autop) begin
+              // todo: there are multiple banks, so this is not always a good 
+              //   choice?
+              snext <= ST_IDLE;
+            end
+          end
         end
 
         ST_READ: begin
-          state <= ST_IDLE;
+          if (ddl_rdy_i) begin
+            state <= snext;
+            snext <= 'bx;  // todo
+          end
         end
 
         ST_WRIT: begin
-          state <= ST_IDLE;
+          if (ddl_rdy_i) begin
+            state <= snext;
+            snext <= 'bx;  // todo
+          end
         end
 
         ST_PREC: begin
@@ -192,6 +241,7 @@ module ddr3_fsm (  /*AUTOARG*/);
           // todo: this pattern shows up alot, make moar-betterer ?!
           if (!ddl_rdy_i) begin
             state <= state;
+            snext <= snext;
           end else if (cmd_next_q == DDR_READ) begin
             state <= ST_READ;
           end else if (cmd_next_q == DDR_WRIT) begin
@@ -205,21 +255,22 @@ module ddr3_fsm (  /*AUTOARG*/);
           // PRECHARGE ALL banks (usually preceding a self-REFRESH)
           if (!ddl_rdy_i) begin
             state <= state;
-          end else if (refresh_pending != 3'b000) begin
-            state <= ST_REFR;
+            snext <= snext;
           end else begin
-            state <= ST_IDLE;
+            state <= snext;
+            snext <= 'bx;
           end
         end
 
         ST_REFR: begin
-          // Wait for all outstanding self-REFRESH operations to complete
-          if (!ddl_rdy_i) begin
-            state <= state;
-          end else if (refresh_pending == 3'b000) begin
-            state <= ST_IDLE;
+          // Wait for all outstanding REFRESH operations to complete
+          // Note: 'ddl_ref_i' stays asserted until REFRESH is about to finish
+          if (!ddl_ref_i && ddl_rdy_i) begin
+            state <= snext;
+            snext <= 'bx;
           end else begin
             state <= state;
+            snext <= snext;
           end
         end
 
@@ -227,49 +278,67 @@ module ddr3_fsm (  /*AUTOARG*/);
           $error("Oh noes");
           $fatal;
           state <= ST_INIT;
+          snext <= 'bx;
         end
       endcase
     end
   end
 
 
-  // -- Command-Queuing -- //
+// -- AUTO-PRECHARGE State Machine -- //
 
-  reg [2:0] ddl_cmd_q, ddl_bank_q;
-  reg [RSB:0] ddl_row_q;
+  always @(posedge clock) begin
+    if (reset) begin
+      autop <= 1'b0;
+    end else begin
+      case (state)
+        default: begin
+          autop <= 1'b0;
+        end
 
-  generate
-    if (DFI_GATING) begin : g_no_queuing
+        ST_IDLE: begin
+          // If a memory-command will be issued, is it the last in a sequence,
+          // or do subsequent memory operations use the same '{row, bank}'?
+          if (!ddl_ref_i && ddl_rdy_i) begin
+            if (byp_rdreq_i) begin
+              autop <= ~byp_rdlst_i;
+            end else if (mem_rdreq_i) begin
+              autop <= ~mem_rdlst_i;
+            end else if (mem_wrreq_i) begin
+              autop <= ~mem_wrlst_i;
+            end else begin
+              // todo: configuration modes ??
+              autop <= 1'b0;
+            end
+          end else begin
+            autop <= 1'b0;
+          end
+        end
 
-      // Slightly smaller core
-      assign ddl_cmd_o = ddl_cmd_q;
+        ST_ACTV: begin
+          // Row-activation command issued
+          if (ddl_rdy_i) begin
+          // todo: if the next command is part of a burst, then keep 'autop'
+          //   asserted (if it already is)
+          end
+        end
 
-    end else begin : g_cmd_queues
+        ST_READ: begin
+          if (ddl_rdy_i) begin
+          // todo: if the next command is part of a burst, then keep 'autop'
+          //   asserted (if it already is)
+          end
+        end
 
-      wire cmd_queue, cmd_ready, ddl_valid;
-      wire [DDL_ROW_BITS + 5:0] cmd_yummy;
-
-      assign cmd_yummy = {ddl_cmd_q, ddl_bank_q, ddl_row_q};
-
-      // Queues up to '1 << ABITS' commands, and these are consumed by the DFI in
-      // accordance to the timings of the DDR3 PHY.
-      sync_fifo #(
-          .WIDTH (3 + 3 + DDL_ROW_BITS),
-          .ABITS (4),
-          .OUTREG(1)
-      ) dfi_cmd_fifo_inst (
-          .clock  (clock),
-          .reset  (reset),
-          .valid_i(cmd_queue),
-          .ready_o(cmd_ready),
-          .data_i (cmd_yummy),
-          .valid_o(ddl_valid),
-          .ready_i(ddl_rdy_i),
-          .data_o (ddl_cmd_o)
-      );
-
-    end  // g_cmd_queues
-  endgenerate
+        ST_WRIT: begin
+          if (ddl_rdy_i) begin
+          // todo: if the next command is part of a burst, then keep 'autop'
+          //   asserted (if it already is)
+          end
+        end
+      endcase
+    end
+  end
 
 
 endmodule  // ddr3_fsm

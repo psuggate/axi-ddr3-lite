@@ -1,4 +1,13 @@
-# axi-ddr3-lite
+---
+title: README for an AXI DDR3 SRAM Memory Controller
+author: Patrick Suggate <<patrick.suggate@gmail.com>>
+date: 21^st^ October, 2023
+colorlinks: true
+fontsize: 11pt
+---
+
+# Overview of `axi-ddr3-lite`
+
 AXI DDR3 SDRAM Memory Controller for Xilinx GoWin Altera Intel Lattice FPGAs, written in Verilog.
 
 ## Design

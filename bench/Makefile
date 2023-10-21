@@ -5,7 +5,7 @@ all:	sim
 #  Icarus Verilog settings
 ##
 IVC	?= iverilog
-OPT	:= -g2005-sv -D__icarus -Wall
+OPT	:= -g2005-sv -D__icarus -Wall -I../rtl/
 
 RTLDIR	:= ../rtl
 MISC_V	:= $(wildcard $(RTLDIR)/misc/*.v)
