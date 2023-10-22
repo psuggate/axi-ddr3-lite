@@ -164,8 +164,8 @@ module ddr3_ddl_tb;
 
 `ifdef __gowin_for_the_win
 
-// GoWin Global System Reset signal tree.
-GSR GSR();
+  // GoWin Global System Reset signal tree.
+  GSR GSR ();
 
   gw2a_ddr3_phy #(
       .DDR3_WIDTH(WIDTH / 2),  // (default)

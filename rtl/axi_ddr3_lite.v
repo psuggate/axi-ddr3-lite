@@ -277,7 +277,7 @@ module axi_ddr3_lite (
 
   ddr3_cfg #(
       .DDR_FREQ_MHZ(DDR_FREQ_MHZ),
-      .DDR_ROW_BITS(DDR_ROW_BITS),
+      .DDR_ROW_BITS(DDR_ROW_BITS)
   ) ddr3_cfg_inst (
       .clock(clock),
       .reset(reset),

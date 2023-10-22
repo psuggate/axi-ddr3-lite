@@ -6,7 +6,47 @@
  * the "DFI" module. This module schedules row-activations, bank-precharging,
  * read-requests, and data-writes.
  */
-module ddr3_fsm (  /*AUTOARG*/);
+module ddr3_fsm (  /*AUTOARG*/
+    clock,
+    reset,
+
+    mem_wrreq_i,
+    mem_wrlst_i,
+    mem_wrtid_i,
+    mem_wradr_i,
+    mem_wrack_o,
+    mem_wrerr_o,
+
+    mem_rdreq_i,
+    mem_rdlst_i,
+    mem_rdtid_i,
+    mem_rdadr_i,
+    mem_rdack_o,
+    mem_rderr_o,
+
+    cfg_req_i,
+    cfg_run_i,
+    cfg_rdy_o,
+    cfg_cmd_i,
+    cfg_ref_i,
+    cfg_ba_i,
+    cfg_adr_i,
+
+    byp_rdreq_i,
+    byp_rdlst_i,
+    byp_rdtid_i,
+    byp_rdadr_i,
+    byp_rdack_o,
+    byp_rderr_o,
+
+    ddl_rdy_i,
+    ddl_ref_i,
+    ddl_req_o,
+    ddl_cmd_o,
+    ddl_tid_o,
+    ddl_ba_o,
+    ddl_adr_o
+);
 
   // DDR3 SRAM Timings
   parameter DDR_FREQ_MHZ = 100;
@@ -62,7 +102,7 @@ module ddr3_fsm (  /*AUTOARG*/);
 
   // Write-request port
   input mem_wrreq_i;
-input mem_wrlst_i; // If asserted, then LAST of burst
+  input mem_wrlst_i;  // If asserted, then LAST of burst
   output mem_wrack_o;
   output mem_wrerr_o;
   input [ISB:0] mem_wrtid_i;
@@ -70,7 +110,7 @@ input mem_wrlst_i; // If asserted, then LAST of burst
 
   // Read-request port
   input mem_rdreq_i;
-input mem_rdlst_i; // If asserted, then LAST of burst
+  input mem_rdlst_i;  // If asserted, then LAST of burst
   output mem_rdack_o;
   output mem_rderr_o;
   input [ISB:0] mem_rdtid_i;
@@ -78,18 +118,20 @@ input mem_rdlst_i; // If asserted, then LAST of burst
 
   // Bypass (fast-read) port
   input byp_rdreq_i;
-input byp_rdlst_i; // If asserted, then LAST of burst
+  input byp_rdlst_i;  // If asserted, then LAST of burst
   output byp_rdack_o;
   output byp_rderr_o;
   input [ISB:0] byp_rdtid_i;
   input [ASB:0] byp_rdadr_i;
 
   // Configuration port
-  input cfg_rdreq_i;
-  output cfg_rdack_o;
-  output cfg_rderr_o;
-  input [ISB:0] cfg_rdtid_i;
-  input [ASB:0] cfg_rdadr_i;
+  input cfg_req_i;
+  input cfg_run_i;
+  output cfg_rdy_o;
+  input [2:0] cfg_cmd_i;
+  input cfg_ref_i;
+  input [2:0] cfg_ba_i;
+  input [RSB:0] cfg_adr_i;
 
   // DDR Data-Layer control signals
   // Note: all state-transitions are gated by the 'ddl_rdy_i' signal
@@ -148,15 +190,17 @@ input byp_rdlst_i; // If asserted, then LAST of burst
   localparam [3:0] ST_WRIT = 4'b0011;
   localparam [3:0] ST_PREC = 4'b0100;
   localparam [3:0] ST_PREA = 4'b0110;
+  localparam [3:0] ST_ACTV = 4'b0111;
   localparam [3:0] ST_REFR = 4'b1000;
 
 
   reg [2:0] prev_wr_bank, prev_rd_bank;
+  reg [2:0] cmd_next_q;
 
   reg [7:0] bank_actv;  // '1' if activated
   reg [RSB:0] actv_rows[0:7];  // row-address for each active bank
 
-wire banks_active;
+  wire banks_active, bank_switch;
 
 
   // -- Main State Machine -- //
@@ -164,7 +208,7 @@ wire banks_active;
   reg [3:0] state, snext;
   reg autop;
 
-assign banks_active = |bank_actv;
+  assign banks_active = |bank_actv;
 
   always @(posedge clock) begin
     if (reset) begin
@@ -176,7 +220,7 @@ assign banks_active = |bank_actv;
           // Sets the (post-RESET#) operating-mode for the device
           // Power-up initialisation is handled by the DFI state-machine, and
           // then the mode-setting state-machine (below)
-          if (smode == MR_DONE) begin
+          if (cfg_run_i) begin
             state <= ST_IDLE;
           end else begin
             state <= state;
@@ -215,7 +259,7 @@ assign banks_active = |bank_actv;
           if (ddl_rdy_i) begin
             state <= snext;
             if (autop) begin
-              // todo: there are multiple banks, so this is not always a good 
+              // todo: there are multiple banks, so this is not always a good
               //   choice?
               snext <= ST_IDLE;
             end
@@ -242,9 +286,9 @@ assign banks_active = |bank_actv;
           if (!ddl_rdy_i) begin
             state <= state;
             snext <= snext;
-          end else if (cmd_next_q == DDR_READ) begin
+          end else if (cmd_next_q == CMD_READ) begin
             state <= ST_READ;
-          end else if (cmd_next_q == DDR_WRIT) begin
+          end else if (cmd_next_q == CMD_WRIT) begin
             state <= ST_WRIT;
           end else begin
             state <= ST_IDLE;
@@ -285,7 +329,7 @@ assign banks_active = |bank_actv;
   end
 
 
-// -- AUTO-PRECHARGE State Machine -- //
+  // -- AUTO-PRECHARGE State Machine -- //
 
   always @(posedge clock) begin
     if (reset) begin
@@ -318,22 +362,22 @@ assign banks_active = |bank_actv;
         ST_ACTV: begin
           // Row-activation command issued
           if (ddl_rdy_i) begin
-          // todo: if the next command is part of a burst, then keep 'autop'
-          //   asserted (if it already is)
+            // todo: if the next command is part of a burst, then keep 'autop'
+            //   asserted (if it already is)
           end
         end
 
         ST_READ: begin
           if (ddl_rdy_i) begin
-          // todo: if the next command is part of a burst, then keep 'autop'
-          //   asserted (if it already is)
+            // todo: if the next command is part of a burst, then keep 'autop'
+            //   asserted (if it already is)
           end
         end
 
         ST_WRIT: begin
           if (ddl_rdy_i) begin
-          // todo: if the next command is part of a burst, then keep 'autop'
-          //   asserted (if it already is)
+            // todo: if the next command is part of a burst, then keep 'autop'
+            //   asserted (if it already is)
           end
         end
       endcase
