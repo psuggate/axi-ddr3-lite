@@ -12,29 +12,30 @@
  * Copyright 2023, Patrick Suggate.
  *
  */
-module ddr3_ddl (  /*AUTOARG*/
+module ddr3_ddl (
     clock,
     reset,
 
-    ctl_req_i, // Memory controller signals
+    ctl_req_i,  // Memory controller signals
+    ctl_run_i,
     ctl_rdy_o,
     ctl_ref_o,
     ctl_cmd_i,
     ctl_ba_i,
     ctl_adr_i,
 
-    mem_wvalid_i, // WRITE data-path
+    mem_wvalid_i,  // WRITE data-path
     mem_wready_o,
     mem_wlast_i,
     mem_wrmask_i,
     mem_wrdata_i,
 
-    mem_rvalid_o, // READ data-path
+    mem_rvalid_o,  // READ data-path
     mem_rready_i,
     mem_rlast_o,
     mem_rddata_o,
 
-    dfi_rst_no, // DDL <-> PHY signals
+    dfi_rst_no,  // DDL <-> PHY signals
     dfi_cke_o,
     dfi_cs_no,
     dfi_ras_no,
@@ -58,7 +59,7 @@ module ddr3_ddl (  /*AUTOARG*/
   // -- DDR3 SDRAM Timings and Parameters -- //
 
   parameter DDR_FREQ_MHZ = 100;
-  localparam TCK = 1000 / DDR_FREQ_MHZ;  // in ns (nanoseconds)
+  `include "ddr3_settings.vh"
 
   // Data-path and address settings
   parameter DDR_COL_BITS = 10;
@@ -71,73 +72,6 @@ module ddr3_ddl (  /*AUTOARG*/
 
   parameter DFI_MASK_WIDTH = DFI_DATA_WIDTH / 8;
   localparam SSB = DFI_MASK_WIDTH - 1;
-
-
-  // Minimum period in DLL=off mode is 8 ns (or, max freq of 125 MHz)
-  parameter DDR_CL = 6;  // DLL=off mode settings
-  parameter DDR_CWL = 6;
-
-  // DDR reset, refresh, and initialisation parameters
-  parameter DDR_TREFI = 7800;  // REFRESH-interval in ns, at normal temperatures
-  parameter DDR_TRFC = 110;  // self-REFRESH duration, in ns, for 1Gb DDR3 SDRAM
-  localparam DDR_TRESET = 200000;  // RESET# for 200 us after power-on
-  localparam DDR_TWAKE = 500000;  // after RESET# deasserts, before first command
-  localparam DDR_TCKE0 = 10;  // at least 10 ns between CKE := 0 and RESET# := 1
-  localparam DDR_CCKE1 = 5;  // at least 5x cycles between CK valid and CKE := 1
-  parameter DDR_TXPR = "todo";  // tXPR := max(tXS; 5x tCK)
-  // parameter DDR_TRRD = 10; // tRRD := max(10ns; 4x tCK)
-
-  // DDR3-800E (6-6-6) speed bin parameters (from pp. 157)
-  parameter DDR_TAAMIN = 15;  // min time (ns) for internal-read -> data
-  parameter DDR_TAAMAX = 20;  // max time (ns) for internal-read -> data
-  parameter DDR_TWR = 15;  // post-WRITE recovery time, in ns
-  parameter DDR_TRP = 15;  // min time (ns) for PRE command
-  parameter DDR_TRCD = 15;  // min time (ns) for ACT -> internal rd/wr
-  parameter DDR_TRC = 52.5;  // min ACT -> {ACT, REF} command period
-  parameter DDR_TRAS = 37.5;  // min ACT -> PRE command period
-
-  // From pp. 169
-  parameter DDR_CDLLK = 512;  // number of cycles for DLL lock
-  parameter DDR_CZQINIT = 512;  // cycles for ZCQL, or 640 ns (if greater)
-  parameter DDR_CRTP = 4;  // cycles for internal READ -> PRE
-  parameter DDR_CWTR = 4;  // cycles for internal WRITE -> internal READ
-  parameter DDR_CMRD = 4;  // cycles for Mode Reg. Set command
-  parameter DDR_CMOD = 12;  // cycles for Mode Reg. Set update
-  parameter DDR_CCCD = 4;  // CAS# -> CAS# command delay (cycles)
-  parameter DDR_CRRD = 4;  // min ACT -> ACT
-
-
-  localparam WR_CYCLES = (DDR_TWR + TCK - 1) / TCK;
-  localparam CWL_CYCLES = 6;  // DLL=off
-
-
-  // Mode Registers:
-  localparam PPD = 1'b0;  // Slow exit (PRE PD), for DLL=off
-  localparam [2:0] WRC = WR_CYCLES == 6 ? 3'b010 : (WR_CYCLES == 5 ? 3'b001 : 3'b000);
-  localparam DLLR = 1'b0;  // No DLL reset, for DLL=off
-  localparam [3:0] CAS = 4'b0100;  // CL=6 for DLL=off
-  localparam [1:0] BLEN = 2'b00;  // BL8
-  localparam [12:0] MR0 = {PPD, WRC, DLLR, 1'b0, CAS[3:1], 1'b0, CAS[0], BLEN};
-
-  localparam QOFF = 1'b0;
-  localparam DLLE = 1'b1;  // DLL=off
-  localparam [1:0] DIC = 2'b00;  // Driver Impedance Control
-  localparam [2:0] RTT = 3'b000;  // Nom, nom, nom, ...
-  localparam [1:0] AL = 2'b00;  // Additive Latency disabled; todo: CL-1 ??
-  localparam WLE = 1'b0;  // Write Leveling Enable is off
-  localparam TDQS = 1'b0;  // Only applies to x8 memory
-  localparam [12:0] MR1 = {
-    QOFF, TDQS, 1'b0, RTT[2], 1'b0, WLE, RTT[1], DIC[1], AL, RTT[0], DIC[0], DLLE
-  };
-
-  localparam [1:0] RTTWR = 2'b00;  // Dynamic ODT off
-  localparam SRT = 1'b0;  // Normal temperature for self-refresh
-  localparam ASR = 1'b0;  // Manual self-refresh reference
-  localparam [2:0] CWL = DLLE == 1'b0 ? CWL_CYCLES - 5 : 3'b001;  // DLL=off, so CWL=6
-  localparam [2:0] PASR = 3'b000;  // Full Array
-  localparam [12:0] MR2 = {2'b00, RTTWR, 1'b0, SRT, ASR, CWL, PASR};
-
-  localparam [12:0] MR3 = {13'h0000};
 
 
   // -- PHY Settings -- //
@@ -157,6 +91,7 @@ module ddr3_ddl (  /*AUTOARG*/
   // From/to DDR3 Controller
   // Note: all state-transitions are gated by the 'ctl_rdy_o' signal
   input ctl_req_i;
+  input ctl_run_i;
   output ctl_rdy_o;
   output ctl_ref_o;  // refresh-request
   input [2:0] ctl_cmd_i;
@@ -166,16 +101,21 @@ module ddr3_ddl (  /*AUTOARG*/
 
   // AXI4-ish write and read ports (in order to de-/en- queue data from/to FIFOs,
   // efficiently)
-  input mem_wvalid_i;
+  input mem_wvalid_i;  // Write port
   output mem_wready_o;
   input mem_wlast_i;  // todo: a good idea ??
   input [SSB:0] mem_wrmask_i;
   input [MSB:0] mem_wrdata_i;
 
-  output mem_rvalid_o;
+  output mem_rvalid_o;  // Read port
   input mem_rready_i;
   output mem_rlast_o;  // todo: a good idea ??
   output [MSB:0] mem_rddata_o;
+
+  output byp_rvalid_o;  // Read fast-path port
+  input byp_rready_i;
+  output byp_rlast_o;  // todo: a good idea ??
+  output [MSB:0] byp_rddata_o;
 
   // (Pseudo-) DDR3 PHY Interface (-ish)
   output dfi_cke_o;
@@ -236,41 +176,8 @@ module ddr3_ddl (  /*AUTOARG*/
   // Minimum cycles between issuing WR and PRE (same bank)
   localparam CYCLES__WR_TO_PRE = DDR_CWL + 4 + (DDR_TWR + TCK - 1) / TCK;  // 12 cycles
 
-
-  // DDR3 Commands: {CS#, RAS#, CAS#, WE#}
-  localparam DDR3_NOOP = 4'b0111;
-  localparam DDR3_ZQCL = 4'b0110;
-  localparam DDR3_READ = 4'b0101;
-  localparam DDR3_WRIT = 4'b0100;
-  localparam DDR3_ACTV = 4'b0011;
-  localparam DDR3_PREC = 4'b0010;
-  localparam DDR3_REFR = 4'b0001;
-  localparam DDR3_MODE = 4'b0000;
-
-  localparam DDR3_PREA = 4'bxxxx;
-
-  // But we always have CS# asserted, so:
-  localparam CMD_NOOP = 3'b111;
-  localparam CMD_ZQCL = 3'b110;
-  localparam CMD_READ = 3'b101;
-  localparam CMD_WRIT = 3'b100;
-  localparam CMD_ACTV = 3'b011;
-  localparam CMD_PREC = 3'b010;
-  localparam CMD_REFR = 3'b001;
-  localparam CMD_MODE = 3'b000;
-
-  // REFRESH settings
-  localparam CREFI = (DDR_TREFI - 1) / TCK;  // cycles(tREFI) - 1
-  localparam RFC_BITS = $clog2(CREFI);
-  localparam RFCSB = RFC_BITS - 1;
-  localparam [RFCSB:0] RFC_ZERO = {RFC_BITS{1'b0}};
-
-
-  reg [RFCSB:0] refresh_counter;
-  reg [2:0] refresh_pending;
-
   reg ready;
-  reg rst_nq, cke_q, cs_nq;
+reg cmd_done = 1'b0; // toodoos
 
   reg [3:0] cmd_prev_q, cmd_curr_q;
   wire [3:0] cmd_next_w;
@@ -280,8 +187,8 @@ module ddr3_ddl (  /*AUTOARG*/
 
   assign dfi_rst_no = 1'bx;  // toods ...
   assign dfi_cke_o = cke_q;
-assign dfi_cs_no = cs_nq;
-assign dfi_odt_o = 1'b0;
+  assign dfi_cs_no = cs_nq;
+  assign dfi_odt_o = 1'b0;
 
 
   // -- Connect FIFO's to the DDR IOB's -- //
@@ -291,19 +198,6 @@ assign dfi_odt_o = 1'b0;
 
   assign mem_rvalid_o = dfi_valid_i;
   assign mem_rddata_o = dfi_data_i;
-
-
-  // -- Chip Enable -- //
-
-  always @(posedge clock) begin
-    if (reset) begin
-      cke_q <= 1'b0;
-    end else begin
-      if (dfi_rst_no == 1'b0) begin
-        cke_q <= 1'b1;  // toods
-      end
-    end
-  end
 
 
   // todo:
@@ -319,10 +213,11 @@ assign dfi_odt_o = 1'b0;
   //  - precharge -> refresh sequencing
   //  - mode-register read & write sequencing
 
-  localparam ST_IDLE = 4'b0000;
-  localparam ST_ACTV = 4'b0001;
-  localparam ST_READ = 4'b0010;
-  localparam ST_WRIT = 4'b0011;
+  localparam ST_INIT = 4'b0000;
+  localparam ST_IDLE = 4'b0001;
+  localparam ST_ACTV = 4'b0010;
+  localparam ST_READ = 4'b0100;
+  localparam ST_WRIT = 4'b0101;
   localparam ST_PREC = 4'b1101;
   localparam ST_PREA = 4'b1110;
   localparam ST_REFR = 4'b1111;
@@ -332,185 +227,184 @@ assign dfi_odt_o = 1'b0;
   // todo: needs one of these per-bank ??
   always @(posedge clock) begin
     if (reset) begin
-      state <= ST_IDLE;
+      state <= ST_INIT;
       ready <= 1'b0;
     end else begin
       case (state)
+        ST_INIT: begin
+          // Wait for the (first steps of the) initialisation to finish
+          if (ctl_run_i) begin
+            state <= ST_IDLE;
+          end
+        end
+
         ST_IDLE: begin
-          ready <= 1'b1;
-          // transitions:
-          //  - REFR
-          //  - ACTV
+          if (ctl_req_i) begin
+            // Possible transitions:
+            //  - ACTV  --  precedes RD/WR commands
+            //  - PREC  --  precedes REFR (but we don't keep pages ACTV + IDLE) ??
+            //  - REFR  --  REFRESH periodically
+            //  - MODE  --  during initialisation
+            //  - ZQCL  --  as the last step during initialisation
+            case (ctl_cmd_i)
+              CMD_ACTV: begin
+                // Row-ACTIVATE, which precedes RD/WR
+                // Default activation time is 6 cycles (DLL=off)
+                state <= ST_ACTV;
+              end
+
+              CMD_PREC: begin
+                // Bank (and row) PRECHARGE
+                // Note: usually a PRECHARGE ALL command
+                // Default is 2 cycles (DLL=off)
+                state <= ST_PREC;
+              end
+
+              CMD_REFR: begin
+                // REFRESH the SDRAM contents
+                // Defaults to 11 cycles, at 100 MHz (DLL=off)
+                state <= ST_REFR;
+              end
+
+              CMD_MODE: begin
+                // Set MODE register
+                state <= ST_MODE;
+              end
+
+              CMD_ZQCL: begin
+                // Impedance calibration
+                // Defaults to 512 cycles, with DLL=off
+                state <= ST_ZQCL;
+              end
+
+              CMD_NOOP: begin
+                // Ignore these, other than noting that the memory-contoller is
+                // being a bit weird ...
+                $display("%10t: DDL: Unnecessary NOP request", $time);
+                ready <= 1'b1;
+              end
+
+              default: begin
+                $error("%10t: DDL: Invalid command: 0x%1x", $time, ctl_cmd_i);
+                state <= ST_INIT;
+              end
+            endcase
+          end
         end
 
         ST_ACTV: begin
-          // Activated banks & rows
+          // ACTIVATE a row/page within a bank
+          // Possible transitions:
+          //  - ACTV  --  allow back-to-back ACTIVATIONs ??
+          //  - PREC  --  weird, but legit. ??
+          //  - READ
+          //  - WRIT
+          if (cmd_done && ctl_req_i) begin
+            case (ctl_cmd_i)
+              CMD_READ: begin
+              end
+
+              CMD_WRIT: begin
+              end
+
+              default: begin
+              end
+            endcase
+          end else if (cmd_done) begin
+            // No command, so return to IDLE
+            $display("%10t: DDL: ACTV -> IDLE -- undesirable?", $time);
+            state <= ST_IDLE;
+          end
         end
 
         ST_PREC: begin
-          // Wait until timer has elapsed
-        end
+          // Wait until timer has elapsed, for a PRECHARGE
+          // Possible transitions:
+          //  - ACTV
+          //  - REFR
+          //  - IDLE
+          //  - MODE  --  weird, but legit. ??
+          // plus unsupported stuff, like power-down.
+          if (cmd_done && ctl_req_i) begin
+            case (ctl_cmd_i)
+              CMD_ACTV: begin
+              end
 
-        ST_PREA: begin
-          // Wait until timer has elapsed
+              default: begin
+              end
+            endcase
+          end else if (cmd_done) begin
+            state <= ST_IDLE;
+          end
         end
 
         ST_REFR: begin
           // Wait until timer has elapsed
+          // Possible transitions:
+          //  - ACTV
+          //  - IDLE
+          //  - MODE  --  weird, but legit. ??
+          if (cmd_done && ctl_req_i) begin
+            case (ctl_cmd_i)
+              CMD_ACTV: begin
+                state <= ST_ACTV;
+                ready <= 1'b1;
+              end
+
+              default: begin
+              end
+            endcase
+          end else if (cmd_done) begin
+            state <= ST_IDLE;
+          end
         end
-      endcase
-    end
-  end
 
-
-  // -- Initialisation State Machine -- //
-
-  // todo:
-  //  - CKE: 0 -> 1 in 500 us
-  //  -
-
-  localparam [3:0] SI_REST = 4'b0000;
-  localparam [3:0] SI_CKE1 = 4'b0001;
-  localparam [3:0] SI_MODE = 4'b0010;
-  localparam [3:0] SI_ZQCL = 4'b0100;
-  localparam [3:0] SI_DONE = 4'b1000;
-
-  reg [3:0] sinit;
-  reg ddr_awake;
-
-localparam CMODES = 4*(DDR_CMRD + DDR_CMOD) + 2;
-localparam UNSTABLE = (600000 + TCK - 1) / TCK;
-localparam STABLE = COUNTER_INIT - UNSTABLE;
-localparam COUNTER_INIT =  + CMODES + DDR_CZQINIT + 2;
-localparam COUNTER_BITS = $clog2(COUNTER_INIT);
-localparam XSB = COUNTER_BITS - 1;
-
-reg [XSB:0] count;
-
-  always @(posedge clock) begin
-    if (reset) begin
-      sinit <= SI_REST;
-      ddr_awake <= 1'b0;
-      rst_nq <= 1'b0;
-      cke_q <= 1'b0;
-      cs_nq <= 1'b1;
-      count <= COUNTER_INIT;
-    end else begin
-      case (sinit)
-          SI_REST: begin
-            // Allow for power supply to stablise
-            rst_nq <= 1'b0;
-
-            if (count < STABLE) begin
-              sinit <= SI_CKE1;
-              cke_q <= 1'b1;
-            end
-          end
-
-          SI_CKE1: begin
-            // After > 5 ticks, deassert RESET#
-          end
-
-          SI_ZQCL: begin
-            // Wait for the DDR3 device to calibrate the impedance of its data-
-            // output drivers
-            if (count == 0) begin
-              sinit <= SI_DONE;
-            end
-          end
-
-          SI_DONE: begin
-            // Chill here until RESET# asserts ...
-          end
-      endcase
-
-      if (refresh_pending != 3'b000) begin
-        ddr_awake <= 1'b1;
-      end
-    end
-  end
-
-
-  // -- Mode-Setting State Machine -- //
-
-  // todo: one-hot encoding ??
-  localparam [3:0] MR_INIT = 4'b0000;
-  localparam [3:0] MR_MODE = 4'b0001;
-  localparam [3:0] MR_DONE = 4'b1000;
-
-  reg [3:0] smode;
-
-  always @(posedge clock) begin
-    if (reset) begin
-      smode <= MR_INIT;
-    end else begin
-      // Set the (post-RESET#) operating-mode for the device
-      case (smode)
-        MR_INIT: begin
-          // Wait until the memory has woken up, then start setting the mode
-          // registers
-          if (ddr_awake) begin
-            smode <= MR_MODE;  // Set the mode registers
+        ST_READ: begin
+          if (ctl_cmd_i == CMD_READ) begin
+            // RD -> RD (default: 4 cycles)
+          end else if (ctl_cmd_i == CMD_WRIT) begin
+            // RD -> WR (default: 6 cycles)
+          end else if (ctl_cmd_i == CMD_ACTV) begin
+            // RD -> ACT (default: 4 cycles)
           end else begin
-            smode <= smode;
+            // RD -> NOP
           end
         end
 
-        MR_MODE: begin
-          // Step through each mode register: MR1 -> MR2 -> MR0
-          smode <= MR_DONE;
-        end
-
-        MR_DONE: begin
-          if (dfi_rst_no != 1'b0) begin
-            // Stay "done" until reset
-            smode <= smode;
+        ST_WRIT: begin
+          if (ctl_cmd_i == CMD_WRIT) begin
+            // WR -> WR (default: 4 cycles)
+          end else if (ctl_cmd_i == CMD_READ) begin
+            // WR -> RD (default: 14 + 4 cycles)
+          end else if (ctl_cmd_i == CMD_ACTV) begin
+            // WR -> ACT (default: 4 cycles, different bank)
+            // WR -> PRE -> ACT (default: 16 cycles, same bank)
           end else begin
-            // We're now officially "not done"
-            smode <= MR_INIT;
+            // WR -> NOP
           end
         end
 
         default: begin
-          $error("How !?");
-          $fatal;
-          smode <= MR_INIT;
+          $error("%10t: DDL: Unexpected state: 0x%02x", $time, state);
+          state <= ST_INIT;
         end
       endcase
     end
   end
 
 
-  // -- Refresh Counter -- //
+// -- Shift-Registers for Command Delays -- //
 
-  wire refresh_issued = ctl_cmd_i == CMD_REFR && ctl_rdy_o;
-
-  always @(posedge clock) begin
-    if (reset) begin
-      refresh_counter <= CREFI;
-      refresh_pending <= 3'd0;
-    end else begin
-      if (refresh_counter == RFC_ZERO) begin
-        refresh_counter <= CREFI;
-
-        // REFRESH completed?
-        if (refresh_issued) begin
-          refresh_pending <= refresh_pending;
-        end else begin
-          refresh_pending <= refresh_pending + 1;
-        end
-      end else begin
-        refresh_counter <= refresh_counter - 1;
-
-        // REFRESH completed?
-        if (refresh_issued && refresh_pending != 3'd0) begin
-          refresh_pending <= refresh_pending - 1;
-        end else begin
-          refresh_pending <= refresh_pending;
-        end
-      end
-    end
-  end
+  shift_register #(
+      .WIDTH(1),
+      .DEPTH(16)
+  ) rd_rd_srl_inst (
+      .clock (clock),
+      .wren_i(1'b1),
+      .data_i(dfi_rden_i),
+      .addr_i(rd_lat_q),
+      .data_o(rd_en_w)
+  );
 
 
 endmodule  // ddr3_ddl

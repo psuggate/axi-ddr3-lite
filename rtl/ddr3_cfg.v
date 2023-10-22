@@ -106,7 +106,7 @@ module ddr3_cfg (
   // -- Initialisation and Refresh Counter -- //
 `ifdef __icarus
   // Faster start-up times for the impatient (simulator) ...
-  localparam CYCLES_UNSTABLE = (20000 + TCK - 1) / TCK;
+  localparam CYCLES_UNSTABLE = (10000 + TCK - 1) / TCK;
   localparam CYCLES_STARTUP = (50000 + TCK - 1) / TCK;
 `else
   // Clock cycles required for power to stabilise (200 us)
@@ -210,6 +210,7 @@ module ddr3_cfg (
 
         ST_CKE1: begin
           // CKE now asserted, so start issuing MODE commands ...
+          // Note: CKE -> MRS2 requires >= 5x tCK
           state <= ST_MRS2;
           cs_nq <= 1'b0;
           req_q <= 1'b1;
@@ -218,6 +219,7 @@ module ddr3_cfg (
         end
 
         ST_MRS2: begin
+          // Note: MRS2 -> MRS3 requires >= 12x tCK
           if (ctl_rdy_i) begin
             state <= ST_MRS3;
             req_q <= 1'b1;
@@ -227,6 +229,7 @@ module ddr3_cfg (
         end
 
         ST_MRS3: begin
+          // Note: MRS3 -> MRS1 requires >= 12x tCK
           if (ctl_rdy_i) begin
             state <= ST_MRS1;
             req_q <= 1'b1;
@@ -236,6 +239,7 @@ module ddr3_cfg (
         end
 
         ST_MRS1: begin
+          // Note: MRS1 -> MRS0 requires >= 12x tCK
           if (ctl_rdy_i) begin
             state <= ST_MRS0;
             req_q <= 1'b1;
@@ -245,6 +249,7 @@ module ddr3_cfg (
         end
 
         ST_MRS0: begin
+          // Note: MRS0 -> ZQCL requires >= 12x tCK
           if (ctl_rdy_i) begin
             state <= ST_ZQCL;
             req_q <= 1'b1;
