@@ -122,6 +122,9 @@ module ddr3_cfg (
   // Clock cycles required to set all four mode registers
   localparam CYCLES_MODE_SET = 4 * (DDR_CMRD + DDR_CMOD) + 2;
 
+
+  // -- Refresh Counter -- //
+
   localparam COUNTER_INIT = CYCLES_UNSTABLE + CYCLES_STARTUP + CYCLES_MODE_SET + DDR_CZQINIT + 2;
   localparam COUNTER_REFI = CREFI;
   localparam COUNTER_ZERO = {COUNTER_BITS{1'b0}};
@@ -329,39 +332,6 @@ module ddr3_cfg (
       endcase
     end
   end
-
-
-  // -- Refresh Counter -- //
-  /*
-  wire refresh_issued = ctl_cmd_o == CMD_REFR && ctl_rdy_i;
-
-  always @(posedge clock) begin
-    if (reset) begin
-      refresh_counter <= CREFI;
-      refresh_pending <= 3'd0;
-    end else begin
-      if (refresh_counter == RFC_ZERO) begin
-        refresh_counter <= CREFI;
-
-        // REFRESH completed?
-        if (refresh_issued) begin
-          refresh_pending <= refresh_pending;
-        end else begin
-          refresh_pending <= refresh_pending + 1;
-        end
-      end else begin
-        refresh_counter <= refresh_counter - 1;
-
-        // REFRESH completed?
-        if (refresh_issued && refresh_pending != 3'd0) begin
-          refresh_pending <= refresh_pending - 1;
-        end else begin
-          refresh_pending <= refresh_pending;
-        end
-      end
-    end
-  end
-*/
 
 
   // -- Simulation Only -- //
