@@ -32,7 +32,8 @@ localparam DDR_TRESET = 200000;  // RESET# for 200 us after power-on
 localparam DDR_TWAKE = 500000;  // after RESET# deasserts, before first command
 localparam DDR_TCKE0 = 10;  // at least 10 ns between CKE := 0 and RESET# := 1
 localparam DDR_CCKE1 = 5;  // at least 5x cycles between CK valid and CKE := 1
-parameter DDR_TXPR = "todo";  // tXPR := max(tXS; 5x tCK)
+parameter DDR_TXS = 170;  // todo
+parameter DDR_TXPR = $max(DDR_TXS, 5 * TCK);  // tXPR := max(tXS; 5x tCK)
 // parameter DDR_TRRD = 10; // tRRD := max(10ns; 4x tCK)
 
 // DDR3-800E (6-6-6) speed bin parameters (from pp. 157)
@@ -41,8 +42,8 @@ parameter DDR_TAAMAX = 20;  // max time (ns) for internal-read -> data
 parameter DDR_TWR = 15;  // post-WRITE recovery time, in ns
 parameter DDR_TRP = 15;  // min time (ns) for PRE command
 parameter DDR_TRCD = 15;  // min time (ns) for ACT -> internal rd/wr
-parameter DDR_TRC = 52.5;  // min ACT -> {ACT, REF} command period
-parameter DDR_TRAS = 37.5;  // min ACT -> PRE command period
+parameter DDR_TRC = 53;  // 52.5;  // min ACT -> {ACT, REF} command period
+parameter DDR_TRAS = 38;  // 37.5;  // min ACT -> PRE command period
 
 // From pp. 169
 parameter DDR_CDLLK = 512;  // number of cycles for DLL lock
@@ -55,8 +56,8 @@ parameter DDR_CCCD = 4;  // CAS# -> CAS# command delay (cycles)
 parameter DDR_CRRD = 4;  // min ACT -> ACT
 
 // todo: with DLL=off, not relevant because cycle-minimums?
-parameter DDR_TRRD = 10; // in ns, for x16, DDR-800E
-parameter DDR_TFAW = 50; // in ns, for x16, DDR-800E
+parameter DDR_TRRD = 10;  // in ns, for x16, DDR-800E
+parameter DDR_TFAW = 50;  // in ns, for x16, DDR-800E
 
 
 //
@@ -67,8 +68,13 @@ parameter DDR_TFAW = 50; // in ns, for x16, DDR-800E
 // do not PRECHARGE or READ before this duration has elapsed.
 localparam WR_CYCLES = (DDR_TWR + TCK - 1) / TCK;
 
+localparam PRE_CYCLES = (DDR_TRP + TCK - 1) / TCK;
 
 // -- DDR Command Dispatch Delay Constraints -- //
+
+// Wait for at least 5x cycles before issuing first (non-NOP) command
+localparam integer CYCLES_CKE_TO_CMD = (DDR_TXPR + TCK - 1) / TCK;  // 5 cycles
+localparam integer CYCLES_MRD_TO_CMD = DDR_CMRD + DDR_CMOD;
 
 // Minimum cycles between same bank ACT -> ACT
 localparam CYCLES_ACT_TO_ACT = (DDR_TRC + TCK - 1) / TCK;  // both of these must
@@ -106,7 +112,8 @@ localparam CYCLES__WR_TO_PRE = DDR_CWL + 4 + (DDR_TWR + TCK - 1) / TCK;  // 12 c
 ///
 
 localparam PPD = 1'b0;  // Slow exit (PRE PD), for DLL=off
-localparam [2:0] WRC = WR_CYCLES == 6 ? 3'b010 : (WR_CYCLES == 5 ? 3'b001 : 3'b000);
+// localparam [2:0] WRC = WR_CYCLES == 6 ? 3'b010 : (WR_CYCLES == 5 ? 3'b001 : 3'b000);
+localparam [2:0] WRC = 3'b001;
 localparam DLLR = 1'b0;  // No DLL reset, for DLL=off
 localparam [3:0] CAS = 4'b0100;  // CL=6 for DLL=off
 localparam [1:0] BLEN = 2'b00;  // BL8

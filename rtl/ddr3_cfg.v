@@ -84,7 +84,7 @@ module ddr3_cfg (
   reg [2:0] refresh_pending, cmd_q, ba_q;
   reg [RSB:0] adr_q;
 
-  reg req_q, run_q;
+  reg req_q, ref_q, run_q;
   reg rst_nq, cke_q, cs_nq;
 
   reg [3:0] cmd_prev_q, cmd_curr_q;
@@ -93,6 +93,7 @@ module ddr3_cfg (
 
   assign ctl_run_o  = run_q;
   assign ctl_req_o  = req_q;
+  assign ctl_ref_o  = ref_q;
   assign ctl_cmd_o  = cmd_q;
   assign ctl_ba_o   = ba_q;
   assign ctl_adr_o  = adr_q;
@@ -143,6 +144,36 @@ module ddr3_cfg (
         // After SDRAM startup, reuse the counter for refresh intervals
         count <= COUNTER_REFI;
       end
+    end
+  end
+
+  wire refresh_issued = ctl_rdy_i && ref_q;
+
+  always @(posedge clock) begin
+    if (reset) begin
+      refresh_pending <= 3'd0;
+    end else if (run_q && cnext == COUNTER_ZERO) begin
+      // REFRESH completed?
+      if (refresh_issued) begin
+        refresh_pending <= refresh_pending;
+      end else begin
+        refresh_pending <= refresh_pending + 1;
+      end
+    end else if (run_q) begin
+      // REFRESH completed?
+      if (refresh_issued && refresh_pending != 3'd0) begin
+        refresh_pending <= refresh_pending - 1;
+      end else begin
+        refresh_pending <= refresh_pending;
+      end
+    end
+  end
+
+  always @(posedge clock) begin
+    if (reset) begin
+      ref_q <= 1'b0;
+    end else begin
+      ref_q <= |refresh_pending;
     end
   end
 
@@ -254,7 +285,8 @@ module ddr3_cfg (
             state <= ST_ZQCL;
             req_q <= 1'b1;
             cmd_q <= CMD_ZQCL;
-            {ba_q, adr_q} <= 'bx;
+            {ba_q, adr_q} <= {3'bx, 2'bx, 1'b1, 10'bx};
+            // {ba_q, adr_q} <= 'bx;
           end
         end
 
@@ -264,8 +296,8 @@ module ddr3_cfg (
           if (ctl_rdy_i) begin
             state <= ST_PREA;
             req_q <= 1'b1;
-            cmd_q <= CMD_ZQCL;
-            {ba_q, adr_q} <= 'bx;
+            cmd_q <= CMD_PREC;
+            {ba_q, adr_q} <= {3'bx, 2'bx, 1'b1, 10'bx};
           end
         end
 
@@ -273,9 +305,9 @@ module ddr3_cfg (
           // Wait until timer has elapsed
           if (ctl_rdy_i) begin
             state <= ST_DONE;
-            req_q <= 1'b1;
-            cmd_q <= CMD_PREC;
-            {ba_q, adr_q} <= {3'h0, 3'h0, 1'b1, 9'h000};
+            req_q <= 1'b0;
+            cmd_q <= CMD_NOOP;
+            // {ba_q, adr_q} <= {3'h0, 2'h0, 1'b1, 10'h000};
           end
         end
 
@@ -300,7 +332,7 @@ module ddr3_cfg (
 
 
   // -- Refresh Counter -- //
-
+  /*
   wire refresh_issued = ctl_cmd_o == CMD_REFR && ctl_rdy_i;
 
   always @(posedge clock) begin
@@ -329,13 +361,34 @@ module ddr3_cfg (
       end
     end
   end
+*/
 
+
+  // -- Simulation Only -- //
 
 `ifdef __icarus
   initial begin
     $display("COUNTER_BITS: %d", COUNTER_BITS);
     $display("COUNTER_INIT: %08x", COUNTER_INIT);
     $display("COUNTER_REFI: %08x", COUNTER_REFI);
+  end
+
+  reg [79:0] dbg_state;
+
+  always @* begin
+    case (state)
+      ST_RSTN: dbg_state = "RESET";
+      ST_INIT: dbg_state = "INIT";
+      ST_CKE1: dbg_state = "CKE";
+      ST_MRS2: dbg_state = "MRS #2";
+      ST_MRS3: dbg_state = "MRS #3";
+      ST_MRS1: dbg_state = "MRS #1";
+      ST_MRS0: dbg_state = "MRS #0";
+      ST_ZQCL: dbg_state = "ZQCL";
+      ST_PREA: dbg_state = "PRECHARGE";
+      ST_DONE: dbg_state = "DONE";
+      default: dbg_state = "UNKNOWN";
+    endcase
   end
 `endif
 

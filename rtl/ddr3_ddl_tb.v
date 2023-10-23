@@ -115,6 +115,10 @@ module ddr3_ddl_tb;
   wire [SSB:0] wr_mask;
   wire [MSB:0] wr_data, rd_data;
 
+  assign dfi_rst_n = 1'b0;
+  assign dfi_cke   = 1'b0;
+  assign dfi_cs_n  = 1'b1;
+
   ddr3_ddl #(
       .DDR_FREQ_MHZ  (100),
       .DDR_ROW_BITS  (DDR3_ROW_BITS),
@@ -126,7 +130,6 @@ module ddr3_ddl_tb;
 
       .ctl_req_i(req),
       .ctl_rdy_o(rdy),
-      .ctl_ref_o(rfc),
       .ctl_cmd_i(cmd),
       .ctl_ba_i (ba),
       .ctl_adr_i(ad),
@@ -142,13 +145,9 @@ module ddr3_ddl_tb;
       .mem_rlast_o (rd_last),
       .mem_rddata_o(rd_data),
 
-      .dfi_rst_no (dfi_rst_n),
-      .dfi_cke_o  (dfi_cke),
-      .dfi_cs_no  (dfi_cs_n),
       .dfi_ras_no (dfi_ras_n),
       .dfi_cas_no (dfi_cas_n),
       .dfi_we_no  (dfi_we_n),
-      .dfi_odt_o  (),
       .dfi_bank_o (dfi_bank),
       .dfi_addr_o (dfi_addr),
       .dfi_wren_o (dfi_wren),

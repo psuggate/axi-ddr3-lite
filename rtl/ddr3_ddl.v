@@ -16,10 +16,11 @@ module ddr3_ddl (
     clock,
     reset,
 
+    ddr_cke_i,
+    ddr_cs_ni,
+
     ctl_req_i,  // Memory controller signals
-    ctl_run_i,
     ctl_rdy_o,
-    ctl_ref_o,
     ctl_cmd_i,
     ctl_ba_i,
     ctl_adr_i,
@@ -35,13 +36,9 @@ module ddr3_ddl (
     mem_rlast_o,
     mem_rddata_o,
 
-    dfi_rst_no,  // DDL <-> PHY signals
-    dfi_cke_o,
-    dfi_cs_no,
-    dfi_ras_no,
+    dfi_ras_no,  // DDL <-> PHY signals
     dfi_cas_no,
     dfi_we_no,
-    dfi_odt_o,
     dfi_bank_o,
     dfi_addr_o,
     dfi_wren_o,
@@ -64,6 +61,7 @@ module ddr3_ddl (
   // Data-path and address settings
   parameter DDR_COL_BITS = 10;
   localparam CSB = DDR_COL_BITS - 1;
+
   parameter DDR_ROW_BITS = 13;
   localparam RSB = DDR_ROW_BITS - 1;
 
@@ -88,12 +86,13 @@ module ddr3_ddl (
   input clock;
   input reset;
 
+  input ddr_cke_i;
+  input ddr_cs_ni;
+
   // From/to DDR3 Controller
   // Note: all state-transitions are gated by the 'ctl_rdy_o' signal
   input ctl_req_i;
-  input ctl_run_i;
   output ctl_rdy_o;
-  output ctl_ref_o;  // refresh-request
   input [2:0] ctl_cmd_i;
   input [2:0] ctl_ba_i;
   input [RSB:0] ctl_adr_i;
@@ -118,13 +117,9 @@ module ddr3_ddl (
   output [MSB:0] byp_rddata_o;
 
   // (Pseudo-) DDR3 PHY Interface (-ish)
-  output dfi_cke_o;
-  output dfi_rst_no;
-  output dfi_cs_no;
   output dfi_ras_no;
   output dfi_cas_no;
   output dfi_we_no;
-  output dfi_odt_o;
   output [2:0] dfi_bank_o;
   output [RSB:0] dfi_addr_o;
 
@@ -139,60 +134,31 @@ module ddr3_ddl (
 
   // -- Constants -- //
 
-  localparam TACTIVATE = 4;
-  localparam TREFRESH = 16;
-  localparam TPRECHARGE = 4;
+  localparam DELAY = CYCLES_CKE_TO_CMD + 1;
+  localparam DSB = DELAY - 1;
+  localparam DZERO = {DELAY{1'b0}};
+  localparam DINIT = 1 << (CYCLES_CKE_TO_CMD - 1);
+
+  localparam CBITS = $clog2(DDR_CZQINIT);
+  localparam XSB = CBITS - 1;
+  localparam CZERO = {CBITS{1'b0}};
 
 
-  // -- DDR Command Dispatch Delay Constraints -- //
-
-  // Minimum cycles between same bank ACT -> ACT
-  localparam CYCLES_ACT_TO_ACT = (DDR_TRC + TCK - 1) / TCK;  // both of these must
-  localparam CYCLES_ACT_TO_PRE = (DDR_TRAS + TCK - 1) / TCK;  // be satisfied
-
-  // Minimum cycles between ACT and REF
-  localparam CYCLES_ACT_TO_REF = CYCLES_ACT_TO_ACT;  // b/c ACT -> PRE -> REF
-
-  // Minimum cycles for a self-REF to complete, before ACT (RAS# := 0)
-  localparam CYCLES_REF_TO_ACT = (DDR_TRFC + TCK - 1) / TCK;
-
-  // Minimum of 2 cycles PRE -> ACT (same bank, defaults, DLL=off)
-  localparam CYCLES_PRE_TO_ACT = (DDR_TRP + TCK - 1) / TCK;
-
-  // RAS# -> CAS# is the same as CAS# -> DQ (valid)
-  localparam CYCLES_ACT_TO__RD = DDR_CL;
-  localparam CYCLES_ACT_TO__WR = DDR_CWL;
-
-  // RD->RD & WR->WR are spaced by at least CAS# -> CAS# delays (of 4 cycles)
-  localparam CYCLES__RD_TO__RD = DDR_CCCD;  // 4 cycles
-  localparam CYCLES__WR_TO__WR = DDR_CCCD;  // 4 cycles
-
-  // Minimum of 6 cycles RD -> WR (with default settings, DLL=off)
-  localparam CYCLES__RD_TO__WR = DDR_CL + DDR_CCCD + 2 - DDR_CWL;
-
-  // Minimum cycles between issuing WR and RD (same bank)
-  localparam CYCLES__WR_TO__RD = DDR_CWL + 4 + DDR_CWTR;  // 14 cycles, BL8, DLL=off
-
-  // Minimum cycles between issuing WR and PRE (same bank)
-  localparam CYCLES__WR_TO_PRE = DDR_CWL + 4 + (DDR_TWR + TCK - 1) / TCK;  // 12 cycles
-
-  reg ready;
-reg cmd_done = 1'b0; // toodoos
-
-  reg [3:0] cmd_prev_q, cmd_curr_q;
-  wire [3:0] cmd_next_w;
+  reg ready, busy;
+  reg [2:0] cmd_q, ba_q;
+  reg [RSB:0] adr_q;
 
 
   assign ctl_rdy_o = ready;
 
-  assign dfi_rst_no = 1'bx;  // toods ...
-  assign dfi_cke_o = cke_q;
-  assign dfi_cs_no = cs_nq;
-  assign dfi_odt_o = 1'b0;
-
 
   // -- Connect FIFO's to the DDR IOB's -- //
 
+  assign dfi_ras_no = cmd_q[2];
+  assign dfi_cas_no = cmd_q[1];
+  assign dfi_we_no = cmd_q[0];
+  assign dfi_bank_o = ba_q;
+  assign dfi_addr_o = adr_q;
   assign dfi_mask_o = mem_wrmask_i;
   assign dfi_data_o = mem_wrdata_i;
 
@@ -221,75 +187,111 @@ reg cmd_done = 1'b0; // toodoos
   localparam ST_PREC = 4'b1101;
   localparam ST_PREA = 4'b1110;
   localparam ST_REFR = 4'b1111;
+  localparam ST_ZQCL = 4'd11;
+  localparam ST_MODE = 4'd12;
 
-  reg [3:0] state;
+  reg  [  3:0] state;
+
+  reg  [DSB:0] delay;
+  reg  [XSB:0] count;
+  wire [XSB:0] cnext;
+
+  assign cnext = count - 1;
 
   // todo: needs one of these per-bank ??
   always @(posedge clock) begin
-    if (reset) begin
-      state <= ST_INIT;
+    if (reset || !ddr_cke_i) begin
+      state <= ST_IDLE;
       ready <= 1'b0;
-    end else begin
+      busy  <= 1'b0;
+      delay <= DINIT;
+      cmd_q <= CMD_NOOP;
+      count <= CZERO;
+    end else if (busy || !ready) begin
+      delay <= {1'b0, delay[DSB:1]};
+      cmd_q <= CMD_NOOP;
+      if (busy) begin
+        count <= cnext;
+      end
+      if (cnext == CZERO) begin
+        busy  <= 1'b0;
+        ready <= 1'b1;
+      end else begin
+        ready <= delay[0];
+      end
+    end else if (ctl_req_i && ready) begin
+      ready <= 1'b0;
+      cmd_q <= ctl_cmd_i;
+      ba_q  <= ctl_ba_i;
+      adr_q <= ctl_adr_i;  // todo: auto-precharge bit (A[10])
+
       case (state)
         ST_INIT: begin
           // Wait for the (first steps of the) initialisation to finish
-          if (ctl_run_i) begin
+          if (ddr_cke_i) begin
             state <= ST_IDLE;
+            delay <= 1 << (CYCLES_CKE_TO_CMD - 1);
           end
         end
 
         ST_IDLE: begin
-          if (ctl_req_i) begin
-            // Possible transitions:
-            //  - ACTV  --  precedes RD/WR commands
-            //  - PREC  --  precedes REFR (but we don't keep pages ACTV + IDLE) ??
-            //  - REFR  --  REFRESH periodically
-            //  - MODE  --  during initialisation
-            //  - ZQCL  --  as the last step during initialisation
-            case (ctl_cmd_i)
-              CMD_ACTV: begin
-                // Row-ACTIVATE, which precedes RD/WR
-                // Default activation time is 6 cycles (DLL=off)
-                state <= ST_ACTV;
-              end
+          // Possible transitions:
+          //  - ACTV  --  precedes RD/WR commands
+          //  - PREC  --  precedes REFR (but we don't keep pages ACTV + IDLE) ??
+          //  - REFR  --  REFRESH periodically
+          //  - MODE  --  during initialisation
+          //  - ZQCL  --  as the last step during initialisation
+          case (ctl_cmd_i)
+            CMD_ACTV: begin
+              // Row-ACTIVATE, which precedes RD/WR
+              // Default activation time is 6 cycles (DLL=off) ??
+              state <= ST_ACTV;
+              delay <= 1 << CYCLES_ACT_TO__RD;
+            end
 
-              CMD_PREC: begin
-                // Bank (and row) PRECHARGE
-                // Note: usually a PRECHARGE ALL command
-                // Default is 2 cycles (DLL=off)
-                state <= ST_PREC;
-              end
+            CMD_PREC: begin
+              // Bank (and row) PRECHARGE
+              // Note: usually a PRECHARGE ALL command
+              // Default is 2 cycles (DLL=off)
+              state <= ST_PREC;
+              delay <= 1 << CYCLES_PRE_TO_ACT;
+            end
 
-              CMD_REFR: begin
-                // REFRESH the SDRAM contents
-                // Defaults to 11 cycles, at 100 MHz (DLL=off)
-                state <= ST_REFR;
-              end
+            CMD_REFR: begin
+              // REFRESH the SDRAM contents
+              // Defaults to 11 cycles, at 100 MHz (DLL=off)
+              state <= ST_REFR;
+              delay <= 1 << CYCLES_REF_TO_ACT;
+            end
 
-              CMD_MODE: begin
-                // Set MODE register
-                state <= ST_MODE;
-              end
+            CMD_MODE: begin
+              // Set MODE register
+              state <= ST_MODE;
+              delay <= 1 << CYCLES_MRD_TO_CMD;
+            end
 
-              CMD_ZQCL: begin
-                // Impedance calibration
-                // Defaults to 512 cycles, with DLL=off
-                state <= ST_ZQCL;
-              end
+            CMD_ZQCL: begin
+              // Impedance calibration
+              // Defaults to 512 cycles, with DLL=off
+              state <= ST_ZQCL;
+              count <= DDR_CZQINIT;
+              busy  <= 1'b1;
+            end
 
-              CMD_NOOP: begin
-                // Ignore these, other than noting that the memory-contoller is
-                // being a bit weird ...
-                $display("%10t: DDL: Unnecessary NOP request", $time);
-                ready <= 1'b1;
-              end
+            CMD_NOOP: begin
+              // Ignore these, other than noting that the memory-contoller is
+              // being a bit weird ...
+              $display("%10t: DDL: Unnecessary NOP request", $time);
+              ready <= 1'b1;
+            end
 
-              default: begin
-                $error("%10t: DDL: Invalid command: 0x%1x", $time, ctl_cmd_i);
-                state <= ST_INIT;
-              end
-            endcase
-          end
+            default: begin
+              $error("%10t: DDL: Invalid command: 0x%1x", $time, ctl_cmd_i);
+              state <= ST_INIT;
+              busy  <= 1'b1;
+              count <= DDR_CZQINIT;
+            end
+          endcase
         end
 
         ST_ACTV: begin
@@ -299,22 +301,84 @@ reg cmd_done = 1'b0; // toodoos
           //  - PREC  --  weird, but legit. ??
           //  - READ
           //  - WRIT
-          if (cmd_done && ctl_req_i) begin
-            case (ctl_cmd_i)
-              CMD_READ: begin
-              end
+          case (ctl_cmd_i)
+            CMD_READ: begin
+              state <= ST_READ;
+              delay <= 1 << CYCLES_ACT_TO__RD;
+            end
 
-              CMD_WRIT: begin
-              end
+            CMD_WRIT: begin
+              state <= ST_WRIT;
+              delay <= 1 << CYCLES_ACT_TO__WR;
+            end
 
-              default: begin
-              end
-            endcase
-          end else if (cmd_done) begin
-            // No command, so return to IDLE
-            $display("%10t: DDL: ACTV -> IDLE -- undesirable?", $time);
-            state <= ST_IDLE;
-          end
+            CMD_ACTV: begin
+              // todo: delay depends on if same bank, or different
+              state <= ST_ACTV;
+              delay <= 1 << CYCLES_ACT_TO_ACT;
+            end
+
+            default: begin
+              state <= 'bx;
+              delay <= 'bx;
+              $error("%10t: DDL: Unexpected command (0x%1x) in 'ST_ACTV'", $time, ctl_cmd_i);
+              $fatal;
+            end
+          endcase
+        end
+
+        ST_READ: begin
+          case (ctl_cmd_i)
+            CMD_READ: begin
+              // RD -> RD (default: 4 cycles)
+              delay <= 1 << CYCLES__RD_TO__RD;
+            end
+
+            CMD_WRIT: begin
+              // RD -> WR (default: 6 cycles)
+              state <= ST_WRIT;
+              delay <= 1 << CYCLES__RD_TO__WR;
+            end
+
+            CMD_ACTV: begin
+              // RD -> ACT (default: 4 cycles)
+              state <= ST_ACTV;
+              delay <= 2;
+            end
+
+            default: begin
+              state <= 'bx;
+              delay <= 'bx;
+              $error("%10t: DDL: Unexpected command (0x%1x) in 'ST_READ'", $time, ctl_cmd_i);
+              $fatal;
+            end
+          endcase
+        end
+
+        ST_WRIT: begin
+          case (ctl_cmd_i)
+            CMD_WRIT: begin
+              // WR -> WR (default: 4 cycles)
+              delay <= 1 << CYCLES__WR_TO__WR;
+            end
+            CMD_READ: begin
+              // WR -> RD (default: 14 + 4 cycles)
+              state <= ST_READ;
+              delay <= 1 << CYCLES__WR_TO__RD;
+            end
+            CMD_ACTV: begin
+              // WR -> ACT (default: 4 cycles, different bank)
+              // WR -> PRE -> ACT (default: 16 cycles, same bank)
+              state <= ST_ACTV;
+              delay <= 2;
+            end
+            default: begin
+              state <= 'bx;
+              delay <= 'bx;
+              $error("%10t: DDL: Unexpected command (0x%1x) in 'ST_WRIT'", $time, ctl_cmd_i);
+              $fatal;
+            end
+          endcase
         end
 
         ST_PREC: begin
@@ -325,17 +389,29 @@ reg cmd_done = 1'b0; // toodoos
           //  - IDLE
           //  - MODE  --  weird, but legit. ??
           // plus unsupported stuff, like power-down.
-          if (cmd_done && ctl_req_i) begin
-            case (ctl_cmd_i)
-              CMD_ACTV: begin
-              end
+          case (ctl_cmd_i)
+            CMD_ACTV: begin
+              state <= ST_ACTV;
+              delay <= 1 << CYCLES_PRE_TO_ACT;
+            end
 
-              default: begin
-              end
-            endcase
-          end else if (cmd_done) begin
-            state <= ST_IDLE;
-          end
+            CMD_REFR: begin
+              state <= ST_REFR;
+              delay <= 1 << PRE_CYCLES;
+            end
+
+            CMD_NOOP: begin
+              state <= ST_IDLE;
+              delay <= 1 << PRE_CYCLES;
+            end
+
+            default: begin
+              state <= 'bx;
+              delay <= 'bx;
+              $error("%10t: DDL: Unexpected command (0x%1x) in 'ST_PREC'", $time, ctl_cmd_i);
+              $fatal;
+            end
+          endcase
         end
 
         ST_REFR: begin
@@ -344,44 +420,77 @@ reg cmd_done = 1'b0; // toodoos
           //  - ACTV
           //  - IDLE
           //  - MODE  --  weird, but legit. ??
-          if (cmd_done && ctl_req_i) begin
-            case (ctl_cmd_i)
-              CMD_ACTV: begin
-                state <= ST_ACTV;
-                ready <= 1'b1;
-              end
+          case (ctl_cmd_i)
+            CMD_ACTV: begin
+              state <= ST_ACTV;
+              delay <= 1 << CYCLES_ACT_TO__RD;
+            end
 
-              default: begin
-              end
-            endcase
-          end else if (cmd_done) begin
-            state <= ST_IDLE;
-          end
+            default: begin
+              state <= 'bx;
+              delay <= 'bx;
+              $error("%10t: DDL: Unexpected command (0x%1x) in 'ST_REFR'", $time, ctl_cmd_i);
+              $fatal;
+            end
+          endcase
         end
 
-        ST_READ: begin
-          if (ctl_cmd_i == CMD_READ) begin
-            // RD -> RD (default: 4 cycles)
-          end else if (ctl_cmd_i == CMD_WRIT) begin
-            // RD -> WR (default: 6 cycles)
-          end else if (ctl_cmd_i == CMD_ACTV) begin
-            // RD -> ACT (default: 4 cycles)
-          end else begin
-            // RD -> NOP
-          end
+        ST_MODE: begin
+          case (ctl_cmd_i)
+            CMD_MODE: begin
+              delay <= 1 << CYCLES_MRD_TO_CMD;
+            end
+
+            CMD_REFR: begin
+              state <= ST_REFR;
+              delay <= 1 << CYCLES_REF_TO_ACT;
+            end
+
+            CMD_PREC: begin
+              state <= ST_PREC;
+              delay <= 1 << CYCLES_PRE_TO_ACT;
+            end
+
+            CMD_ZQCL: begin
+              state <= ST_ZQCL;
+              busy  <= 1'b1;
+              count <= DDR_CZQINIT;
+            end
+
+            default: begin
+              state <= 'bx;
+              delay <= 'bx;
+              $error("%10t: DDL: Unexpected command (0x%1x) in 'ST_MODE'", $time, ctl_cmd_i);
+              $fatal;
+            end
+          endcase
         end
 
-        ST_WRIT: begin
-          if (ctl_cmd_i == CMD_WRIT) begin
-            // WR -> WR (default: 4 cycles)
-          end else if (ctl_cmd_i == CMD_READ) begin
-            // WR -> RD (default: 14 + 4 cycles)
-          end else if (ctl_cmd_i == CMD_ACTV) begin
-            // WR -> ACT (default: 4 cycles, different bank)
-            // WR -> PRE -> ACT (default: 16 cycles, same bank)
-          end else begin
-            // WR -> NOP
-          end
+        ST_ZQCL: begin
+          state <= ST_IDLE;
+          case (ctl_cmd_i)
+            CMD_ACTV: begin
+              state <= ST_ACTV;
+              delay <= 1 << CYCLES_ACT_TO__RD;
+            end
+
+            CMD_REFR: begin
+              state <= ST_REFR;
+              delay <= 1 << CYCLES_REF_TO_ACT;
+            end
+
+            CMD_PREC: begin
+              state <= ST_PREC;
+              delay <= 1 << CYCLES_PRE_TO_ACT;
+            end
+
+            default: begin
+              state <= 'bx;
+              delay <= 'bx;
+              $error("%10t: DDL: Unexpected command (0x%1x) in 'ST_ZQCL'", $time, ctl_cmd_i);
+              $fatal;
+            end
+          endcase
         end
 
         default: begin
@@ -389,22 +498,35 @@ reg cmd_done = 1'b0; // toodoos
           state <= ST_INIT;
         end
       endcase
+    end else if (ready) begin
+      // No follow-up command, so IDLE
+      state <= ST_IDLE;
+      cmd_q <= CMD_NOOP;
     end
   end
 
 
-// -- Shift-Registers for Command Delays -- //
+  // -- Simulation Only -- //
 
-  shift_register #(
-      .WIDTH(1),
-      .DEPTH(16)
-  ) rd_rd_srl_inst (
-      .clock (clock),
-      .wren_i(1'b1),
-      .data_i(dfi_rden_i),
-      .addr_i(rd_lat_q),
-      .data_o(rd_en_w)
-  );
+`ifdef __icarus
+  reg [79:0] dbg_state;
+
+  always @* begin
+    case (state)
+      ST_INIT: dbg_state = "INIT";
+      ST_IDLE: dbg_state = "IDLE";
+      ST_ACTV: dbg_state = "ACTIVATE";
+      ST_READ: dbg_state = "READ";
+      ST_WRIT: dbg_state = "WRITE";
+      ST_PREC: dbg_state = "PRECHARGE";
+      ST_PREA: dbg_state = "PRE-ALL";
+      ST_REFR: dbg_state = "REFRESH";
+      ST_ZQCL: dbg_state = "ZQCL";
+      ST_MODE: dbg_state = "MODE REG";
+      default: dbg_state = "UNKNOWN";
+    endcase
+  end
+`endif
 
 
 endmodule  // ddr3_ddl
