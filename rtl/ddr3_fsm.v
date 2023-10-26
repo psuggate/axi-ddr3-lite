@@ -5,43 +5,48 @@
  * Specifics of DDR3 initialisation and timings are handled one level down, by
  * the "DFI" module. This module schedules row-activations, bank-precharging,
  * read-requests, and data-writes.
+ * 
+ * Note:
+ *  - if enabled, "fast-path" read-requests can use the bypass ('byp_*') ports
+ *    for low-latency, high-priority reads; e.g., to service fetch-requests from
+ *    a processor (i.e., one of its caches);
  */
-module ddr3_fsm (  /*AUTOARG*/
+module ddr3_fsm (
     clock,
     reset,
 
-    mem_wrreq_i,
+    mem_wrreq_i,  // Write port
     mem_wrlst_i,
     mem_wrtid_i,
     mem_wradr_i,
     mem_wrack_o,
     mem_wrerr_o,
 
-    mem_rdreq_i,
+    mem_rdreq_i,  // Read port
     mem_rdlst_i,
     mem_rdtid_i,
     mem_rdadr_i,
     mem_rdack_o,
     mem_rderr_o,
 
-    cfg_req_i,
-    cfg_run_i,
-    cfg_rdy_o,
-    cfg_cmd_i,
-    cfg_ref_i,
-    cfg_ba_i,
-    cfg_adr_i,
-
-    byp_rdreq_i,
+    byp_rdreq_i,  // Read bypass-/fast- path port
     byp_rdlst_i,
     byp_rdtid_i,
     byp_rdadr_i,
     byp_rdack_o,
     byp_rderr_o,
 
-    ddl_rdy_i,
-    ddl_ref_i,
+    cfg_run_i,  // Configuration port
+    cfg_req_i,
+    cfg_rdy_o,
+    cfg_cmd_i,
+    cfg_ref_i,
+    cfg_ba_i,
+    cfg_adr_i,
+
     ddl_req_o,
+    ddl_ref_i,
+    ddl_rdy_i,
     ddl_cmd_o,
     ddl_tid_o,
     ddl_ba_o,
@@ -52,8 +57,22 @@ module ddr3_fsm (  /*AUTOARG*/
   parameter DDR_FREQ_MHZ = 100;
   `include "ddr3_settings.vh"
 
+  // Enables the (read-) bypass port
+  // todo:
+  parameter BYPASS_ENABLE = 1'b0;
+
+  // If enabled, the {wrlst, rdlst} are used to decide when to ACTIVATE and
+  // PRECHARGE rows
+  // todo:
+  parameter WRLAST_ENABLE = 1'b0;
+  parameter RDLAST_ENABLE = 1'b0;
+  parameter BYLAST_ENABLE = 1'b0;
+
   // Allows reads to be moved ahead of writes, and writes moved ahead of reads
   // (for same-bank accesses), in order to reduce turn-around costs
+  // todo:
+  //  - design & implement;
+  //  - is this a good idea; i.e., is it worth the resources & complexity ??
   parameter OUT_OF_ORDER = 0;
 
   // Data-path and address settings
@@ -168,16 +187,6 @@ module ddr3_fsm (  /*AUTOARG*/
   parameter COST_RD_TO_WR = 3;
   parameter COST_WR_TO_RD = 7;
 
-  // DDR3 Commands: {CS# = 1'b0, RAS#, CAS#, WE#}
-  localparam DDR3_NOOP = 3'b111;
-  localparam DDR3_ZQCL = 3'b110;
-  localparam DDR3_READ = 3'b101;
-  localparam DDR3_WRIT = 3'b100;
-  localparam DDR3_ACTV = 3'b011;
-  localparam DDR3_PREC = 3'b010;
-  localparam DDR3_REFR = 3'b001;
-  localparam DDR3_MODE = 3'b000;
-
 
   wire same_page;
   wire precharge_required;
@@ -194,13 +203,33 @@ module ddr3_fsm (  /*AUTOARG*/
   localparam [3:0] ST_REFR = 4'b1000;
 
 
+reg wrack, rdack, byack, req_q, req_x;
+
   reg [2:0] prev_wr_bank, prev_rd_bank;
-  reg [2:0] cmd_next_q;
+  reg [2:0] cmd_q, cmd_x, ba_q, ba_x;
+reg [RSB:0] adr_q, adr_x;
 
   reg [7:0] bank_actv;  // '1' if activated
   reg [RSB:0] actv_rows[0:7];  // row-address for each active bank
 
+wire [RSB:0] row_w, col_w;
+wire [2:0] bank_w;
   wire banks_active, bank_switch;
+
+
+assign mem_wrack_o = wrack;
+assign mem_rdack_o = rdack;
+assign byp_rdack_o = byack;
+
+assign ddl_req_o = req_q;
+assign ddl_cmd_o = cmd_q;
+assign ddl_ba_o  = ba_q;
+assign ddl_adr_o = adr_q;
+
+
+assign bank_w = mem_wradr_i[12:10];
+assign row_w = mem_wradr_i[ASB:13];
+assign col_w = {2'b00, autop, mem_wradr_i[9:0]};
 
 
   // -- Main State Machine -- //
@@ -214,6 +243,14 @@ module ddr3_fsm (  /*AUTOARG*/
     if (reset) begin
       state <= ST_INIT;
       snext <= 'bx;
+      req_q <= 1'b0;
+      cmd_q <= CMD_NOOP;
+      req_x <= 1'b0;
+      cmd_x <= CMD_NOOP;
+      ba_q  <= 'bx;
+      ba_x  <= 'bx;
+      adr_q <= 'bx;
+      adr_x <= 'bx;
     end else begin
       case (state)
         ST_INIT: begin
@@ -234,23 +271,53 @@ module ddr3_fsm (  /*AUTOARG*/
             if (banks_active) begin
               state <= ST_PREA;
               snext <= ST_REFR;
+              req_q <= 1'b1;
+              cmd_q <= CMD_PREC;
+              req_x <= 1'b1;
+              cmd_x <= CMD_REFR;
             end else begin
               state <= ST_REFR;
               snext <= ST_IDLE;
+              req_q <= 1'b1;
+              cmd_q <= CMD_REFR;
+              req_x <= 1'b0;
+              cmd_x <= CMD_NOOP;
             end
           end else if (bank_switch) begin
             // todo: don't PRE from IDLE ??
             state <= ST_PREC;
             snext <= ST_IDLE;
+            req_q <= 1'b1;
+            cmd_q <= CMD_PREC;
+            req_x <= 1'b0;
+            cmd_x <= CMD_NOOP;
           end else if (byp_rdreq_i || mem_rdreq_i && !mem_wrreq_i) begin
             state <= ST_ACTV;
             snext <= ST_READ;
+            req_q <= 1'b1; // 1st command, RAS#
+            cmd_q <= CMD_ACTV;
+            ba_q  <= bank_w;
+            adr_q <= row_w;
+            req_x <= 1'b1; // 2nd command, CAS#
+            cmd_x <= CMD_READ;
+            ba_x  <= bank_w;
+            adr_x <= col_w;
           end else if (mem_wrreq_i) begin
             state <= ST_ACTV;
             snext <= ST_WRIT;
+            req_q <= 1'b1; // 1st command, RAS#
+            cmd_q <= CMD_ACTV;
+            ba_q  <= bank_w;
+            adr_q <= row_w;
+            req_x <= 1'b1; // 2nd command, CAS# + WE#
+            cmd_x <= CMD_WRIT;
+            ba_x  <= bank_w;
+            adr_x <= col_w;
           end else begin
             state <= ST_IDLE;
             snext <= 'bx;
+            req_q <= 1'b0;
+            cmd_q <= CMD_NOOP;
           end
         end
 
@@ -258,6 +325,13 @@ module ddr3_fsm (  /*AUTOARG*/
           // Row-activation command issued
           if (ddl_rdy_i) begin
             state <= snext;
+            req_q <= req_x;
+            cmd_q <= cmd_x;
+            ba_q  <= ba_x;
+            adr_q <= adr_x;
+            cmd_x <= CMD_NOOP; // todo: back-to-back reads/writes
+            req_x <= 1'b0; // todo: back-to-back reads/writes
+
             if (autop) begin
               // todo: there are multiple banks, so this is not always a good
               //   choice?
@@ -269,14 +343,26 @@ module ddr3_fsm (  /*AUTOARG*/
         ST_READ: begin
           if (ddl_rdy_i) begin
             state <= snext;
-            snext <= 'bx;  // todo
+            snext <= ST_IDLE;  // todo
+            req_q <= req_x;
+            cmd_q <= cmd_x;
+            ba_q  <= ba_x;
+            adr_q <= adr_x;
+            req_x <= 1'b0;
+            cmd_x <= CMD_NOOP;
           end
         end
 
         ST_WRIT: begin
           if (ddl_rdy_i) begin
             state <= snext;
-            snext <= 'bx;  // todo
+            snext <= ST_IDLE;  // todo
+            req_q <= req_x;
+            cmd_q <= cmd_x;
+            ba_q  <= ba_x;
+            adr_q <= adr_x;
+            req_x <= 1'b0;
+            cmd_x <= CMD_NOOP;
           end
         end
 
@@ -286,12 +372,13 @@ module ddr3_fsm (  /*AUTOARG*/
           if (!ddl_rdy_i) begin
             state <= state;
             snext <= snext;
-          end else if (cmd_next_q == CMD_READ) begin
-            state <= ST_READ;
-          end else if (cmd_next_q == CMD_WRIT) begin
-            state <= ST_WRIT;
           end else begin
-            state <= ST_IDLE;
+            state <= snext;
+            snext <= ST_IDLE; // todo
+            req_q <= req_x;
+            cmd_q <= cmd_x;
+            req_x <= 1'b0;
+            cmd_x <= CMD_NOOP;
           end
         end
 
@@ -302,7 +389,13 @@ module ddr3_fsm (  /*AUTOARG*/
             snext <= snext;
           end else begin
             state <= snext;
-            snext <= 'bx;
+            snext <= ST_IDLE; // todo
+            req_q <= req_x;
+            cmd_q <= cmd_x;
+            ba_q  <= ba_x;
+            adr_q <= adr_x;
+            req_x <= 1'b0;
+            cmd_x <= CMD_NOOP;
           end
         end
 
@@ -311,7 +404,13 @@ module ddr3_fsm (  /*AUTOARG*/
           // Note: 'ddl_ref_i' stays asserted until REFRESH is about to finish
           if (!ddl_ref_i && ddl_rdy_i) begin
             state <= snext;
-            snext <= 'bx;
+            snext <= ST_IDLE; // todo
+            req_q <= req_x;
+            cmd_q <= cmd_x;
+            ba_q  <= ba_x;
+            adr_q <= adr_x;
+            req_x <= 1'b0;
+            cmd_x <= CMD_NOOP;
           end else begin
             state <= state;
             snext <= snext;
@@ -320,9 +419,9 @@ module ddr3_fsm (  /*AUTOARG*/
 
         default: begin
           $error("Oh noes");
-          $fatal;
           state <= ST_INIT;
           snext <= 'bx;
+          #100 $fatal;
         end
       endcase
     end
@@ -383,6 +482,67 @@ module ddr3_fsm (  /*AUTOARG*/
       endcase
     end
   end
+
+
+// -- Acknowledge Signals -- //
+
+  always @(posedge clock) begin
+    if (reset) begin
+      wrack <= 1'b0;
+      rdack <= 1'b0;
+      byack <= 1'b0;
+    end else begin
+      case (state)
+        ST_IDLE: begin
+          if (byp_rdreq_i) begin
+            wrack <= 1'b0;
+            rdack <= 1'b0;
+            byack <= 1'b1;
+          end else if (mem_rdreq_i) begin
+            wrack <= 1'b0;
+            rdack <= 1'b1;
+            byack <= 1'b0;
+          end else if (mem_wrreq_i) begin
+            wrack <= 1'b1;
+            rdack <= 1'b0;
+            byack <= 1'b0;
+          end else begin
+            wrack <= 1'b0;
+            rdack <= 1'b0;
+            byack <= 1'b0;
+          end
+        end
+
+          default: begin
+            wrack <= 1'b0;
+            rdack <= 1'b0;
+            byack <= 1'b0;
+          end
+            
+      endcase
+    end
+  end
+
+
+  // -- Simulation Only -- //
+
+`ifdef __icarus
+  reg [79:0] dbg_state;
+
+  always @* begin
+    case (state)
+      ST_INIT: dbg_state = "INIT";
+      ST_IDLE: dbg_state = "IDLE";
+      ST_READ: dbg_state = "RD";
+      ST_WRIT: dbg_state = "WR";
+      ST_PREC: dbg_state = "PRE";
+      ST_PREA: dbg_state = "PREA";
+      ST_ACTV: dbg_state = "ACT";
+      ST_REFR: dbg_state = "REF";
+      default: dbg_state = "UNKNOWN";
+    endcase
+  end
+`endif
 
 
 endmodule  // ddr3_fsm

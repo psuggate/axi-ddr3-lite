@@ -33,7 +33,7 @@ module ddr3_cfg (
 );
 
   //
-  //  DDL Settings
+  //  Settings for the Configuration Module
   ///
 
   // -- DDR3 SDRAM Timings and Parameters -- //

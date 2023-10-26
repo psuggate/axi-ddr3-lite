@@ -1,0 +1,41 @@
+[*]
+[*] GTKWave Analyzer v3.3.104 (w)1999-2020 BSI
+[*] Thu Oct 26 21:49:05 2023
+[*]
+[dumpfile] "./ddr3_fsm_tb.vcd"
+[dumpfile_mtime] "Thu Oct 26 21:48:50 2023"
+[dumpfile_size] 8115
+[savefile] "./ddr3_fsm_tb.gtkw"
+[timestart] 0
+[size] 1920 1043
+[pos] -1 -1
+*-15.440692 200000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] ddr3_fsm_tb.
+[sst_width] 233
+[signals_width] 150
+[sst_expanded] 1
+[sst_vpaned_height] 298
+@28
+ddr3_fsm_tb.clock
+ddr3_fsm_tb.reset
+ddr3_fsm_tb.cfg_run
+ddr3_fsm_tb.fsm_wrreq
+ddr3_fsm_tb.fsm_wrack
+@800200
+-FSM
+@820
+[color] 7
+ddr3_fsm_tb.ddr3_fsm_inst.dbg_state[79:0]
+@1000200
+-FSM
+@28
+ddr3_fsm_tb.ddl_req
+ddr3_fsm_tb.ddl_rdy
+@29
+ddr3_fsm_tb.ddl_cmd[2:0]
+@28
+ddr3_fsm_tb.ddl_ba[2:0]
+@22
+ddr3_fsm_tb.ddl_adr[12:0]
+[pattern_trace] 1
+[pattern_trace] 0

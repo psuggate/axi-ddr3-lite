@@ -83,6 +83,12 @@ The READ response path may need to be optimised, for "fast-path responses." Bypa
 
 A dedicated fast-path (user) signal may be useful in situations where multiple functional units share the same memory interface, and there is a clear priority difference between types of accesses. E.g., when the same memory controller provides redraw-data for a display, as well as servicing requests from a microprocessor. Fast-path requests could then allow queue-jumping, for good processor performance, whilst still supporting long burst-transactions, for high thoughput and utilisation.
 
+### Bypass Port
+
+Todo:
+ - takes priority over current RD & WR bursts?
+ - how to handle any required ACTIVATE and PRECHARGE bank/row operations?
+
 ## Auto-PRECHARGE
 
 Conditions:
