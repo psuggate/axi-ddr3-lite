@@ -1,20 +1,20 @@
 [*]
 [*] GTKWave Analyzer v3.3.104 (w)1999-2020 BSI
-[*] Mon Oct 23 03:46:00 2023
+[*] Thu Oct 26 04:07:21 2023
 [*]
 [dumpfile] "./ddr3_cfg_tb.vcd"
-[dumpfile_mtime] "Mon Oct 23 03:45:00 2023"
-[dumpfile_size] 2441303
+[dumpfile_mtime] "Thu Oct 26 04:04:40 2023"
+[dumpfile_size] 2442847
 [savefile] "./ddr3_cfg_tb.gtkw"
-[timestart] 56230000
-[size] 1920 1043
+[timestart] 59830000
+[size] 2560 1376
 [pos] -1 -1
-*-21.362078 66265000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+*-20.362078 67000000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] ddr3_cfg_tb.
 [sst_width] 233
 [signals_width] 150
 [sst_expanded] 1
-[sst_vpaned_height] 298
+[sst_vpaned_height] 414
 @28
 ddr3_cfg_tb.clock
 ddr3_cfg_tb.reset
@@ -46,17 +46,20 @@ ddr3_cfg_tb.ddr3_cfg_inst.dbg_state[79:0]
 @1000200
 -CFG
 @28
+ddr3_cfg_tb.mem_req
+@29
+ddr3_cfg_tb.mem_cmd[2:0]
+@28
+ddr3_cfg_tb.cfg_ref
 ddr3_cfg_tb.ctl_req
-ddr3_cfg_tb.ctl_run
 ddr3_cfg_tb.ctl_rdy
-ddr3_cfg_tb.ctl_ref
 ddr3_cfg_tb.ctl_cmd[2:0]
 ddr3_cfg_tb.ctl_ba[2:0]
 @22
 ddr3_cfg_tb.ctl_adr[12:0]
 @800200
 -DDL
-@23
+@22
 ddr3_cfg_tb.ddr3_ddl_inst.delay[18:0]
 @28
 ddr3_cfg_tb.ddr3_ddl_inst.busy

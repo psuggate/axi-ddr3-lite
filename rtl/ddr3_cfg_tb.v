@@ -69,6 +69,10 @@ module ddr3_cfg_tb;
   wire [2:0] ctl_cmd, ctl_ba;
   wire [RSB:0] ctl_adr;
 
+  wire cfg_req, cfg_run, cfg_rdy, cfg_ref;
+  wire [2:0] cfg_cmd, cfg_ba;
+  wire [RSB:0] cfg_adr;
+
   // AXI <-> {FSM, DDL} signals
   wire wr_valid, wr_ready, wr_last;
   wire rd_valid, rd_ready, rd_last;
@@ -102,6 +106,35 @@ module ddr3_cfg_tb;
   assign rd_ready  = 1'b0;
   assign wr_mask   = {MASKS{1'b0}};
   assign wr_data   = {WIDTH{1'bx}};
+
+
+  // -- Manage the REFRESH Requests -- //
+
+  reg mem_req;
+  reg [2:0] mem_cmd;
+
+  assign ctl_cmd = cfg_run ? mem_cmd : cfg_cmd;
+  assign ctl_req = cfg_run ? mem_req : cfg_req;
+  assign ctl_ba  = cfg_run ? 'bx : cfg_ba;
+  assign ctl_adr = cfg_run ? 'bx : cfg_adr;
+
+  assign cfg_rdy = ctl_rdy;
+
+
+  always @(posedge clock) begin
+    if (reset || !cfg_run) begin
+      mem_cmd <= CMD_NOOP;
+      mem_req <= 1'b0;
+    end else begin
+      if (!mem_req && cfg_ref) begin
+        mem_cmd <= CMD_REFR;
+        mem_req <= 1'b1;
+      end else if (mem_req && ctl_rdy) begin
+        mem_req <= 1'b0;
+        mem_cmd <= CMD_NOOP;
+      end
+    end
+  end
 
 
   // -- DDR3 Simulation Model from Micron -- //
@@ -244,13 +277,13 @@ module ddr3_cfg_tb;
       .dfi_cs_no (dfi_cs_n),
       .dfi_odt_o (dfi_odt),
 
-      .ctl_req_o(ctl_req),  // Memory controller signals
-      .ctl_run_o(ctl_run),  // When initialisation has completed
-      .ctl_rdy_i(ctl_rdy),
-      .ctl_cmd_o(ctl_cmd),
-      .ctl_ref_o(ctl_ref),
-      .ctl_ba_o (ctl_ba),
-      .ctl_adr_o(ctl_adr)
+      .ctl_req_o(cfg_req),  // Memory controller signals
+      .ctl_run_o(cfg_run),  // When initialisation has completed
+      .ctl_rdy_i(cfg_rdy),
+      .ctl_cmd_o(cfg_cmd),
+      .ctl_ref_o(cfg_ref),
+      .ctl_ba_o (cfg_ba),
+      .ctl_adr_o(cfg_adr)
   );
 
 

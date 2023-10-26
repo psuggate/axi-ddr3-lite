@@ -420,10 +420,16 @@ module ddr3_ddl (
           //  - ACTV
           //  - IDLE
           //  - MODE  --  weird, but legit. ??
+          //  - REFR  --  up to 16x REFR can be issued within 2*tREFI
           case (ctl_cmd_i)
             CMD_ACTV: begin
               state <= ST_ACTV;
               delay <= 1 << CYCLES_ACT_TO__RD;
+            end
+
+            CMD_REFR: begin
+              $display("%10t: DDL: Back-to-back REFRESH commands issued", $time);
+              delay <= 1 << CYCLES_REF_TO_ACT;
             end
 
             default: begin
