@@ -719,6 +719,39 @@ module ddr3_ddl (
       default: dbg_state = "UNKNOWN";
     endcase
   end
+
+  reg  [39:0] dbg_cmd;
+
+  always @* begin
+    case (cmd_q)
+      CMD_MODE: dbg_cmd = "MRS";
+      CMD_REFR: dbg_cmd = "REF";
+      CMD_PREC: begin
+        if (adr_q[10]) begin
+          dbg_cmd = "PREA";
+        end else begin
+          dbg_cmd = "PRE";
+        end
+      end
+      CMD_ACTV: dbg_cmd = "ACT";
+      CMD_WRIT: begin
+        if (adr_q[10]) begin
+          dbg_cmd = "WR-A";
+        end else begin
+          dbg_cmd = "WR";
+        end
+      end
+      CMD_READ: begin
+        if (adr_q[10]) begin
+          dbg_cmd = "RD-A";
+        end else begin
+          dbg_cmd = "RD";
+        end
+      end
+      CMD_ZQCL: dbg_cmd = "ZQCL";
+      default:  dbg_cmd = "---";
+    endcase
+  end
 `endif
 
 

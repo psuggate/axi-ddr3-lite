@@ -40,7 +40,6 @@ module ddr3_fsm (
     cfg_req_i,
     cfg_rdy_o,
     cfg_cmd_i,
-    cfg_ref_i,
     cfg_ba_i,
     cfg_adr_i,
 
@@ -144,11 +143,10 @@ module ddr3_fsm (
   input [ASB:0] byp_rdadr_i;
 
   // Configuration port
-  input cfg_req_i;
   input cfg_run_i;
+  input cfg_req_i;
   output cfg_rdy_o;
   input [2:0] cfg_cmd_i;
-  input cfg_ref_i;
   input [2:0] cfg_ba_i;
   input [RSB:0] cfg_adr_i;
 
@@ -220,6 +218,8 @@ module ddr3_fsm (
   wire same_row_w, same_cmd_w;
 
 
+  assign cfg_rdy_o = ddl_rdy_i;
+
   assign mem_wrack_o = wrack;
   assign mem_rdack_o = rdack;
   assign byp_rdack_o = byack;
@@ -230,23 +230,42 @@ module ddr3_fsm (
   assign ddl_adr_o = adr_q;
 
 
+  reg [3:0] state, snext;
+  reg autop;
+
+
+  // -- Address Logic -- //
+
+  wire [CSB:0] col_l, cfg_col_w;
+  wire [1:0] asel;
+
+  assign cfg_col_w = {DDR_COL_BITS{1'bx}};
+
+  assign asel = !cfg_run_i ? 2'b11
+              : byp_rdreq_i & BYPASS_ENABLE ? 2'b00
+              : mem_rdreq_i ? 2'b01
+              : mem_wrreq_i ? 2'b10
+              : BYPASS_ENABLE ? 2'b00
+              : 2'b01 ;
+
+  assign {row_w, bank_w, col_l} = asel == 2'b11 ? {cfg_adr_i, cfg_ba_i, cfg_col_w}
+                                : asel == 2'b10 ? mem_wradr_i
+                                : asel == 2'b01 ? mem_rdadr_i
+                                : byp_rdadr_i ;
+  assign {col_w[RSB:11], col_w[9:0]} = {{(DDR_ROW_BITS - DDR_COL_BITS - 1) {1'b0}}, col_l};
+  assign col_w[10] = auto_w;
+
   assign auto_w = byp_rdreq_i & BYPASS_ENABLE ? byp_rdlst_i
                 : mem_rdreq_i ? mem_rdlst_i
                 : mem_wrreq_i & mem_wrlst_i;
-  assign bank_w = mem_wradr_i[DDR_COL_BITS+2:DDR_COL_BITS];
-  assign row_w = mem_wradr_i[ASB:DDR_COL_BITS+3];
-  assign col_w = {2'b00, auto_w, mem_wradr_i[DDR_COL_BITS-1:0]};
 
   assign same_row_w = store && (bank_w == ba_q) && (row_w == adr_q);  // todo
   assign same_cmd_w = store && mem_wrreq_i || fetch && (mem_rdreq_i || byp_rdreq_i);
 
+  assign banks_active = |bank_actv;
+
 
   // -- Main State Machine -- //
-
-  reg [3:0] state, snext;
-  reg autop;
-
-  assign banks_active = |bank_actv;
 
   always @(posedge clock) begin
     if (reset) begin
@@ -270,8 +289,14 @@ module ddr3_fsm (
           // then the mode-setting state-machine (below)
           if (cfg_run_i) begin
             state <= ST_IDLE;
+            req_q <= 1'b0;
+            cmd_q <= CMD_NOOP;
           end else begin
             state <= state;
+            req_q <= cfg_req_i;
+            cmd_q <= cfg_cmd_i;
+            ba_q  <= cfg_ba_i;
+            adr_q <= cfg_adr_i;
           end
           snext <= 'bx;
           store <= 1'b0;
@@ -454,7 +479,7 @@ module ddr3_fsm (
         ST_REFR: begin
           // Wait for all outstanding REFRESH operations to complete
           // Note: 'ddl_ref_i' stays asserted until REFRESH is about to finish
-          if (!ddl_ref_i && ddl_rdy_i) begin
+          if (!ddl_ref_i || ddl_rdy_i) begin
             state <= snext;
             snext <= ST_IDLE;  // todo
             req_q <= req_x;
@@ -635,6 +660,40 @@ module ddr3_fsm (
       ST_ACTV: dbg_state = "ACT";
       ST_REFR: dbg_state = "REF";
       default: dbg_state = "----";
+    endcase
+  end
+
+  wire [ 2:0] dbg_cmd_w = ddl_rdy_i ? cmd_q : CMD_NOOP;
+  reg  [39:0] dbg_cmd;
+
+  always @* begin
+    case (dbg_cmd_w)
+      CMD_MODE: dbg_cmd = "MRS";
+      CMD_REFR: dbg_cmd = "REF";
+      CMD_PREC: begin
+        if (adr_q[10]) begin
+          dbg_cmd = "PREA";
+        end else begin
+          dbg_cmd = "PRE";
+        end
+      end
+      CMD_ACTV: dbg_cmd = "ACT";
+      CMD_WRIT: begin
+        if (adr_q[10]) begin
+          dbg_cmd = "WR-A";
+        end else begin
+          dbg_cmd = "WR";
+        end
+      end
+      CMD_READ: begin
+        if (adr_q[10]) begin
+          dbg_cmd = "RD-A";
+        end else begin
+          dbg_cmd = "RD";
+        end
+      end
+      CMD_ZQCL: dbg_cmd = "ZQCL";
+      default:  dbg_cmd = "---";
     endcase
   end
 `endif

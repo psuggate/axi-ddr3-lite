@@ -20,6 +20,9 @@ module ddr3_cfg_tb;
   localparam MASKS = WIDTH / 8;
   localparam SSB = MASKS - 1;
 
+  localparam ADDRS = DDR_COL_BITS + DDR_ROW_BITS + 3 - 1;
+  localparam ASB = ADDRS - 1;
+
   localparam REQID = 4;
   localparam ISB = REQID - 1;
 
@@ -60,7 +63,7 @@ module ddr3_cfg_tb;
 
   // -- DDR3 Configurator for a Memory Controller -- //
 
-  wire ddl_req, ddl_rdy, ddl_ref;
+  wire ddl_req, ddl_seq, ddl_rdy, ddl_ref;
   wire [2:0] ddl_cmd, ddl_ba;
   wire [ISB:0] ddl_tid;
   wire [RSB:0] ddl_adr;
@@ -219,12 +222,12 @@ module ddr3_cfg_tb;
       .ddr_cke_i(dfi_cke),
       .ddr_cs_ni(dfi_cs_n),
 
-      .ctl_req_i(ctl_req),
-      .ctl_seq_i(ctl_seq),
-      .ctl_rdy_o(ctl_rdy),
-      .ctl_cmd_i(ctl_cmd),
-      .ctl_ba_i (ctl_ba),
-      .ctl_adr_i(ctl_adr),
+      .ctl_req_i(ddl_req),
+      .ctl_seq_i(ddl_seq),
+      .ctl_rdy_o(ddl_rdy),
+      .ctl_cmd_i(ddl_cmd),
+      .ctl_ba_i (ddl_ba),
+      .ctl_adr_i(ddl_adr),
 
       .mem_wvalid_i(wr_valid),
       .mem_wready_o(wr_ready),
@@ -249,6 +252,76 @@ module ddr3_cfg_tb;
       .dfi_rden_o(dfi_rden),
       .dfi_rvld_i(dfi_valid),
       .dfi_data_i(dfi_rdata)
+  );
+
+  wire fsm_wrack, fsm_wrerr, fsm_rdack, fsm_rderr;
+  wire fsm_wrreq = 1'b0;
+  wire fsm_wrlst = 1'b0;
+  wire fsm_rdreq = 1'b0;
+  wire fsm_rdlst = 1'b0;
+  wire [ISB:0] fsm_wrtid, fsm_rdtid;
+  wire [ASB:0] fsm_wradr, fsm_rdadr;
+
+  assign fsm_wrtid = 0;
+  assign fsm_rdtid = 0;
+  assign fsm_wradr = 0;
+  assign fsm_rdadr = 0;
+
+  wire byp_rdack, byp_rderr;
+  wire byp_rdreq = 1'b0;
+  wire byp_rdlst = 1'b0;
+  wire [ISB:0] byp_rdtid;
+  wire [ASB:0] byp_rdadr;
+
+  assign byp_rdtid = 0;
+  assign byp_rdadr = 0;
+
+  ddr3_fsm #(
+      .DDR_FREQ_MHZ(DDR_FREQ_MHZ),
+      .DDR_ROW_BITS(DDR_ROW_BITS),
+      .DDR_COL_BITS(DDR_COL_BITS),
+      .REQID(REQID),
+      .ADDRS(ADDRS),
+      .BYPASS_ENABLE(1'b0)
+  ) ddr3_fsm_inst (
+      .clock(clock),
+      .reset(reset),
+
+      .mem_wrreq_i(fsm_wrreq),  // Bus -> Controller requests
+      .mem_wrlst_i(fsm_wrlst),
+      .mem_wrack_o(fsm_wrack),
+      .mem_wrerr_o(fsm_wrerr),
+      .mem_wrtid_i(fsm_wrtid),
+      .mem_wradr_i(fsm_wradr),
+
+      .mem_rdreq_i(fsm_rdreq),
+      .mem_rdlst_i(fsm_rdlst),
+      .mem_rdack_o(fsm_rdack),
+      .mem_rderr_o(fsm_rderr),
+      .mem_rdtid_i(fsm_rdtid),
+      .mem_rdadr_i(fsm_rdadr),
+
+      .byp_rdreq_i(byp_rdreq),
+      .byp_rdlst_i(byp_rdlst),
+      .byp_rdack_o(byp_rdack),
+      .byp_rderr_o(byp_rderr),
+      .byp_rdtid_i(byp_rdtid),
+      .byp_rdadr_i(byp_rdadr),
+
+      .cfg_run_i(cfg_run),  // Configuration port
+      .cfg_req_i(cfg_req),
+      .cfg_rdy_o(cfg_rdy),
+      .cfg_cmd_i(cfg_cmd),
+      .cfg_ba_i (cfg_ba),
+      .cfg_adr_i(cfg_adr),
+
+      .ddl_req_o(ddl_req),  // Controller <-> DFI
+      .ddl_rdy_i(ddl_rdy),
+      .ddl_ref_i(cfg_ref),
+      .ddl_cmd_o(ddl_cmd),
+      .ddl_tid_o(ddl_tid),
+      .ddl_ba_o (ddl_ba),
+      .ddl_adr_o(ddl_adr)
   );
 
 

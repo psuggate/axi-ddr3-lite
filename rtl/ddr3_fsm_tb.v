@@ -291,12 +291,22 @@ module ddr3_fsm_tb;
 
   // -- Module Under Test -- //
 
+  wire byp_rdack, byp_rderr;
+  wire byp_rdreq = 1'b0;
+  wire byp_rdlst = 1'b0;
+  wire [ISB:0] byp_rdtid;
+  wire [ASB:0] byp_rdadr;
+
+  assign byp_rdtid = 0;
+  assign byp_rdadr = 0;
+
   ddr3_fsm #(
       .DDR_FREQ_MHZ(DDR_FREQ_MHZ),
       .DDR_ROW_BITS(DDR_ROW_BITS),
       .DDR_COL_BITS(DDR_COL_BITS),
       .REQID(REQID),
-      .ADDRS(ADDRS)
+      .ADDRS(ADDRS),
+      .BYPASS_ENABLE(1'b0)
   ) ddr3_fsm_inst (
       .clock(clock),
       .reset(reset),
@@ -315,11 +325,17 @@ module ddr3_fsm_tb;
       .mem_rdtid_i(fsm_rdtid),
       .mem_rdadr_i(fsm_rdadr),
 
+      .byp_rdreq_i(byp_rdreq),
+      .byp_rdlst_i(byp_rdlst),
+      .byp_rdack_o(byp_rdack),
+      .byp_rderr_o(byp_rderr),
+      .byp_rdtid_i(byp_rdtid),
+      .byp_rdadr_i(byp_rdadr),
+
       .cfg_run_i(cfg_run),  // Configuration port
       .cfg_req_i(cfg_req),
       .cfg_rdy_o(cfg_rdy),
       .cfg_cmd_i(cfg_cmd),
-      .cfg_ref_i(cfg_ref),
       .cfg_ba_i (cfg_ba),
       .cfg_adr_i(cfg_adr),
 
