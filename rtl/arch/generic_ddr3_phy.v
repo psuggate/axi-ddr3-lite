@@ -62,9 +62,6 @@ module generic_ddr3_phy (
 
   input clk_ddr;  // Same phase, but twice freq of 'clock'
 
-  input cfg_valid_i;
-  input [31:0] cfg_data_i;
-
   input dfi_cke_i;
   input dfi_rst_ni;
   input dfi_cs_ni;

@@ -203,7 +203,7 @@ module ddr3_fsm (
   localparam [3:0] ST_REFR = 4'b1000;
 
 
-  reg wrack, rdack, byack, req_q, req_x;
+  reg wrack, rdack, byack, req_q, req_x, store, fetch;
 
   reg same_row, same_cmd;
   reg [2:0] prev_wr_bank, prev_rd_bank;
@@ -237,8 +237,8 @@ module ddr3_fsm (
   assign row_w = mem_wradr_i[ASB:DDR_COL_BITS+3];
   assign col_w = {2'b00, auto_w, mem_wradr_i[DDR_COL_BITS-1:0]};
 
-  assign same_row_w = 1'b0;
-  assign same_cmd_w = 1'b0;
+  assign same_row_w = store && (bank_w == ba_q) && (row_w == adr_q);  // todo
+  assign same_cmd_w = store && mem_wrreq_i || fetch && (mem_rdreq_i || byp_rdreq_i);
 
 
   // -- Main State Machine -- //
@@ -252,6 +252,8 @@ module ddr3_fsm (
     if (reset) begin
       state <= ST_INIT;
       snext <= 'bx;
+      store <= 1'b0;
+      fetch <= 1'b0;
       req_q <= 1'b0;
       cmd_q <= CMD_NOOP;
       req_x <= 1'b0;
@@ -272,6 +274,8 @@ module ddr3_fsm (
             state <= state;
           end
           snext <= 'bx;
+          store <= 1'b0;
+          fetch <= 1'b0;
         end
 
         ST_IDLE: begin
@@ -280,6 +284,8 @@ module ddr3_fsm (
             if (banks_active) begin
               state <= ST_PREA;
               snext <= ST_REFR;
+              store <= 1'b0;
+              fetch <= 1'b0;
               req_q <= 1'b1;
               cmd_q <= CMD_PREC;
               ba_q  <= 'bx;
@@ -298,6 +304,7 @@ module ddr3_fsm (
             // todo: don't PRE from IDLE ??
             state <= ST_PREC;
             snext <= ST_IDLE;
+            store <= 1'b0;
             req_q <= 1'b1;
             cmd_q <= CMD_PREC;
             ba_q  <= ba_x;  // todo: use 'ba_x' to store last-used bank ??
@@ -307,6 +314,8 @@ module ddr3_fsm (
           end else if (byp_rdreq_i || mem_rdreq_i && !mem_wrreq_i) begin
             state <= ST_ACTV;
             snext <= ST_READ;
+            store <= 1'b0;
+            fetch <= 1'b1;
             req_q <= 1'b1;  // 1st command, RAS#
             cmd_q <= CMD_ACTV;
             ba_q  <= bank_w;
@@ -318,6 +327,8 @@ module ddr3_fsm (
           end else if (mem_wrreq_i) begin
             state <= ST_ACTV;
             snext <= ST_WRIT;
+            store <= 1'b1;
+            fetch <= 1'b0;
             req_q <= 1'b1;  // 1st command, RAS#
             cmd_q <= CMD_ACTV;
             ba_q  <= bank_w;
@@ -329,6 +340,8 @@ module ddr3_fsm (
           end else begin
             state <= ST_IDLE;
             snext <= 'bx;
+            store <= 1'b0;
+            fetch <= 1'b0;
             req_q <= 1'b0;
             cmd_q <= CMD_NOOP;
           end
@@ -378,6 +391,7 @@ module ddr3_fsm (
             end else begin
               req_x <= 1'b0;  // todo: back-to-back reads/writes
               cmd_x <= CMD_NOOP;  // todo: back-to-back reads/writes
+              fetch <= 1'b0;
             end
           end
         end
@@ -399,6 +413,7 @@ module ddr3_fsm (
             end else begin
               req_x <= 1'b0;  // todo: back-to-back reads/writes
               cmd_x <= CMD_NOOP;  // todo: back-to-back reads/writes
+              store <= 1'b0;
             end
           end
         end
@@ -547,6 +562,14 @@ module ddr3_fsm (
           end
         end
 
+        ST_WRIT: begin
+          if (ddl_rdy_i && same_row && same_cmd) begin
+            wrack <= 1'b1;
+          end else begin
+            wrack <= 1'b0;
+          end
+        end
+
         default: begin
           wrack <= 1'b0;
           rdack <= 1'b0;
@@ -560,6 +583,8 @@ module ddr3_fsm (
 
   // -- Next-Command Signals -- //
 
+  // todo:
+  //  - combine (BL8) bursts into "sequences"
   wire [2:0] cmd_w;
   reg  [2:0] cmd_n;
 
@@ -585,19 +610,31 @@ module ddr3_fsm (
   // -- Simulation Only -- //
 
 `ifdef __icarus
-  reg [79:0] dbg_state;
+  reg [39:0] dbg_state;
 
   always @* begin
     case (state)
       ST_INIT: dbg_state = "INIT";
       ST_IDLE: dbg_state = "IDLE";
-      ST_READ: dbg_state = "RD";
-      ST_WRIT: dbg_state = "WR";
+      ST_READ: begin
+        if (adr_q[10]) begin
+          dbg_state = "RD-A";
+        end else begin
+          dbg_state = "RD";
+        end
+      end
+      ST_WRIT: begin
+        if (adr_q[10]) begin
+          dbg_state = "WR-A";
+        end else begin
+          dbg_state = "WR";
+        end
+      end
       ST_PREC: dbg_state = "PRE";
       ST_PREA: dbg_state = "PREA";
       ST_ACTV: dbg_state = "ACT";
       ST_REFR: dbg_state = "REF";
-      default: dbg_state = "UNKNOWN";
+      default: dbg_state = "----";
     endcase
   end
 `endif

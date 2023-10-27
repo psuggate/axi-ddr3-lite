@@ -72,13 +72,13 @@ module ddr3_ddl_tb;
   wire [DSB:0] ddr_dq;
 
   wire dfi_cke, dfi_rst_n, dfi_cs_n, dfi_ras_n, dfi_cas_n, dfi_we_n;
-  wire dfi_odt, dfi_rden, dfi_wren, dfi_valid;
+  wire dfi_odt, dfi_rden, dfi_wstb, dfi_wren, dfi_valid;
   wire [  2:0] dfi_bank;
   wire [RSB:0] dfi_addr;
   wire [SSB:0] dfi_mask;
   wire [MSB:0] dfi_rdata, dfi_wdata;
 
-  reg en, req, pre;
+  reg en, req, seq, pre;
   reg [  2:0] cmd;
   reg [  2:0] ba;
   reg [RSB:0] ad;
@@ -97,6 +97,7 @@ module ddr3_ddl_tb;
   always @(posedge clock) begin
     if (reset) begin
       req <= 1'b0;
+      seq <= 1'b0;
       en  <= 1'b0;
       pre <= 1'b0;
     end else begin
@@ -132,6 +133,7 @@ module ddr3_ddl_tb;
       .ddr_cs_ni(~en),
 
       .ctl_req_i(req),
+      .ctl_seq_i(seq),
       .ctl_rdy_o(rdy),
       .ctl_cmd_i(cmd),
       .ctl_ba_i (ba),
@@ -226,9 +228,6 @@ module ddr3_ddl_tb;
       .clock  (clock),
       .reset  (reset),
       .clk_ddr(clk_ddr),
-
-      .cfg_valid_i(1'b0),
-      .cfg_data_i ('bx),
 
       .dfi_rst_ni(dfi_rst_n),
       .dfi_cke_i (dfi_cke),

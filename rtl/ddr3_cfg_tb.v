@@ -65,7 +65,7 @@ module ddr3_cfg_tb;
   wire [ISB:0] ddl_tid;
   wire [RSB:0] ddl_adr;
 
-  wire ctl_req, ctl_run, ctl_rdy, ctl_ref;
+  wire ctl_req, ctl_seq, ctl_run, ctl_rdy, ctl_ref;
   wire [2:0] ctl_cmd, ctl_ba;
   wire [RSB:0] ctl_adr;
 
@@ -179,6 +179,7 @@ module ddr3_cfg_tb;
       .dfi_bank_i(dfi_bank),
       .dfi_addr_i(dfi_addr),
 
+      .dfi_wstb_i(dfi_wstb),
       .dfi_wren_i(dfi_wren),
       .dfi_mask_i(dfi_mask),
       .dfi_data_i(dfi_wdata),
@@ -219,6 +220,7 @@ module ddr3_cfg_tb;
       .ddr_cs_ni(dfi_cs_n),
 
       .ctl_req_i(ctl_req),
+      .ctl_seq_i(ctl_seq),
       .ctl_rdy_o(ctl_rdy),
       .ctl_cmd_i(ctl_cmd),
       .ctl_ba_i (ctl_ba),

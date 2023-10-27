@@ -20,6 +20,7 @@ module ddr3_ddl (
     ddr_cs_ni,
 
     ctl_req_i,  // Memory controller signals
+    ctl_seq_i,
     ctl_rdy_o,
     ctl_cmd_i,
     ctl_ba_i,
@@ -94,6 +95,7 @@ module ddr3_ddl (
   // From/to DDR3 Controller
   // Note: all state-transitions are gated by the 'ctl_rdy_o' signal
   input ctl_req_i;
+  input ctl_seq_i; // Burst-sequence indicator
   output ctl_rdy_o;
   input [2:0] ctl_cmd_i;
   input [2:0] ctl_ba_i;
@@ -165,7 +167,7 @@ module ddr3_ddl (
   localparam DELAY__RD_TO__RD = 1 << (CYCLES__RD_TO__RD - 1);
   localparam DELAY__RD_TO__WR = 1 << (CYCLES__RD_TO__WR - 1);
   localparam DELAY__WR_TO__RD = 1 << (CYCLES__WR_TO__RD - 1);
-  localparam DELAY__WR_TO__WR = 1 << (CYCLES__WR_TO__WR - 1);
+  localparam DELAY__WR_TO__WR = 1 << (CYCLES__WR_TO__WR - 2);
   localparam DELAY_RDA_TO_ACT = 1 << (CYCLES_RDA_TO_ACT - 1);
   localparam DELAY_WRA_TO_ACT = 1 << (CYCLES_WRA_TO_ACT - 1);
 
@@ -175,6 +177,8 @@ module ddr3_ddl (
   reg ready, busy;
   reg [2:0] cmd_q, ba_q;
   reg [RSB:0] adr_q;
+
+  wire ctl_pre_w;
 
 
   // -- Connect to Upstream Controller & Data-paths -- //
