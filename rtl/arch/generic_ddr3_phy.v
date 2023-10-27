@@ -10,9 +10,6 @@ module generic_ddr3_phy (
 
     clk_ddr,
 
-    cfg_valid_i,
-    cfg_data_i,
-
     dfi_cke_i,
     dfi_rst_ni,
     dfi_cs_ni,
@@ -22,11 +19,12 @@ module generic_ddr3_phy (
     dfi_odt_i,
     dfi_bank_i,
     dfi_addr_i,
+    dfi_wstb_i,
     dfi_wren_i,
     dfi_mask_i,
     dfi_data_i,
     dfi_rden_i,
-    dfi_valid_o,
+    dfi_rvld_o,
     dfi_data_o,
 
     ddr3_ck_po,
@@ -46,9 +44,6 @@ module generic_ddr3_phy (
     ddr3_dq_io
 );
 
-  parameter DEFAULT_CL = 6;  // According to JEDEC spec, for DLL=off mode
-  parameter DEFAULT_CWL = 6;
-
   parameter DDR3_WIDTH = 16;
   parameter DDR3_MASKS = DDR3_WIDTH / 8;
 
@@ -60,9 +55,6 @@ module generic_ddr3_phy (
 
   parameter ADDR_BITS = 14;
   localparam ASB = ADDR_BITS - 1;
-
-  parameter MAX_RW_LATENCY = 12;  // Maximum 'CL'/'CWL'
-  localparam CSB = MAX_RW_LATENCY - 1;
 
 
   input clock;
@@ -84,12 +76,13 @@ module generic_ddr3_phy (
   input [2:0] dfi_bank_i;
   input [ASB:0] dfi_addr_i;
 
+  input dfi_wstb_i;
   input dfi_wren_i;
   input [SSB:0] dfi_mask_i;
   input [DSB:0] dfi_data_i;
 
   input dfi_rden_i;
-  output dfi_valid_o;
+  output dfi_rvld_o;
   output [DSB:0] dfi_data_o;
 
   output ddr3_ck_po;
@@ -123,7 +116,7 @@ module generic_ddr3_phy (
 
   // -- DFI Read-Data Signal Assignments -- //
 
-  assign dfi_valid_o  = valid_q;
+  assign dfi_rvld_o   = valid_q;
   assign dfi_data_o   = data_q;
 
 
@@ -146,26 +139,6 @@ module generic_ddr3_phy (
   assign ddr3_dqs_nio = dqs_t ? {DDR3_MASKS{1'bz}} : dqs_n;
   assign ddr3_dm_o    = dm_q;
   assign ddr3_dq_io   = dq_t ? {DDR3_WIDTH{1'bz}} : dq_q;
-
-
-  // -- DFI Configuration -- //
-
-  reg [3:0] rd_lat_q, wr_lat_q;
-
-  always @(posedge clock)
-    if (reset) begin
-      rd_lat_q <= DEFAULT_CL - 2;
-    end else if (cfg_valid_i) begin
-      rd_lat_q <= cfg_data_i[11:8];
-    end
-
-  always @(posedge clock) begin
-    if (reset) begin
-      wr_lat_q <= DEFAULT_CWL - 2;
-    end else if (cfg_valid_i) begin
-      wr_lat_q <= cfg_data_i[15:12];  // todo ...
-    end
-  end
 
 
   // -- DDR3 Command Signals -- //
@@ -198,105 +171,50 @@ module generic_ddr3_phy (
 
   // -- DDR3 Data Strobes -- //
 
-  localparam WRITE_SHIFT_WIDTH = DDR3_WIDTH * 2 + DDR3_MASKS * 2 + 1;
-  localparam WRITE_SHIFT_ADDRS = $clog2(MAX_RW_LATENCY - 1);
-  localparam WRITE_SHIFT_DEPTH = 1 << WRITE_SHIFT_ADDRS;
-
-  reg  dqs_q;
   wire dqs_w;
+
+  assign dqs_w = ~dfi_wstb_i & ~dfi_wren_i;
 
   assign dqs_p = {DDR3_MASKS{~clock}};
   assign dqs_n = {DDR3_MASKS{clock}};
 
   always @(negedge clock) begin
     if (reset) begin
-      dqs_q <= 1'b1;
       dqs_t <= 1'b1;
-    end else if (!dqs_w) begin
-      dqs_q <= 1'b0;
+    end else if (dfi_wstb_i) begin
       dqs_t <= 1'b0;
     end else begin
-      {dqs_t, dqs_q} <= {dqs_q, dqs_w};
+      dqs_t <= dqs_w;
     end
   end
-
-  wire [WRITE_SHIFT_ADDRS-1:0] wr_dqs_w = wr_lat_q - 2;
-
-  shift_register #(
-      .WIDTH(1),
-      .DEPTH(16)
-  ) wr_srl_inst (
-      .clock (clock),
-      .wren_i(1'b1),
-      .data_i(~dfi_wren_i),
-      .addr_i(wr_dqs_w),
-      .data_o(dqs_w)
-  );
 
 
   // -- Write-Data Outputs -- //
 
-  reg clock_270, dt_s;
-  wire dt_srl;
-  wire [DSB:0] dq_srl;
-  wire [SSB:0] dm_srl;
+  reg hi_q;
   wire [MSB:0] dq_w;
   wire [QSB:0] dm_w;
   reg [MSB:0] dq_s;
   reg [QSB:0] dm_s;
 
-  assign dq_w = clock_270 ? dq_srl[MSB:0] : dq_srl[DSB:DDR3_WIDTH];
-  assign dm_w = clock_270 ? dm_srl[QSB:0] : dm_srl[SSB:DDR3_MASKS];
+  assign dm_w = ~dfi_mask_i[QSB:0];
+  assign dq_w = dfi_data_i[MSB:0];
 
-  always @(negedge clk_ddr) begin
-    clock_270 <= clock;
+  always @(posedge clk_ddr) begin
+    dm_s <= ~dfi_mask_i[SSB:DDR3_MASKS];
+    dq_s <= dfi_data_i[DSB:DDR3_WIDTH];
   end
 
   always @(negedge clk_ddr) begin
     if (reset) begin
       dq_t <= 1'b1;
+      hi_q <= 1'b0;
     end else begin
-      {dq_t, dt_s} <= {dt_s, dt_srl};
-      {dm_q, dm_s} <= {dm_s, dm_w};
-      {dq_q, dq_s} <= {dq_s, dq_w};
+      dq_t <= ~dfi_wren_i;
+      hi_q <= ~hi_q & dfi_wren_i;
     end
-  end
-
-  wire [WRITE_SHIFT_ADDRS-1:0] wr_lat_w = wr_lat_q - 1;
-
-  shift_register #(
-      .WIDTH(WRITE_SHIFT_WIDTH),
-      .DEPTH(WRITE_SHIFT_DEPTH)
-  ) dq_srl_inst (
-      .clock (clock_270),
-      .wren_i(1'b1),
-      .data_i({~dfi_wren_i, dfi_mask_i, dfi_data_i}),
-      .addr_i(wr_lat_w),
-      .data_o({dt_srl, dm_srl, dq_srl})
-  );
-
-
-  // -- Read Data Valid Signals -- //
-
-  wire rd_en_w;
-
-  shift_register #(
-      .WIDTH(1),
-      .DEPTH(16)
-  ) rd_srl_inst (
-      .clock (clock),
-      .wren_i(1'b1),
-      .data_i(dfi_rden_i),
-      .addr_i(rd_lat_q),
-      .data_o(rd_en_w)
-  );
-
-  always @(posedge clock) begin
-    if (reset) begin
-      valid_q <= 1'b0;
-    end else begin
-      valid_q <= rd_en_w;
-    end
+    dm_q <= hi_q ? dm_s : dm_w;
+    dq_q <= hi_q ? dq_s : dq_w;
   end
 
 

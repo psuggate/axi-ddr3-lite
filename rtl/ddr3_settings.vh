@@ -90,8 +90,9 @@ localparam CYCLES_REF_TO_ACT = (DDR_TRFC + TCK - 1) / TCK;
 localparam CYCLES_PRE_TO_ACT = (DDR_TRP + TCK - 1) / TCK;
 
 // RAS# -> CAS# is the same as CAS# -> DQ (valid)
-localparam CYCLES_ACT_TO__RD = DDR_CL;
-localparam CYCLES_ACT_TO__WR = DDR_CWL;
+localparam CYCLES_ACT_TO_R_W = (DDR_TRCD + TCK - 1) / TCK;
+// localparam CYCLES_ACT_TO__RD = DDR_CL;
+// localparam CYCLES_ACT_TO__WR = DDR_CWL;
 
 // RD->RD & WR->WR are spaced by at least CAS# -> CAS# delays (of 4 cycles)
 localparam CYCLES__RD_TO__RD = DDR_CCCD;  // 4 cycles
@@ -105,6 +106,13 @@ localparam CYCLES__WR_TO__RD = DDR_CWL + 4 + DDR_CWTR;  // 14 cycles, BL8, DLL=o
 
 // Minimum cycles between issuing WR and PRE (same bank)
 localparam CYCLES__WR_TO_PRE = DDR_CWL + 4 + (DDR_TWR + TCK - 1) / TCK;  // 12 cycles
+
+// Minimum cycles between issuing WR with AP, to ACT (same bank)
+localparam CYCLES_WRA_TO_ACT = CYCLES__WR_TO_PRE + (DDR_TRP + TCK - 1) / TCK;
+
+// Minimum cycles from RD with AP, to ACT (same bank)
+localparam CYCLES_RDA_TO_ACT = DDR_CCCD + (DDR_TRP + TCK - 1) / TCK;  // 6 cycles
+// localparam CYCLES_RDA_TO_ACT = DDR_CL + (DDR_TRP + TCK - 1) / TCK; // 8 cycles
 
 
 //

@@ -42,11 +42,12 @@ module ddr3_ddl (
     dfi_odt_o,
     dfi_bank_o,
     dfi_addr_o,
+    dfi_wstb_o,
     dfi_wren_o,
     dfi_mask_o,
     dfi_data_o,
     dfi_rden_o,
-    dfi_valid_i,
+    dfi_rvld_i,
     dfi_data_i
 );
 
@@ -77,8 +78,8 @@ module ddr3_ddl (
 
   // Note: these latencies are due to the registers and IOBs in the PHY for the
   //   commands, addresses, and the data-paths.
-  parameter PHY_WR_LATENCY = 2;
-  parameter PHY_RD_LATENCY = 5;
+  parameter PHY_WR_LATENCY = 1;
+  parameter PHY_RD_LATENCY = 2;
 
   // A DDR3 burst has length of 8 transfers (DDR), so four clock/memory cycles
   localparam PHY_BURST_LEN = 4;
@@ -125,12 +126,13 @@ module ddr3_ddl (
   output [2:0] dfi_bank_o;
   output [RSB:0] dfi_addr_o;
 
+  output dfi_wstb_o;
   output dfi_wren_o;
   output [SSB:0] dfi_mask_o;
   output [MSB:0] dfi_data_o;
 
   output dfi_rden_o;
-  input dfi_valid_i;
+  input dfi_rvld_i;
   input [MSB:0] dfi_data_i;
 
 
@@ -145,18 +147,42 @@ module ddr3_ddl (
   localparam XSB = CBITS - 1;
   localparam CZERO = {CBITS{1'b0}};
 
+  localparam WDLYS = 4;  // BL8 = 4 extra delays
+  localparam WSB = WDLYS - 1;
 
-reg wr_ready;
+  // Delays for the various transitions
+  localparam DELAY_CKE_TO_CMD = 1 << (CYCLES_CKE_TO_CMD - 1);
+  localparam DELAY_MRD_TO_CMD = 1 << (CYCLES_MRD_TO_CMD - 1);
+  localparam DELAY_PRE_TO_ACT = 1 << (CYCLES_PRE_TO_ACT - 1);
+  localparam DELAY_ACT_TO_PRE = 1 << (CYCLES_ACT_TO_PRE - 1);
+  localparam DELAY_REF_TO_ACT = 1 << (CYCLES_REF_TO_ACT - 1);
+  localparam DELAY_ACT_TO_REF = 1 << (CYCLES_ACT_TO_REF - 1);
+
+  localparam DELAY_ACT_TO_ACT_L = 1 << (CYCLES_ACT_TO_ACT - 1);
+  localparam DELAY_ACT_TO_ACT_S = DDR_CRRD - 1;
+
+  localparam DELAY_ACT_TO_R_W = 1 << (CYCLES_ACT_TO_R_W - 1);
+  localparam DELAY__RD_TO__RD = 1 << (CYCLES__RD_TO__RD - 1);
+  localparam DELAY__RD_TO__WR = 1 << (CYCLES__RD_TO__WR - 1);
+  localparam DELAY__WR_TO__RD = 1 << (CYCLES__WR_TO__RD - 1);
+  localparam DELAY__WR_TO__WR = 1 << (CYCLES__WR_TO__WR - 1);
+  localparam DELAY_RDA_TO_ACT = 1 << (CYCLES_RDA_TO_ACT - 1);
+  localparam DELAY_WRA_TO_ACT = 1 << (CYCLES_WRA_TO_ACT - 1);
+
+
+  reg [WSB:0] wr_delay;
+  reg wr_strob, wr_ready;
   reg ready, busy;
   reg [2:0] cmd_q, ba_q;
   reg [RSB:0] adr_q;
 
 
-// -- Connect to Upstream Controller & Data-paths -- //
+  // -- Connect to Upstream Controller & Data-paths -- //
 
   assign ctl_rdy_o = ready;
+  assign ctl_pre_w = ctl_adr_i[10];
 
-assign mem_wready_o = wr_ready;
+  assign mem_wready_o = wr_ready;
 
 
   // -- Connect FIFO's to the DDR IOB's -- //
@@ -164,14 +190,15 @@ assign mem_wready_o = wr_ready;
   assign dfi_ras_no = cmd_q[2];
   assign dfi_cas_no = cmd_q[1];
   assign dfi_we_no = cmd_q[0];
-assign dfi_odt_o = 1'b0;
+  assign dfi_odt_o = 1'b0;
   assign dfi_bank_o = ba_q;
   assign dfi_addr_o = adr_q;
-assign dfi_wren_o = wr_ready;
+  assign dfi_wstb_o = wr_strob;
+  assign dfi_wren_o = wr_ready;
   assign dfi_mask_o = mem_wrmask_i;
   assign dfi_data_o = mem_wrdata_i;
 
-  assign mem_rvalid_o = dfi_valid_i;
+  assign mem_rvalid_o = dfi_rvld_i;
   assign mem_rddata_o = dfi_data_i;
 
 
@@ -199,9 +226,10 @@ assign dfi_wren_o = wr_ready;
   localparam ST_ZQCL = 4'd11;
   localparam ST_MODE = 4'd12;
 
-  reg  [  3:0] state;
+  reg l_dly, a_req;
 
-  reg  [DSB:0] delay;
+  reg [3:0] state;
+  reg [DSB:0] delay, b_dly, c_dly, r_dly, w_dly;
   reg  [XSB:0] count;
   wire [XSB:0] cnext;
 
@@ -214,7 +242,9 @@ assign dfi_wren_o = wr_ready;
       ready <= 1'b0;
       busy  <= 1'b0;
       delay <= DINIT;
+      a_req <= 1'b1;
       cmd_q <= CMD_NOOP;
+      l_dly <= 1'b0;
       count <= CZERO;
     end else if (busy || !ready) begin
       delay <= {1'b0, delay[DSB:1]};
@@ -239,7 +269,7 @@ assign dfi_wren_o = wr_ready;
           // Wait for the (first steps of the) initialisation to finish
           if (ddr_cke_i) begin
             state <= ST_IDLE;
-            delay <= 1 << (CYCLES_CKE_TO_CMD - 1);
+            delay <= DELAY_CKE_TO_CMD;
           end
         end
 
@@ -255,7 +285,15 @@ assign dfi_wren_o = wr_ready;
               // Row-ACTIVATE, which precedes RD/WR
               // Default activation time is 6 cycles (DLL=off) ??
               state <= ST_ACTV;
-              delay <= 1 << CYCLES_ACT_TO__RD;
+              delay <= DELAY_ACT_TO_R_W;
+
+              l_dly <= 1'b0;
+              b_dly <= DELAY_ACT_TO_ACT_L;
+              c_dly <= DELAY_ACT_TO_ACT_S;
+
+              a_req <= 1'b0;  // No ACTIVATE required (prior to R/W)
+              r_dly <= DELAY_ACT_TO_R_W;
+              w_dly <= DELAY_ACT_TO_R_W;
             end
 
             CMD_PREC: begin
@@ -263,20 +301,48 @@ assign dfi_wren_o = wr_ready;
               // Note: usually a PRECHARGE ALL command
               // Default is 2 cycles (DLL=off)
               state <= ST_PREC;
-              delay <= 1 << CYCLES_PRE_TO_ACT;
+              delay <= DELAY_PRE_TO_ACT;
+
+              l_dly <= 1'b0;
+              b_dly <= DELAY_PRE_TO_ACT;
+              if (ctl_pre_w) begin
+                // PRECHARGE ALL banks
+                c_dly <= DELAY_PRE_TO_ACT;
+                a_req <= 1'b1;
+                r_dly <= 0;
+                w_dly <= 0;
+              end else begin
+                c_dly <= 1;
+              end
             end
 
             CMD_REFR: begin
               // REFRESH the SDRAM contents
               // Defaults to 11 cycles, at 100 MHz (DLL=off)
               state <= ST_REFR;
-              delay <= 1 << CYCLES_REF_TO_ACT;
+              delay <= DELAY_REF_TO_ACT;
+
+              l_dly <= 1'b0;
+              b_dly <= DELAY_REF_TO_ACT;
+              c_dly <= DELAY_REF_TO_ACT;
+
+              a_req <= 1'b1;
+              r_dly <= 0;
+              w_dly <= 0;
             end
 
             CMD_MODE: begin
               // Set MODE register
               state <= ST_MODE;
-              delay <= 1 << CYCLES_MRD_TO_CMD;
+              delay <= DELAY_MRD_TO_CMD;
+
+              l_dly <= 1'b0;
+              b_dly <= DELAY_MRD_TO_CMD;
+              c_dly <= DELAY_MRD_TO_CMD;
+
+              a_req <= 1'b1;
+              r_dly <= 0;
+              w_dly <= 0;
             end
 
             CMD_ZQCL: begin
@@ -285,6 +351,14 @@ assign dfi_wren_o = wr_ready;
               state <= ST_ZQCL;
               count <= DDR_CZQINIT;
               busy  <= 1'b1;
+
+              l_dly <= 1'b1;  // long delay
+              b_dly <= 0;
+              c_dly <= 0;
+
+              a_req <= 1'b1;
+              r_dly <= 0;
+              w_dly <= 0;
             end
 
             CMD_NOOP: begin
@@ -313,18 +387,66 @@ assign dfi_wren_o = wr_ready;
           case (ctl_cmd_i)
             CMD_READ: begin
               state <= ST_READ;
-              delay <= 1 << CYCLES_ACT_TO__RD;
+              if (ctl_pre_w) begin
+                delay <= DELAY_RDA_TO_ACT;
+
+                l_dly <= 1'b0;
+                b_dly <= DELAY_RDA_TO_ACT;
+                c_dly <= DELAY_RDA_TO_ACT;
+
+                a_req <= 1'b1;
+                r_dly <= 0;
+                w_dly <= 0;
+              end else begin
+                delay <= DELAY__RD_TO__RD;
+
+                l_dly <= 1'b0;
+                b_dly <= DELAY_ACT_TO_ACT_L;
+                c_dly <= DELAY_ACT_TO_ACT_S;
+
+                a_req <= 1'b0;
+                r_dly <= DELAY__RD_TO__RD;
+                w_dly <= DELAY__RD_TO__WR;
+              end
             end
 
             CMD_WRIT: begin
               state <= ST_WRIT;
-              delay <= 1 << CYCLES_ACT_TO__WR;
+              if (ctl_pre_w) begin
+                delay <= DELAY_WRA_TO_ACT;
+
+                l_dly <= 1'b0;
+                b_dly <= DELAY_WRA_TO_ACT;
+                c_dly <= 1;
+
+                a_req <= 1'b1;
+                r_dly <= 0;
+                w_dly <= 0;
+              end else begin
+                delay <= DELAY__WR_TO__WR;
+
+                l_dly <= 1'b0;
+                b_dly <= DELAY_ACT_TO_ACT_L;
+                c_dly <= DELAY_ACT_TO_ACT_S;
+
+                a_req <= 1'b0;
+                r_dly <= DELAY__WR_TO__RD;
+                w_dly <= DELAY__WR_TO__WR;
+              end
             end
 
             CMD_ACTV: begin
               // todo: delay depends on if same bank, or different
               state <= ST_ACTV;
-              delay <= 1 << CYCLES_ACT_TO_ACT;
+              delay <= DELAY_ACT_TO_ACT_S;
+
+              l_dly <= 1'b0;
+              b_dly <= DELAY_ACT_TO_ACT_L;
+              c_dly <= DELAY_ACT_TO_ACT_S;
+
+              a_req <= 1'b0;
+              r_dly <= DELAY_ACT_TO_R_W;
+              w_dly <= DELAY_ACT_TO_R_W;
             end
 
             default: begin
@@ -337,16 +459,31 @@ assign dfi_wren_o = wr_ready;
         end
 
         ST_READ: begin
+          l_dly <= 1'b0;
+          b_dly <= DELAY_ACT_TO_ACT_L;
+
           case (ctl_cmd_i)
             CMD_READ: begin
               // RD -> RD (default: 4 cycles)
-              delay <= 1 << CYCLES__RD_TO__RD;
+              delay <= DELAY__RD_TO__RD;
+
+              if (ctl_pre_w) begin
+                c_dly <= DELAY_RDA_TO_ACT;
+                a_req <= 1'b1;
+                r_dly <= 0;
+                w_dly <= 0;
+              end else begin
+                c_dly <= 1;
+                a_req <= 1'b0;
+                r_dly <= DELAY__RD_TO__RD;
+                w_dly <= DELAY__RD_TO__WR;
+              end
             end
 
             CMD_WRIT: begin
               // RD -> WR (default: 6 cycles)
               state <= ST_WRIT;
-              delay <= 1 << CYCLES__RD_TO__WR;
+              delay <= DELAY__RD_TO__WR;
             end
 
             CMD_ACTV: begin
@@ -368,12 +505,12 @@ assign dfi_wren_o = wr_ready;
           case (ctl_cmd_i)
             CMD_WRIT: begin
               // WR -> WR (default: 4 cycles)
-              delay <= 1 << CYCLES__WR_TO__WR;
+              delay <= DELAY__WR_TO__WR;
             end
             CMD_READ: begin
               // WR -> RD (default: 14 + 4 cycles)
               state <= ST_READ;
-              delay <= 1 << CYCLES__WR_TO__RD;
+              delay <= DELAY__WR_TO__RD;
             end
             CMD_ACTV: begin
               // WR -> ACT (default: 4 cycles, different bank)
@@ -401,7 +538,7 @@ assign dfi_wren_o = wr_ready;
           case (ctl_cmd_i)
             CMD_ACTV: begin
               state <= ST_ACTV;
-              delay <= 1 << CYCLES_PRE_TO_ACT;
+              delay <= DELAY_PRE_TO_ACT;
             end
 
             CMD_REFR: begin
@@ -433,12 +570,12 @@ assign dfi_wren_o = wr_ready;
           case (ctl_cmd_i)
             CMD_ACTV: begin
               state <= ST_ACTV;
-              delay <= 1 << CYCLES_ACT_TO__RD;
+              delay <= DELAY_ACT_TO_R_W;
             end
 
             CMD_REFR: begin
               $display("%10t: DDL: Back-to-back REFRESH commands issued", $time);
-              delay <= 1 << CYCLES_REF_TO_ACT;
+              delay <= DELAY_REF_TO_ACT;
             end
 
             default: begin
@@ -453,17 +590,17 @@ assign dfi_wren_o = wr_ready;
         ST_MODE: begin
           case (ctl_cmd_i)
             CMD_MODE: begin
-              delay <= 1 << CYCLES_MRD_TO_CMD;
+              delay <= DELAY_MRD_TO_CMD;
             end
 
             CMD_REFR: begin
               state <= ST_REFR;
-              delay <= 1 << CYCLES_REF_TO_ACT;
+              delay <= DELAY_REF_TO_ACT;
             end
 
             CMD_PREC: begin
               state <= ST_PREC;
-              delay <= 1 << CYCLES_PRE_TO_ACT;
+              delay <= DELAY_PRE_TO_ACT;
             end
 
             CMD_ZQCL: begin
@@ -486,17 +623,17 @@ assign dfi_wren_o = wr_ready;
           case (ctl_cmd_i)
             CMD_ACTV: begin
               state <= ST_ACTV;
-              delay <= 1 << CYCLES_ACT_TO__RD;
+              delay <= DELAY_ACT_TO_R_W;
             end
 
             CMD_REFR: begin
               state <= ST_REFR;
-              delay <= 1 << CYCLES_REF_TO_ACT;
+              delay <= DELAY_REF_TO_ACT;
             end
 
             CMD_PREC: begin
               state <= ST_PREC;
-              delay <= 1 << CYCLES_PRE_TO_ACT;
+              delay <= DELAY_PRE_TO_ACT;
             end
 
             default: begin
@@ -521,28 +658,41 @@ assign dfi_wren_o = wr_ready;
   end
 
 
-// -- Write Data-Path -- //
+  // -- Write Data-Path -- //
 
-localparam WDLYS = PHY_WR_LATENCY + 4; // BL8 = 4 extra delays
-localparam WSB = WDLYS - 1;
+  localparam [WSB:0] WR_SHIFTS = DDR_CWL - PHY_WR_LATENCY - 2;
 
-reg [WSB:0] wr_delay;
-wire store_w;
+  wire store_w, wr_rdy_w;
 
-assign store_w = ctl_cmd_i == CMD_WRIT && ready;
+  assign store_w = ctl_cmd_i == CMD_WRIT && ready;
 
-always @(posedge clock) begin
-  if (reset) begin
-    wr_delay <= {WDLYS{1'b0}};
-    wr_ready <= 1'b0;
-  end else if (store_w) begin
-    wr_delay <= {4'b1111, wr_delay[WSB-3:1]};
-    wr_ready <= wr_delay[0];
-  end else begin
-    wr_delay <= {1'b0, wr_delay[WSB:1]};
-    wr_ready <= wr_delay[0];
+  always @(posedge clock) begin
+    if (reset) begin
+      wr_delay <= {WDLYS{1'b0}};
+      wr_strob <= 1'b0;
+      wr_ready <= 1'b0;
+    end else begin
+      if (store_w) begin
+        wr_delay <= {WDLYS{1'b1}};
+      end else begin
+        wr_delay <= {1'b0, wr_delay[WSB:1]};
+      end
+
+      wr_strob <= wr_rdy_w;
+      wr_ready <= wr_strob;
+    end
   end
-end
+
+  shift_register #(
+      .WIDTH(1),
+      .DEPTH(16)
+  ) wr_srl_inst (
+      .clock (clock),
+      .wren_i(1'b1),
+      .addr_i(WR_SHIFTS),
+      .data_i(wr_delay[0]),
+      .data_o(wr_rdy_w)
+  );
 
 
   // -- Simulation Only -- //

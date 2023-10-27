@@ -1,18 +1,18 @@
 [*]
 [*] GTKWave Analyzer v3.3.104 (w)1999-2020 BSI
-[*] Fri Oct 27 01:27:48 2023
+[*] Fri Oct 27 05:14:45 2023
 [*]
 [dumpfile] "./ddr3_fsm_tb.vcd"
-[dumpfile_mtime] "Fri Oct 27 01:27:43 2023"
-[dumpfile_size] 198245
+[dumpfile_mtime] "Fri Oct 27 05:08:40 2023"
+[dumpfile_size] 101544
 [savefile] "./ddr3_fsm_tb.gtkw"
-[timestart] 0
+[timestart] 193400
 [size] 1920 1043
 [pos] -1 -1
-*-15.950885 230000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+*-15.950885 315000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] ddr3_fsm_tb.
 [sst_width] 233
-[signals_width] 150
+[signals_width] 142
 [sst_expanded] 1
 [sst_vpaned_height] 298
 @28
@@ -23,11 +23,6 @@ ddr3_fsm_tb.cfg_ref
 ddr3_fsm_tb.ddl_cke
 @800200
 -Control
-@28
-ddr3_fsm_tb.fsm_wrreq
-ddr3_fsm_tb.fsm_wrack
-ddr3_fsm_tb.fsm_rdreq
-ddr3_fsm_tb.fsm_rdack
 @c00200
 -FSM
 @22
@@ -42,12 +37,9 @@ ddr3_fsm_tb.ddr3_fsm_inst.row_w[12:0]
 ddr3_fsm_tb.ddr3_fsm_inst.col_w[12:0]
 @1401200
 -FSM
-@820
-[color] 7
-ddr3_fsm_tb.ddr3_fsm_inst.dbg_state[79:0]
 @1000200
 -Control
-@800200
+@c00200
 -DDL
 @28
 ddr3_fsm_tb.ddl_req
@@ -56,15 +48,18 @@ ddr3_fsm_tb.ddl_cmd[2:0]
 ddr3_fsm_tb.ddl_ba[2:0]
 @22
 ddr3_fsm_tb.ddl_adr[12:0]
-@1000200
+@1401200
 -DDL
 @c00200
 -DFI
+-Read
 @28
 ddr3_fsm_tb.dfi_valid
 ddr3_fsm_tb.dfi_rden
 ddr3_fsm_tb.rd_valid
 ddr3_fsm_tb.rd_ready
+@1401200
+-Read
 @800200
 -Write
 @28
@@ -84,8 +79,10 @@ ddr3_fsm_tb.dfi_bank[2:0]
 @22
 ddr3_fsm_tb.dfi_addr[12:0]
 @28
+ddr3_fsm_tb.dfi_wstb
 ddr3_fsm_tb.dfi_wren
 @22
+ddr3_fsm_tb.dfi_mask[3:0]
 ddr3_fsm_tb.dfi_wdata[31:0]
 @820
 [color] 6
@@ -95,13 +92,15 @@ ddr3_fsm_tb.ddr3_ddl_inst.store_w
 @1401200
 -DFI
 @28
+ddr3_fsm_tb.ddr3_phy_inst.hi_q
+@800200
+-DDR
+@28
 ddr3_fsm_tb.ddr_ck_p
 ddr3_fsm_tb.ddr_ck_n
 ddr3_fsm_tb.ddr_rst_n
 ddr3_fsm_tb.ddr_cke
-@29
 ddr3_fsm_tb.ddr_cs_n
-@28
 ddr3_fsm_tb.ddr_ras_n
 ddr3_fsm_tb.ddr_cas_n
 ddr3_fsm_tb.ddr_we_n
@@ -115,5 +114,7 @@ ddr3_fsm_tb.ddr_dqs_n[1:0]
 ddr3_fsm_tb.ddr_dm[1:0]
 @22
 ddr3_fsm_tb.ddr_dq[15:0]
+@1000200
+-DDR
 [pattern_trace] 1
 [pattern_trace] 0

@@ -205,6 +205,7 @@ module ddr3_fsm (
 
   reg wrack, rdack, byack, req_q, req_x;
 
+  reg same_row, same_cmd;
   reg [2:0] prev_wr_bank, prev_rd_bank;
   reg [2:0] cmd_q, cmd_x, ba_q, ba_x;
   reg [RSB:0] adr_q, adr_x;
@@ -216,6 +217,7 @@ module ddr3_fsm (
   wire [RSB:0] row_w, col_w;
   wire [2:0] bank_w;
   wire banks_active, bank_switch;
+  wire same_row_w, same_cmd_w;
 
 
   assign mem_wrack_o = wrack;
@@ -234,6 +236,9 @@ module ddr3_fsm (
   assign bank_w = mem_wradr_i[DDR_COL_BITS+2:DDR_COL_BITS];
   assign row_w = mem_wradr_i[ASB:DDR_COL_BITS+3];
   assign col_w = {2'b00, auto_w, mem_wradr_i[DDR_COL_BITS-1:0]};
+
+  assign same_row_w = 1'b0;
+  assign same_cmd_w = 1'b0;
 
 
   // -- Main State Machine -- //
@@ -337,8 +342,16 @@ module ddr3_fsm (
             cmd_q <= cmd_x;
             ba_q  <= ba_x;
             adr_q <= adr_x;
-            cmd_x <= CMD_NOOP;  // todo: back-to-back reads/writes
-            req_x <= 1'b0;  // todo: back-to-back reads/writes
+
+            if (same_row && same_cmd) begin
+              req_x <= req_x;
+              cmd_x <= cmd_x;
+              ba_x  <= ba_x;
+              adr_x <= col_w;
+            end else begin
+              req_x <= 1'b0;  // todo: back-to-back reads/writes
+              cmd_x <= CMD_NOOP;  // todo: back-to-back reads/writes
+            end
 
             if (autop) begin
               // todo: there are multiple banks, so this is not always a good
@@ -356,8 +369,16 @@ module ddr3_fsm (
             cmd_q <= cmd_x;
             ba_q  <= ba_x;
             adr_q <= adr_x;
-            req_x <= 1'b0;
-            cmd_x <= CMD_NOOP;
+
+            if (same_row && same_cmd) begin
+              req_x <= req_x;
+              cmd_x <= cmd_x;
+              ba_x  <= ba_x;
+              adr_x <= col_w;
+            end else begin
+              req_x <= 1'b0;  // todo: back-to-back reads/writes
+              cmd_x <= CMD_NOOP;  // todo: back-to-back reads/writes
+            end
           end
         end
 
@@ -369,8 +390,16 @@ module ddr3_fsm (
             cmd_q <= cmd_x;
             ba_q  <= ba_x;
             adr_q <= adr_x;
-            req_x <= 1'b0;
-            cmd_x <= CMD_NOOP;
+
+            if (same_row && same_cmd) begin
+              req_x <= req_x;
+              cmd_x <= cmd_x;
+              ba_x  <= ba_x;
+              adr_x <= col_w;
+            end else begin
+              req_x <= 1'b0;  // todo: back-to-back reads/writes
+              cmd_x <= CMD_NOOP;  // todo: back-to-back reads/writes
+            end
           end
         end
 
@@ -539,10 +568,14 @@ module ddr3_fsm (
   always @(posedge clock) begin
     if (reset) begin
       cmd_n <= CMD_NOOP;
+      same_row <= 1'b0;
+      same_cmd <= 1'b0;
     end else begin
       case (state)
         default: begin
           cmd_n <= CMD_NOOP;
+          same_row <= same_row_w;
+          same_cmd <= same_cmd_w;
         end
       endcase
     end

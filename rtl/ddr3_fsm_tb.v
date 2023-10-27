@@ -70,13 +70,13 @@ module ddr3_fsm_tb;
   // AXI <-> {FSM, DDL} signals
   wire wr_ready, rd_valid, rd_last;
   wire [MSB:0] rd_data;
-reg wr_valid, wr_last, rd_ready;
-reg [SSB:0] wr_mask;
-reg [MSB:0] wr_data;
+  reg wr_valid, wr_last, rd_ready;
+  reg [SSB:0] wr_mask;
+  reg [MSB:0] wr_data;
 
   // DFI <-> PHY
   wire dfi_rst_n, dfi_ras_n, dfi_cas_n, dfi_we_n;
-  wire dfi_odt, dfi_wren, dfi_rden, dfi_valid;
+  wire dfi_odt, dfi_wstb, dfi_wren, dfi_rden, dfi_valid;
   wire [  2:0] dfi_bank;
   wire [RSB:0] dfi_addr;
   wire [SSB:0] dfi_mask;
@@ -145,7 +145,16 @@ reg [MSB:0] wr_data;
 
     $display("%10t: STORE", $time);
     @(posedge clock);
-    mem_store(0, 1, 'bx);
+    mem_store(0, 1, 1, 'bx);
+
+    @(posedge clock);
+    @(posedge clock);
+
+    // 2x BL8 as part of a 32B burst
+    $display("%10t: STORE", $time);
+    @(posedge clock);
+    mem_store(0, 0, 2, 'bx);
+    mem_store(8, 1, 2, 'bx);
 
     @(posedge clock);
     @(posedge clock);
@@ -159,31 +168,31 @@ reg [MSB:0] wr_data;
   end
 
 
-// -- Fake Write Data -- //
+  // -- Fake Write Data -- //
 
-reg [1:0] wr_count;
-wire [1:0] wr_cnext = wr_count + 1;
+  reg  [1:0] wr_count;
+  wire [1:0] wr_cnext = wr_count + 1;
 
-always @(posedge clock) begin
-  if (reset) begin
-    wr_valid <= 1'b0;
-    wr_count <= 2'h0;
-  end else if (cfg_run) begin
-    if (!wr_valid) begin
-      wr_valid <= 1'b1;
-      wr_data  <= $urandom;
-      wr_mask  <= {MASKS{1'b1}};
-    end    else if (wr_ready) begin
-      wr_last  <= wr_count == 2'h2;
-      wr_mask  <= {MASKS{1'b1}};
-      wr_data  <= $urandom;
-      wr_count <= wr_cnext;
+  always @(posedge clock) begin
+    if (reset) begin
+      wr_valid <= 1'b0;
+      wr_count <= 2'h0;
+    end else if (cfg_run) begin
+      if (!wr_valid) begin
+        wr_valid <= 1'b1;
+        wr_data  <= $urandom;
+        wr_mask  <= {MASKS{1'b1}};
+      end else if (wr_ready) begin
+        wr_last  <= wr_count == 2'h2;
+        wr_mask  <= {MASKS{1'b1}};
+        wr_data  <= $urandom;
+        wr_count <= wr_cnext;
+      end
     end
   end
-end
 
 
-// -- DFI Data Layer -- //
+  // -- DFI Data Layer -- //
 
 
   // -- DDR3 PHI Interface Modules -- //
@@ -196,9 +205,6 @@ end
       .reset  (reset),
       .clk_ddr(clk_ddr),
 
-      .cfg_valid_i(dfi_valid),
-      .cfg_data_i ({16'h0000, 4'h4, 4'h4, 8'h00}),
-
       .dfi_rst_ni(~reset),
       .dfi_cke_i (ddl_cke),
       .dfi_cs_ni (~ddl_cke),
@@ -209,13 +215,14 @@ end
       .dfi_bank_i(dfi_bank),
       .dfi_addr_i(dfi_addr),
 
+      .dfi_wstb_i(dfi_wstb),
       .dfi_wren_i(dfi_wren),
       .dfi_mask_i(dfi_mask),
       .dfi_data_i(dfi_wdata),
 
-      .dfi_rden_i (dfi_rden),
-      .dfi_valid_o(dfi_valid),
-      .dfi_data_o (dfi_rdata),
+      .dfi_rden_i(dfi_rden),
+      .dfi_rvld_o(dfi_valid),
+      .dfi_data_o(dfi_rdata),
 
       .ddr3_ck_po(ddr_ck_p),
       .ddr3_ck_no(ddr_ck_n),
@@ -265,18 +272,19 @@ end
       .mem_rlast_o (rd_last),
       .mem_rddata_o(rd_data),
 
-      .dfi_ras_no (dfi_ras_n),
-      .dfi_cas_no (dfi_cas_n),
-      .dfi_we_no  (dfi_we_n),
-      .dfi_odt_o  (dfi_odt),
-      .dfi_bank_o (dfi_bank),
-      .dfi_addr_o (dfi_addr),
-      .dfi_wren_o (dfi_wren),
-      .dfi_mask_o (dfi_mask),
-      .dfi_data_o (dfi_wdata),
-      .dfi_rden_o (dfi_rden),
-      .dfi_valid_i(dfi_valid),
-      .dfi_data_i (dfi_rdata)
+      .dfi_ras_no(dfi_ras_n),
+      .dfi_cas_no(dfi_cas_n),
+      .dfi_we_no (dfi_we_n),
+      .dfi_odt_o (dfi_odt),
+      .dfi_bank_o(dfi_bank),
+      .dfi_addr_o(dfi_addr),
+      .dfi_wstb_o(dfi_wstb),
+      .dfi_wren_o(dfi_wren),
+      .dfi_mask_o(dfi_mask),
+      .dfi_data_o(dfi_wdata),
+      .dfi_rden_o(dfi_rden),
+      .dfi_rvld_i(dfi_valid),
+      .dfi_data_i(dfi_rdata)
   );
 
 
@@ -328,19 +336,14 @@ end
 
   task mem_store;
     input [ASB:0] addr;
+    input last;
     input [ISB:0] tid;
     input [127:0] data;
     begin
-      // integer count;
-
       fsm_wrreq <= 1'b1;
-      fsm_wrlst <= 1'b1;
+      fsm_wrlst <= last;
       fsm_wrtid <= tid;
       fsm_wradr <= addr;
-
-      // count <= 0;
-
-      @(posedge clock);
 
       while (!fsm_wrack) begin
         @(posedge clock);
@@ -349,10 +352,7 @@ end
       fsm_wrreq <= 1'b0;
       @(posedge clock);
 
-      // count <= 1;
-
       // todo: tx data stuffs
-      @(posedge clock);
     end
   endtask  // mem_store
 

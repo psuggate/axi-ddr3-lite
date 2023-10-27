@@ -81,7 +81,7 @@ module ddr3_cfg_tb;
 
   // DFI <-> PHY
   wire dfi_rst_n, dfi_cke, dfi_cs_n, dfi_ras_n, dfi_cas_n, dfi_we_n;
-  wire dfi_odt, dfi_wren, dfi_rden, dfi_valid;
+  wire dfi_odt, dfi_wstb, dfi_wren, dfi_rden, dfi_valid;
   wire [  2:0] dfi_bank;
   wire [RSB:0] dfi_addr;
   wire [SSB:0] dfi_mask;
@@ -169,9 +169,6 @@ module ddr3_cfg_tb;
       .reset  (reset),
       .clk_ddr(clk_ddr),
 
-      .cfg_valid_i(dfi_valid),
-      .cfg_data_i ({16'h0000, 4'h4, 4'h4, 8'h00}),
-
       .dfi_cke_i (dfi_cke),
       .dfi_rst_ni(dfi_rst_n),
       .dfi_cs_ni (dfi_cs_n),
@@ -186,9 +183,9 @@ module ddr3_cfg_tb;
       .dfi_mask_i(dfi_mask),
       .dfi_data_i(dfi_wdata),
 
-      .dfi_rden_i (dfi_rden),
-      .dfi_valid_o(dfi_valid),
-      .dfi_data_o (dfi_rdata),
+      .dfi_rden_i(dfi_rden),
+      .dfi_rvld_o(dfi_valid),
+      .dfi_data_o(dfi_rdata),
 
       .ddr3_ck_po(ddr_ck_p),
       .ddr3_ck_no(ddr_ck_n),
@@ -238,17 +235,18 @@ module ddr3_cfg_tb;
       .mem_rlast_o (rd_last),
       .mem_rddata_o(rd_data),
 
-      .dfi_ras_no (dfi_ras_n),
-      .dfi_cas_no (dfi_cas_n),
-      .dfi_we_no  (dfi_we_n),
-      .dfi_bank_o (dfi_bank),
-      .dfi_addr_o (dfi_addr),
-      .dfi_wren_o (dfi_wren),
-      .dfi_mask_o (dfi_mask),
-      .dfi_data_o (dfi_wdata),
-      .dfi_rden_o (dfi_rden),
-      .dfi_valid_i(dfi_valid),
-      .dfi_data_i (dfi_rdata)
+      .dfi_ras_no(dfi_ras_n),
+      .dfi_cas_no(dfi_cas_n),
+      .dfi_we_no (dfi_we_n),
+      .dfi_bank_o(dfi_bank),
+      .dfi_addr_o(dfi_addr),
+      .dfi_wstb_o(dfi_wstb),
+      .dfi_wren_o(dfi_wren),
+      .dfi_mask_o(dfi_mask),
+      .dfi_data_o(dfi_wdata),
+      .dfi_rden_o(dfi_rden),
+      .dfi_rvld_i(dfi_valid),
+      .dfi_data_i(dfi_rdata)
   );
 
 
