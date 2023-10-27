@@ -1,15 +1,15 @@
 [*]
 [*] GTKWave Analyzer v3.3.104 (w)1999-2020 BSI
-[*] Thu Oct 26 21:49:05 2023
+[*] Fri Oct 27 01:27:48 2023
 [*]
 [dumpfile] "./ddr3_fsm_tb.vcd"
-[dumpfile_mtime] "Thu Oct 26 21:48:50 2023"
-[dumpfile_size] 8115
+[dumpfile_mtime] "Fri Oct 27 01:27:43 2023"
+[dumpfile_size] 198245
 [savefile] "./ddr3_fsm_tb.gtkw"
 [timestart] 0
 [size] 1920 1043
 [pos] -1 -1
-*-15.440692 200000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+*-15.950885 230000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] ddr3_fsm_tb.
 [sst_width] 233
 [signals_width] 150
@@ -19,23 +19,101 @@
 ddr3_fsm_tb.clock
 ddr3_fsm_tb.reset
 ddr3_fsm_tb.cfg_run
+ddr3_fsm_tb.cfg_ref
+ddr3_fsm_tb.ddl_cke
+@800200
+-Control
+@28
 ddr3_fsm_tb.fsm_wrreq
 ddr3_fsm_tb.fsm_wrack
-@800200
+ddr3_fsm_tb.fsm_rdreq
+ddr3_fsm_tb.fsm_rdack
+@c00200
+-FSM
+@22
+ddr3_fsm_tb.ddr3_fsm_inst.state[3:0]
+ddr3_fsm_tb.ddr3_fsm_inst.snext[3:0]
+@28
+ddr3_fsm_tb.ddr3_fsm_inst.cmd_q[2:0]
+ddr3_fsm_tb.ddr3_fsm_inst.cmd_x[2:0]
+ddr3_fsm_tb.ddr3_fsm_inst.autop
+@22
+ddr3_fsm_tb.ddr3_fsm_inst.row_w[12:0]
+ddr3_fsm_tb.ddr3_fsm_inst.col_w[12:0]
+@1401200
 -FSM
 @820
 [color] 7
 ddr3_fsm_tb.ddr3_fsm_inst.dbg_state[79:0]
 @1000200
--FSM
+-Control
+@800200
+-DDL
 @28
 ddr3_fsm_tb.ddl_req
 ddr3_fsm_tb.ddl_rdy
-@29
 ddr3_fsm_tb.ddl_cmd[2:0]
-@28
 ddr3_fsm_tb.ddl_ba[2:0]
 @22
 ddr3_fsm_tb.ddl_adr[12:0]
+@1000200
+-DDL
+@c00200
+-DFI
+@28
+ddr3_fsm_tb.dfi_valid
+ddr3_fsm_tb.dfi_rden
+ddr3_fsm_tb.rd_valid
+ddr3_fsm_tb.rd_ready
+@800200
+-Write
+@28
+ddr3_fsm_tb.wr_valid
+ddr3_fsm_tb.wr_last
+ddr3_fsm_tb.wr_ready
+ddr3_fsm_tb.wr_count[1:0]
+@22
+ddr3_fsm_tb.wr_data[31:0]
+@1000200
+-Write
+@28
+ddr3_fsm_tb.dfi_ras_n
+ddr3_fsm_tb.dfi_cas_n
+ddr3_fsm_tb.dfi_we_n
+ddr3_fsm_tb.dfi_bank[2:0]
+@22
+ddr3_fsm_tb.dfi_addr[12:0]
+@28
+ddr3_fsm_tb.dfi_wren
+@22
+ddr3_fsm_tb.dfi_wdata[31:0]
+@820
+[color] 6
+ddr3_fsm_tb.ddr3_ddl_inst.dbg_state[79:0]
+@28
+ddr3_fsm_tb.ddr3_ddl_inst.store_w
+@1401200
+-DFI
+@28
+ddr3_fsm_tb.ddr_ck_p
+ddr3_fsm_tb.ddr_ck_n
+ddr3_fsm_tb.ddr_rst_n
+ddr3_fsm_tb.ddr_cke
+@29
+ddr3_fsm_tb.ddr_cs_n
+@28
+ddr3_fsm_tb.ddr_ras_n
+ddr3_fsm_tb.ddr_cas_n
+ddr3_fsm_tb.ddr_we_n
+ddr3_fsm_tb.ddr_odt
+ddr3_fsm_tb.ddr_ba[2:0]
+@22
+ddr3_fsm_tb.ddr_a[12:0]
+@28
+ddr3_fsm_tb.ddr_dqs_p[1:0]
+ddr3_fsm_tb.ddr_dqs_n[1:0]
+ddr3_fsm_tb.ddr_dm[1:0]
+@22
+ddr3_fsm_tb.ddr_dq[15:0]
 [pattern_trace] 1
 [pattern_trace] 0

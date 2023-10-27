@@ -203,33 +203,37 @@ module ddr3_fsm (
   localparam [3:0] ST_REFR = 4'b1000;
 
 
-reg wrack, rdack, byack, req_q, req_x;
+  reg wrack, rdack, byack, req_q, req_x;
 
   reg [2:0] prev_wr_bank, prev_rd_bank;
   reg [2:0] cmd_q, cmd_x, ba_q, ba_x;
-reg [RSB:0] adr_q, adr_x;
+  reg [RSB:0] adr_q, adr_x;
 
   reg [7:0] bank_actv;  // '1' if activated
   reg [RSB:0] actv_rows[0:7];  // row-address for each active bank
 
-wire [RSB:0] row_w, col_w;
-wire [2:0] bank_w;
+  wire auto_w;
+  wire [RSB:0] row_w, col_w;
+  wire [2:0] bank_w;
   wire banks_active, bank_switch;
 
 
-assign mem_wrack_o = wrack;
-assign mem_rdack_o = rdack;
-assign byp_rdack_o = byack;
+  assign mem_wrack_o = wrack;
+  assign mem_rdack_o = rdack;
+  assign byp_rdack_o = byack;
 
-assign ddl_req_o = req_q;
-assign ddl_cmd_o = cmd_q;
-assign ddl_ba_o  = ba_q;
-assign ddl_adr_o = adr_q;
+  assign ddl_req_o = req_q;
+  assign ddl_cmd_o = cmd_q;
+  assign ddl_ba_o = ba_q;
+  assign ddl_adr_o = adr_q;
 
 
-assign bank_w = mem_wradr_i[12:10];
-assign row_w = mem_wradr_i[ASB:13];
-assign col_w = {2'b00, autop, mem_wradr_i[9:0]};
+  assign auto_w = byp_rdreq_i & BYPASS_ENABLE ? byp_rdlst_i
+                : mem_rdreq_i ? mem_rdlst_i
+                : mem_wrreq_i & mem_wrlst_i;
+  assign bank_w = mem_wradr_i[DDR_COL_BITS+2:DDR_COL_BITS];
+  assign row_w = mem_wradr_i[ASB:DDR_COL_BITS+3];
+  assign col_w = {2'b00, auto_w, mem_wradr_i[DDR_COL_BITS-1:0]};
 
 
   // -- Main State Machine -- //
@@ -273,6 +277,8 @@ assign col_w = {2'b00, autop, mem_wradr_i[9:0]};
               snext <= ST_REFR;
               req_q <= 1'b1;
               cmd_q <= CMD_PREC;
+              ba_q  <= 'bx;
+              adr_q <= {2'b00, 1'b1, 10'h000};
               req_x <= 1'b1;
               cmd_x <= CMD_REFR;
             end else begin
@@ -289,27 +295,29 @@ assign col_w = {2'b00, autop, mem_wradr_i[9:0]};
             snext <= ST_IDLE;
             req_q <= 1'b1;
             cmd_q <= CMD_PREC;
+            ba_q  <= ba_x;  // todo: use 'ba_x' to store last-used bank ??
+            adr_q <= {DDR_ROW_BITS{1'b0}};  // note: no PRECHARGE-ALL
             req_x <= 1'b0;
             cmd_x <= CMD_NOOP;
           end else if (byp_rdreq_i || mem_rdreq_i && !mem_wrreq_i) begin
             state <= ST_ACTV;
             snext <= ST_READ;
-            req_q <= 1'b1; // 1st command, RAS#
+            req_q <= 1'b1;  // 1st command, RAS#
             cmd_q <= CMD_ACTV;
             ba_q  <= bank_w;
             adr_q <= row_w;
-            req_x <= 1'b1; // 2nd command, CAS#
+            req_x <= 1'b1;  // 2nd command, CAS#
             cmd_x <= CMD_READ;
             ba_x  <= bank_w;
             adr_x <= col_w;
           end else if (mem_wrreq_i) begin
             state <= ST_ACTV;
             snext <= ST_WRIT;
-            req_q <= 1'b1; // 1st command, RAS#
+            req_q <= 1'b1;  // 1st command, RAS#
             cmd_q <= CMD_ACTV;
             ba_q  <= bank_w;
             adr_q <= row_w;
-            req_x <= 1'b1; // 2nd command, CAS# + WE#
+            req_x <= 1'b1;  // 2nd command, CAS# + WE#
             cmd_x <= CMD_WRIT;
             ba_x  <= bank_w;
             adr_x <= col_w;
@@ -329,8 +337,8 @@ assign col_w = {2'b00, autop, mem_wradr_i[9:0]};
             cmd_q <= cmd_x;
             ba_q  <= ba_x;
             adr_q <= adr_x;
-            cmd_x <= CMD_NOOP; // todo: back-to-back reads/writes
-            req_x <= 1'b0; // todo: back-to-back reads/writes
+            cmd_x <= CMD_NOOP;  // todo: back-to-back reads/writes
+            req_x <= 1'b0;  // todo: back-to-back reads/writes
 
             if (autop) begin
               // todo: there are multiple banks, so this is not always a good
@@ -374,7 +382,7 @@ assign col_w = {2'b00, autop, mem_wradr_i[9:0]};
             snext <= snext;
           end else begin
             state <= snext;
-            snext <= ST_IDLE; // todo
+            snext <= ST_IDLE;  // todo
             req_q <= req_x;
             cmd_q <= cmd_x;
             req_x <= 1'b0;
@@ -389,7 +397,7 @@ assign col_w = {2'b00, autop, mem_wradr_i[9:0]};
             snext <= snext;
           end else begin
             state <= snext;
-            snext <= ST_IDLE; // todo
+            snext <= ST_IDLE;  // todo
             req_q <= req_x;
             cmd_q <= cmd_x;
             ba_q  <= ba_x;
@@ -404,7 +412,7 @@ assign col_w = {2'b00, autop, mem_wradr_i[9:0]};
           // Note: 'ddl_ref_i' stays asserted until REFRESH is about to finish
           if (!ddl_ref_i && ddl_rdy_i) begin
             state <= snext;
-            snext <= ST_IDLE; // todo
+            snext <= ST_IDLE;  // todo
             req_q <= req_x;
             cmd_q <= cmd_x;
             ba_q  <= ba_x;
@@ -435,24 +443,17 @@ assign col_w = {2'b00, autop, mem_wradr_i[9:0]};
       autop <= 1'b0;
     end else begin
       case (state)
-        default: begin
-          autop <= 1'b0;
-        end
-
         ST_IDLE: begin
           // If a memory-command will be issued, is it the last in a sequence,
           // or do subsequent memory operations use the same '{row, bank}'?
-          if (!ddl_ref_i && ddl_rdy_i) begin
-            if (byp_rdreq_i) begin
-              autop <= ~byp_rdlst_i;
-            end else if (mem_rdreq_i) begin
-              autop <= ~mem_rdlst_i;
-            end else if (mem_wrreq_i) begin
-              autop <= ~mem_wrlst_i;
-            end else begin
-              // todo: configuration modes ??
-              autop <= 1'b0;
-            end
+          if (byp_rdreq_i) begin
+            autop <= byp_rdlst_i;
+          end else if (mem_rdreq_i) begin
+            autop <= mem_rdlst_i;
+          end else if (mem_wrreq_i) begin
+            autop <= mem_wrlst_i;
+          end else if (ddl_ref_i) begin
+            autop <= banks_active;
           end else begin
             autop <= 1'b0;
           end
@@ -479,12 +480,16 @@ assign col_w = {2'b00, autop, mem_wradr_i[9:0]};
             //   asserted (if it already is)
           end
         end
+
+        default: begin
+          autop <= 1'b0;
+        end
       endcase
     end
   end
 
 
-// -- Acknowledge Signals -- //
+  // -- Acknowledge Signals -- //
 
   always @(posedge clock) begin
     if (reset) begin
@@ -513,12 +518,32 @@ assign col_w = {2'b00, autop, mem_wradr_i[9:0]};
           end
         end
 
-          default: begin
-            wrack <= 1'b0;
-            rdack <= 1'b0;
-            byack <= 1'b0;
-          end
-            
+        default: begin
+          wrack <= 1'b0;
+          rdack <= 1'b0;
+          byack <= 1'b0;
+        end
+
+      endcase
+    end
+  end
+
+
+  // -- Next-Command Signals -- //
+
+  wire [2:0] cmd_w;
+  reg  [2:0] cmd_n;
+
+  assign cmd_w = byp_rdreq_i & BYPASS_ENABLE ? CMD_ACTV : cmd_n;
+
+  always @(posedge clock) begin
+    if (reset) begin
+      cmd_n <= CMD_NOOP;
+    end else begin
+      case (state)
+        default: begin
+          cmd_n <= CMD_NOOP;
+        end
       endcase
     end
   end

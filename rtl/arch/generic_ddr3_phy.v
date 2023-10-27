@@ -1,4 +1,9 @@
 `timescale 1ns / 100ps
+/**
+ * Todo:
+ *  - remove all of the shift-registers;
+ *  - only instantiate IOB registers, and the minimum of other logic;
+ */
 module generic_ddr3_phy (
     clock,
     reset,

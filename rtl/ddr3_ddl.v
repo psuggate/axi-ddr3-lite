@@ -39,6 +39,7 @@ module ddr3_ddl (
     dfi_ras_no,  // DDL <-> PHY signals
     dfi_cas_no,
     dfi_we_no,
+    dfi_odt_o,
     dfi_bank_o,
     dfi_addr_o,
     dfi_wren_o,
@@ -120,6 +121,7 @@ module ddr3_ddl (
   output dfi_ras_no;
   output dfi_cas_no;
   output dfi_we_no;
+  output dfi_odt_o;
   output [2:0] dfi_bank_o;
   output [RSB:0] dfi_addr_o;
 
@@ -144,12 +146,17 @@ module ddr3_ddl (
   localparam CZERO = {CBITS{1'b0}};
 
 
+reg wr_ready;
   reg ready, busy;
   reg [2:0] cmd_q, ba_q;
   reg [RSB:0] adr_q;
 
 
+// -- Connect to Upstream Controller & Data-paths -- //
+
   assign ctl_rdy_o = ready;
+
+assign mem_wready_o = wr_ready;
 
 
   // -- Connect FIFO's to the DDR IOB's -- //
@@ -157,8 +164,10 @@ module ddr3_ddl (
   assign dfi_ras_no = cmd_q[2];
   assign dfi_cas_no = cmd_q[1];
   assign dfi_we_no = cmd_q[0];
+assign dfi_odt_o = 1'b0;
   assign dfi_bank_o = ba_q;
   assign dfi_addr_o = adr_q;
+assign dfi_wren_o = wr_ready;
   assign dfi_mask_o = mem_wrmask_i;
   assign dfi_data_o = mem_wrdata_i;
 
@@ -510,6 +519,30 @@ module ddr3_ddl (
       cmd_q <= CMD_NOOP;
     end
   end
+
+
+// -- Write Data-Path -- //
+
+localparam WDLYS = PHY_WR_LATENCY + 4; // BL8 = 4 extra delays
+localparam WSB = WDLYS - 1;
+
+reg [WSB:0] wr_delay;
+wire store_w;
+
+assign store_w = ctl_cmd_i == CMD_WRIT && ready;
+
+always @(posedge clock) begin
+  if (reset) begin
+    wr_delay <= {WDLYS{1'b0}};
+    wr_ready <= 1'b0;
+  end else if (store_w) begin
+    wr_delay <= {4'b1111, wr_delay[WSB-3:1]};
+    wr_ready <= wr_delay[0];
+  end else begin
+    wr_delay <= {1'b0, wr_delay[WSB:1]};
+    wr_ready <= wr_delay[0];
+  end
+end
 
 
   // -- Simulation Only -- //
