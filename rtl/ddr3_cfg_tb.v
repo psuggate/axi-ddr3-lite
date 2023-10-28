@@ -63,7 +63,7 @@ module ddr3_cfg_tb;
 
   // -- DDR3 Configurator for a Memory Controller -- //
 
-  wire ddl_req, ddl_seq, ddl_rdy, ddl_ref;
+  wire ddl_run, ddl_req, ddl_seq, ddl_rdy, ddl_ref;
   wire [2:0] ddl_cmd, ddl_ba;
   wire [ISB:0] ddl_tid;
   wire [RSB:0] ddl_adr;
@@ -77,10 +77,11 @@ module ddr3_cfg_tb;
   wire [RSB:0] cfg_adr;
 
   // AXI <-> {FSM, DDL} signals
-  wire wr_valid, wr_ready, wr_last;
-  wire rd_valid, rd_ready, rd_last;
-  wire [SSB:0] wr_mask;
-  wire [MSB:0] wr_data, rd_data;
+  wire wr_ready, rd_valid, rd_last;
+  wire [MSB:0] rd_data;
+  reg wr_valid, wr_last, rd_ready;
+  reg [SSB:0] wr_mask;
+  reg [MSB:0] wr_data;
 
   // DFI <-> PHY
   wire dfi_rst_n, dfi_cke, dfi_cs_n, dfi_ras_n, dfi_cas_n, dfi_we_n;
@@ -100,15 +101,7 @@ module ddr3_cfg_tb;
   wire [15:0] ddr_dq;
 
 
-  assign dfi_valid = 1'b0;
-  assign dfi_mask  = {MASKS{1'b0}};
-  assign dfi_wdata = {WIDTH{1'bx}};
-
-  assign wr_valid  = 1'b0;
-  assign wr_last   = 1'bx;
-  assign rd_ready  = 1'b0;
-  assign wr_mask   = {MASKS{1'b0}};
-  assign wr_data   = {WIDTH{1'bx}};
+  assign rd_ready  = 1'b1;
 
 
   // -- Manage the REFRESH Requests -- //
@@ -121,7 +114,8 @@ module ddr3_cfg_tb;
   assign ctl_ba  = cfg_run ? 'bx : cfg_ba;
   assign ctl_adr = cfg_run ? 'bx : cfg_adr;
 
-  assign cfg_rdy = ctl_rdy;
+  assign cfg_rdy = ddl_rdy;
+  assign ctl_rdy = ddl_rdy;
 
 
   always @(posedge clock) begin
@@ -135,6 +129,111 @@ module ddr3_cfg_tb;
       end else if (mem_req && ctl_rdy) begin
         mem_req <= 1'b0;
         mem_cmd <= CMD_NOOP;
+      end
+    end
+  end
+
+
+// -- Use the Memory Controller FSM to Generate Requests -- //
+
+  reg fsm_wrreq, fsm_wrlst;
+  reg fsm_rdreq, fsm_rdlst;
+  wire fsm_wrack, fsm_wrerr, fsm_rdack, fsm_rderr;
+  reg [ISB:0] fsm_wrtid, fsm_rdtid;
+  reg [ASB:0] fsm_wradr, fsm_rdadr;
+
+  wire byp_rdack, byp_rderr;
+  wire byp_rdreq = 1'b0;
+  wire byp_rdlst = 1'b0;
+  wire [ISB:0] byp_rdtid;
+  wire [ASB:0] byp_rdadr;
+
+  assign byp_rdtid = 0;
+  assign byp_rdadr = 0;
+
+  reg [6:0] counter;
+  reg fsm_run, mem_run, rfc;
+
+  always @(posedge clock) begin
+    if (reset) begin
+      fsm_run   <= 1'b0;
+      mem_run   <= 1'b0;
+      rfc <= 1'b0;
+      counter   <= 7'd100;
+      fsm_wrreq <= 1'b0;
+      fsm_wrlst <= 1'b0;
+      fsm_rdreq <= 1'b0;
+      fsm_rdlst <= 1'b0;
+    end else if (cfg_run && counter > 0) begin
+      counter <= counter - 1;
+      fsm_run <= counter == 7'd001;
+    end else if (fsm_run && cfg_ref && ddl_rdy) begin
+      rfc <= 1'b1;
+      mem_run <= 1'b1;
+    end
+  end
+
+
+  reg [127:0] data;
+
+  initial begin
+    while (!reset) begin
+      @(posedge clock);
+    end
+    @(posedge clock);
+    while (reset) begin
+      @(posedge clock);
+    end
+
+    @(posedge clock);
+    while (!cfg_run || !ddl_run || !fsm_run) begin
+      @(posedge clock);
+    end
+
+    $display("%10t: STORE", $time);
+    @(posedge clock);
+    mem_store(0, 1, 1, 'bx);
+
+    @(posedge clock);
+    @(posedge clock);
+
+    // 2x BL8 as part of a 32B burst
+    $display("%10t: STORE", $time);
+    @(posedge clock);
+    mem_store(0, 0, 2, 'bx);
+    mem_store(8, 1, 2, 'bx);
+
+    @(posedge clock);
+    @(posedge clock);
+
+    $display("%10t: FETCH", $time);
+    @(posedge clock);
+    mem_fetch(0, 1, data);
+
+    @(posedge clock);
+    @(posedge clock);
+  end
+
+
+  // -- Fake Write Data -- //
+
+  reg  [1:0] wr_count;
+  wire [1:0] wr_cnext = wr_count + 1;
+
+  always @(posedge clock) begin
+    if (reset) begin
+      wr_valid <= 1'b0;
+      wr_count <= 2'h0;
+    end else if (fsm_run) begin
+      if (!wr_valid) begin
+        wr_valid <= 1'b1;
+        wr_data  <= $urandom;
+        wr_mask  <= {MASKS{1'b1}};
+      end else if (wr_ready) begin
+        wr_last  <= wr_count == 2'h2;
+        wr_mask  <= {MASKS{1'b1}};
+        wr_data  <= $urandom;
+        wr_count <= wr_cnext;
       end
     end
   end
@@ -222,6 +321,7 @@ module ddr3_cfg_tb;
       .ddr_cke_i(dfi_cke),
       .ddr_cs_ni(dfi_cs_n),
 
+      .ctl_run_o(ddl_run),
       .ctl_req_i(ddl_req),
       .ctl_seq_i(ddl_seq),
       .ctl_rdy_o(ddl_rdy),
@@ -253,28 +353,6 @@ module ddr3_cfg_tb;
       .dfi_rvld_i(dfi_valid),
       .dfi_data_i(dfi_rdata)
   );
-
-  wire fsm_wrack, fsm_wrerr, fsm_rdack, fsm_rderr;
-  wire fsm_wrreq = 1'b0;
-  wire fsm_wrlst = 1'b0;
-  wire fsm_rdreq = 1'b0;
-  wire fsm_rdlst = 1'b0;
-  wire [ISB:0] fsm_wrtid, fsm_rdtid;
-  wire [ASB:0] fsm_wradr, fsm_rdadr;
-
-  assign fsm_wrtid = 0;
-  assign fsm_rdtid = 0;
-  assign fsm_wradr = 0;
-  assign fsm_rdadr = 0;
-
-  wire byp_rdack, byp_rderr;
-  wire byp_rdreq = 1'b0;
-  wire byp_rdlst = 1'b0;
-  wire [ISB:0] byp_rdtid;
-  wire [ASB:0] byp_rdadr;
-
-  assign byp_rdtid = 0;
-  assign byp_rdadr = 0;
 
   ddr3_fsm #(
       .DDR_FREQ_MHZ(DDR_FREQ_MHZ),
@@ -308,7 +386,8 @@ module ddr3_cfg_tb;
       .byp_rdtid_i(byp_rdtid),
       .byp_rdadr_i(byp_rdadr),
 
-      .cfg_run_i(cfg_run),  // Configuration port
+//       .cfg_run_i(cfg_run),  // Configuration port
+      .cfg_run_i(fsm_run),  // Configuration port
       .cfg_req_i(cfg_req),
       .cfg_rdy_o(cfg_rdy),
       .cfg_cmd_i(cfg_cmd),
@@ -317,7 +396,7 @@ module ddr3_cfg_tb;
 
       .ddl_req_o(ddl_req),  // Controller <-> DFI
       .ddl_rdy_i(ddl_rdy),
-      .ddl_ref_i(cfg_ref),
+      .ddl_ref_i(cfg_ref), // todo ...
       .ddl_cmd_o(ddl_cmd),
       .ddl_tid_o(ddl_tid),
       .ddl_ba_o (ddl_ba),
@@ -358,6 +437,58 @@ module ddr3_cfg_tb;
       .ctl_ba_o (cfg_ba),
       .ctl_adr_o(cfg_adr)
   );
+
+
+  // -- Perform write transfer (128-bit) -- //
+
+  task mem_store;
+    input [ASB:0] addr;
+    input last;
+    input [ISB:0] tid;
+    input [127:0] data;
+    begin
+      fsm_wrreq <= 1'b1;
+      fsm_wrlst <= last;
+      fsm_wrtid <= tid;
+      fsm_wradr <= addr;
+
+      while (!fsm_wrack) begin
+        @(posedge clock);
+      end
+
+      fsm_wrreq <= 1'b0;
+      @(posedge clock);
+
+      // todo: tx data stuffs
+    end
+  endtask  // mem_store
+
+
+  // -- Perform read transfer (128-bit) -- //
+
+  task mem_fetch;
+    input [ASB:0] addr;
+    input [ISB:0] tid;
+    output [127:0] data;
+    begin
+      fsm_rdreq <= 1'b1;
+      fsm_rdlst <= 1'b1;
+      fsm_rdtid <= tid;
+      fsm_rdadr <= addr;
+
+      @(posedge clock);
+
+      while (!fsm_rdack) begin
+        @(posedge clock);
+      end
+
+      fsm_rdreq <= 1'b0;
+      @(posedge clock);
+
+      // todo: rx data stuffs
+      @(posedge clock);
+    end
+  endtask  // mem_fetch
 
 
 endmodule  // ddr3_cfg_tb

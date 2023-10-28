@@ -27,7 +27,8 @@ parameter DDR_CWL = 6;  // DLL=off mode is required to support this
 
 // DDR reset, refresh, and initialisation parameters
 parameter DDR_TREFI = 7800;  // REFRESH-interval in ns, at normal temperatures
-parameter DDR_TRFC = 110;  // self-REFRESH duration, in ns, for 1Gb DDR3 SDRAM
+parameter DDR_TRFC = 160;  // self-REFRESH duration, in ns, for 2Gb DDR3 SDRAM
+// parameter DDR_TRFC = 110;  // self-REFRESH duration, in ns, for 1Gb DDR3 SDRAM
 localparam DDR_TRESET = 200000;  // RESET# for 200 us after power-on
 localparam DDR_TWAKE = 500000;  // after RESET# deasserts, before first command
 localparam DDR_TCKE0 = 10;  // at least 10 ns between CKE := 0 and RESET# := 1
@@ -122,7 +123,8 @@ localparam CYCLES_RDA_TO_ACT = DDR_CCCD + (DDR_TRP + TCK - 1) / TCK;  // 6 cycle
 localparam PPD = 1'b0;  // Slow exit (PRE PD), for DLL=off
 // localparam [2:0] WRC = WR_CYCLES == 6 ? 3'b010 : (WR_CYCLES == 5 ? 3'b001 : 3'b000);
 localparam [2:0] WRC = 3'b001;
-localparam DLLR = 1'b0;  // No DLL reset, for DLL=off
+localparam DLLR = 1'b1;  // No DLL reset, for DLL=off
+// localparam DLLR = 1'b0;  // No DLL reset, for DLL=off
 localparam [3:0] CAS = 4'b0100;  // CL=6 for DLL=off
 localparam [1:0] BLEN = 2'b00;  // BL8
 localparam [12:0] MR0 = {PPD, WRC, DLLR, 1'b0, CAS[3:1], 1'b0, CAS[0], BLEN};

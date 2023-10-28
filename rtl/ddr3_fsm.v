@@ -502,6 +502,8 @@ module ddr3_fsm (
     end
   end
 
+// Determines if any requests (RD, WR, BYP) allow for additional sequences of
+// commands to be issued, for any of the open banks/rows.
   // todo:
   always @(posedge clock) begin
     if (!cfg_run_i) begin
@@ -537,6 +539,12 @@ module ddr3_fsm (
             cmd_s <= cmd_x;
             ba_s  <= ba_x;
             col_s <= col_w;
+          end else if (seq_x && fetch && mem_rdreq_i) begin
+            seq_s <= ~mem_rdlst_i;
+            req_s <= 1'b1;
+            cmd_s <= cmd_x;
+            ba_s  <= ba_x;
+            col_s <= col_w;
           end else begin
             seq_s <= 1'b0;
             req_s <= 1'b0;
@@ -548,7 +556,7 @@ module ddr3_fsm (
 
         ST_WRIT: begin
           if (seq_x && store && mem_wrreq_i) begin
-            seq_s <= mem_wrlst_i;
+            seq_s <= ~mem_wrlst_i;
             req_s <= 1'b1;
             cmd_s <= cmd_x;
             ba_s  <= ba_x;
@@ -591,7 +599,7 @@ module ddr3_fsm (
       default: dbg_state = "XXX";
     endcase
     case (snext)
-      ST_IDLE: dbg_state = cfg_run_i ? "IDLE" : "INIT";
+      ST_IDLE: dbg_snext = cfg_run_i ? "IDLE" : "INIT";
       ST_READ: dbg_snext = adr_q[10] ? "RD-A" : "RD";
       ST_WRIT: dbg_snext = adr_q[10] ? "WR-A" : "WR";
       ST_PREC: dbg_snext = "PRE";

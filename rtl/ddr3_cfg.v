@@ -196,6 +196,7 @@ module ddr3_cfg (
   localparam [3:0] ST_MRS0 = 4'b1000;  // set mode-register #0
   localparam [3:0] ST_ZQCL = 4'b0011;  // calibration
   localparam [3:0] ST_PREA = 4'b0100;  // PRECHARGE all
+  localparam [3:0] ST_REFR = 4'b0110;  // REFRESH
   localparam [3:0] ST_DONE = 4'b0101;  // hand over to mem. ctrl.
 
   reg [3:0] state;
@@ -307,10 +308,19 @@ module ddr3_cfg (
         ST_PREA: begin
           // Wait until timer has elapsed
           if (ctl_rdy_i) begin
+            state <= ST_REFR;
+            req_q <= 1'b1;
+            cmd_q <= CMD_REFR;
+            {ba_q, adr_q} <= {3'h0, 2'h0, 1'b1, 10'h000};
+          end
+        end
+
+        ST_REFR: begin
+          // Wait until timer has elapsed
+          if (ctl_rdy_i) begin
             state <= ST_DONE;
             req_q <= 1'b0;
             cmd_q <= CMD_NOOP;
-            // {ba_q, adr_q} <= {3'h0, 2'h0, 1'b1, 10'h000};
           end
         end
 
@@ -356,6 +366,7 @@ module ddr3_cfg (
       ST_MRS0: dbg_state = "MRS #0";
       ST_ZQCL: dbg_state = "ZQCL";
       ST_PREA: dbg_state = "PRECHARGE";
+      ST_REFR: dbg_state = "REFRESH";
       ST_DONE: dbg_state = "DONE";
       default: dbg_state = "UNKNOWN";
     endcase

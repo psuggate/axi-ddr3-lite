@@ -19,7 +19,8 @@ module ddr3_ddl (
     ddr_cke_i,
     ddr_cs_ni,
 
-    ctl_req_i,  // Memory controller signals
+    ctl_run_o,  // Memory controller signals
+    ctl_req_i,
     ctl_seq_i,
     ctl_rdy_o,
     ctl_cmd_i,
@@ -80,7 +81,7 @@ module ddr3_ddl (
   // Note: these latencies are due to the registers and IOBs in the PHY for the
   //   commands, addresses, and the data-paths.
   parameter PHY_WR_LATENCY = 1;
-  parameter PHY_RD_LATENCY = 2;
+  parameter PHY_RD_LATENCY = 1;
 
   // A DDR3 burst has length of 8 transfers (DDR), so four clock/memory cycles
   localparam PHY_BURST_LEN = 4;
@@ -94,6 +95,7 @@ module ddr3_ddl (
 
   // From/to DDR3 Controller
   // Note: all state-transitions are gated by the 'ctl_rdy_o' signal
+  output ctl_run_o;
   input ctl_req_i;
   input ctl_seq_i;  // Burst-sequence indicator
   output ctl_rdy_o;
@@ -157,24 +159,24 @@ module ddr3_ddl (
   localparam DELAY_MRD_TO_CMD = 1 << (CYCLES_MRD_TO_CMD - 1);
   localparam DELAY_PRE_TO_ACT = 1 << (CYCLES_PRE_TO_ACT - 1);
   localparam DELAY_ACT_TO_PRE = 1 << (CYCLES_ACT_TO_PRE - 1);
-  localparam DELAY_REF_TO_ACT = 1 << (CYCLES_REF_TO_ACT - 1);
+  localparam DELAY_REF_TO_ACT = 1 << (CYCLES_REF_TO_ACT - 2);
   localparam DELAY_ACT_TO_REF = 1 << (CYCLES_ACT_TO_REF - 1);
 
   localparam DELAY_ACT_TO_ACT_L = 1 << (CYCLES_ACT_TO_ACT - 1);
   localparam DELAY_ACT_TO_ACT_S = DDR_CRRD - 1;
 
-  localparam DELAY_ACT_TO_R_W = 1 << (CYCLES_ACT_TO_R_W - 1);
-  localparam DELAY__RD_TO__RD = 1 << (CYCLES__RD_TO__RD - 1);
-  localparam DELAY__RD_TO__WR = 1 << (CYCLES__RD_TO__WR - 1);
-  localparam DELAY__WR_TO__RD = 1 << (CYCLES__WR_TO__RD - 1);
+  localparam DELAY_ACT_TO_R_W = 1 << (CYCLES_ACT_TO_R_W - 2);
+  localparam DELAY__RD_TO__RD = 1 << (CYCLES__RD_TO__RD - 2);
+  localparam DELAY__RD_TO__WR = 1 << (CYCLES__RD_TO__WR - 2);
+  localparam DELAY__WR_TO__RD = 1 << (CYCLES__WR_TO__RD - 2);
   localparam DELAY__WR_TO__WR = 1 << (CYCLES__WR_TO__WR - 2);
-  localparam DELAY_RDA_TO_ACT = 1 << (CYCLES_RDA_TO_ACT - 1);
-  localparam DELAY_WRA_TO_ACT = 1 << (CYCLES_WRA_TO_ACT - 1);
+  localparam DELAY_RDA_TO_ACT = 1 << (CYCLES_RDA_TO_ACT + 2);
+  localparam DELAY_WRA_TO_ACT = 1 << (CYCLES_WRA_TO_ACT + 2);
 
 
-  reg [WSB:0] wr_delay;
-  reg wr_strob, wr_ready;
-  reg ready, busy;
+  reg [WSB:0] wr_delay, rd_delay;
+  reg wr_strob, wr_ready, rd_ready;
+  reg run_q, ready, busy;
   reg [2:0] cmd_q, ba_q;
   reg [RSB:0] adr_q;
 
@@ -183,6 +185,7 @@ module ddr3_ddl (
 
   // -- Connect to Upstream Controller & Data-paths -- //
 
+  assign ctl_run_o = run_q;
   assign ctl_rdy_o = ready;
   assign ctl_pre_w = ctl_adr_i[10];
 
@@ -201,6 +204,7 @@ module ddr3_ddl (
   assign dfi_wren_o = wr_ready;
   assign dfi_mask_o = mem_wrmask_i;
   assign dfi_data_o = mem_wrdata_i;
+  assign dfi_rden_o = rd_ready;
 
   assign mem_rvalid_o = dfi_rvld_i;
   assign mem_rddata_o = dfi_data_i;
@@ -219,7 +223,6 @@ module ddr3_ddl (
   //  - precharge -> refresh sequencing
   //  - mode-register read & write sequencing
 
-  localparam ST_INIT = 4'b0000;
   localparam ST_IDLE = 4'b0001;
   localparam ST_ACTV = 4'b0010;
   localparam ST_READ = 4'b0100;
@@ -247,6 +250,7 @@ module ddr3_ddl (
       busy  <= 1'b0;
       delay <= DINIT;
       a_req <= 1'b1;
+      run_q <= 1'b0;
       cmd_q <= CMD_NOOP;
       l_dly <= 1'b0;
       count <= CZERO;
@@ -261,6 +265,7 @@ module ddr3_ddl (
         ready <= 1'b1;
       end else begin
         ready <= delay[0];
+        run_q <= run_q | delay[0];
       end
     end else if (ctl_req_i && ready) begin
       ready <= 1'b0;
@@ -269,14 +274,6 @@ module ddr3_ddl (
       adr_q <= ctl_adr_i;  // todo: auto-precharge bit (A[10])
 
       case (state)
-        ST_INIT: begin
-          // Wait for the (first steps of the) initialisation to finish
-          if (ddr_cke_i) begin
-            state <= ST_IDLE;
-            delay <= DELAY_CKE_TO_CMD;
-          end
-        end
-
         ST_IDLE: begin
           // Possible transitions:
           //  - ACTV  --  precedes RD/WR commands
@@ -374,7 +371,7 @@ module ddr3_ddl (
 
             default: begin
               $error("%10t: DDL: Invalid command: 0x%1x", $time, ctl_cmd_i);
-              state <= ST_INIT;
+              state <= ST_IDLE;
               busy  <= 1'b1;
               count <= DDR_CZQINIT;
             end
@@ -415,8 +412,8 @@ module ddr3_ddl (
             end
 
             CMD_WRIT: begin
-              state <= ST_WRIT;
               if (ctl_pre_w) begin
+                state <= ST_IDLE;
                 delay <= DELAY_WRA_TO_ACT;
 
                 l_dly <= 1'b0;
@@ -427,6 +424,7 @@ module ddr3_ddl (
                 r_dly <= 0;
                 w_dly <= 0;
               end else begin
+                state <= ST_WRIT;
                 delay <= DELAY__WR_TO__WR;
 
                 l_dly <= 1'b0;
@@ -508,8 +506,14 @@ module ddr3_ddl (
         ST_WRIT: begin
           case (ctl_cmd_i)
             CMD_WRIT: begin
-              // WR -> WR (default: 4 cycles)
-              delay <= DELAY__WR_TO__WR;
+              if (ctl_pre_w) begin
+                // WR + AUTO-PRECHARGE (default: 14 cycles)
+                delay <= DELAY_WRA_TO_ACT;
+                state <= ST_IDLE;
+              end else begin
+                // WR -> WR (default: 4 cycles)
+                delay <= DELAY__WR_TO__WR;
+              end
             end
             CMD_READ: begin
               // WR -> RD (default: 14 + 4 cycles)
@@ -651,7 +655,7 @@ module ddr3_ddl (
 
         default: begin
           $error("%10t: DDL: Unexpected state: 0x%02x", $time, state);
-          state <= ST_INIT;
+          state <= ST_IDLE;
         end
       endcase
     end else if (ready) begin
@@ -699,6 +703,40 @@ module ddr3_ddl (
   );
 
 
+  // -- Read Data-Path -- //
+
+  localparam [WSB:0] RD_SHIFTS = DDR_CL - PHY_RD_LATENCY - 2;
+
+  wire fetch_w, rd_rdy_w;
+
+  assign fetch_w = ctl_cmd_i == CMD_READ && ready;
+
+  always @(posedge clock) begin
+    if (reset) begin
+      rd_delay <= {WDLYS{1'b0}};
+      rd_ready <= 1'b0;
+    end else begin
+      if (fetch_w) begin
+        rd_delay <= {WDLYS{1'b1}};
+      end else begin
+        rd_delay <= {1'b0, rd_delay[WSB:1]};
+      end
+      rd_ready <= rd_rdy_w;
+    end
+  end
+
+  shift_register #(
+      .WIDTH(1),
+      .DEPTH(16)
+  ) rd_srl_inst (
+      .clock (clock),
+      .wren_i(1'b1),
+      .addr_i(RD_SHIFTS),
+      .data_i(rd_delay[0]),
+      .data_o(rd_rdy_w)
+  );
+
+
   // -- Simulation Only -- //
 
 `ifdef __icarus
@@ -706,8 +744,7 @@ module ddr3_ddl (
 
   always @* begin
     case (state)
-      ST_INIT: dbg_state = "INIT";
-      ST_IDLE: dbg_state = "IDLE";
+      ST_IDLE: dbg_state = ddr_cke_i & ~ddr_cs_ni & ~reset ? "IDLE" : "INIT";
       ST_ACTV: dbg_state = "ACTIVATE";
       ST_READ: dbg_state = "READ";
       ST_WRIT: dbg_state = "WRITE";

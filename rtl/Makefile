@@ -9,6 +9,7 @@ IVC	?= iverilog
 OPT	:= -g2005-sv -D__icarus -Wall -I../bench
 
 SRC	:= $(wildcard *.v)
+INC	:= $(wildcard *.vh)
 PHY	:= $(wildcard arch/*.v) $(wildcard ../bench/arch/*.v)
 LIB	:= $(wildcard misc/*.v) $(wildcard fifo/*.v) $(PHY) ../bench/ddr3.v
 RTL	:= $(filter-out %_tb.v, $(SRC))
