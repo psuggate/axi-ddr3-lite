@@ -235,10 +235,8 @@ module ddr3_ddl (
   localparam ST_ZQCL = 4'd11;
   localparam ST_MODE = 4'd12;
 
-  reg l_dly, a_req;
-
   reg [3:0] state;
-  reg [DSB:0] delay, b_dly, c_dly, r_dly, w_dly;
+  reg [DSB:0] delay;
   reg  [XSB:0] count;
   wire [XSB:0] cnext;
 
@@ -251,10 +249,8 @@ module ddr3_ddl (
       ready <= 1'b0;
       busy  <= 1'b0;
       delay <= DINIT;
-      a_req <= 1'b1;
       run_q <= 1'b0;
       cmd_q <= CMD_NOOP;
-      l_dly <= 1'b0;
       count <= CZERO;
     end else if (busy || !ready) begin
       delay <= {1'b0, delay[DSB:1]};
@@ -289,14 +285,6 @@ module ddr3_ddl (
               // Default activation time is 6 cycles (DLL=off) ??
               state <= ST_ACTV;
               delay <= DELAY_ACT_TO_R_W;
-
-              l_dly <= 1'b0;
-              b_dly <= DELAY_ACT_TO_ACT_L;
-              c_dly <= DELAY_ACT_TO_ACT_S;
-
-              a_req <= 1'b0;  // No ACTIVATE required (prior to R/W)
-              r_dly <= DELAY_ACT_TO_R_W;
-              w_dly <= DELAY_ACT_TO_R_W;
             end
 
             CMD_PREC: begin
@@ -305,18 +293,6 @@ module ddr3_ddl (
               // Default is 2 cycles (DLL=off)
               state <= ST_PREC;
               delay <= DELAY_PRE_TO_ACT;
-
-              l_dly <= 1'b0;
-              b_dly <= DELAY_PRE_TO_ACT;
-              if (ctl_pre_w) begin
-                // PRECHARGE ALL banks
-                c_dly <= DELAY_PRE_TO_ACT;
-                a_req <= 1'b1;
-                r_dly <= 0;
-                w_dly <= 0;
-              end else begin
-                c_dly <= 1;
-              end
             end
 
             CMD_REFR: begin
@@ -324,28 +300,12 @@ module ddr3_ddl (
               // Defaults to 11 cycles, at 100 MHz (DLL=off)
               state <= ST_REFR;
               delay <= DELAY_REF_TO_ACT;
-
-              l_dly <= 1'b0;
-              b_dly <= DELAY_REF_TO_ACT;
-              c_dly <= DELAY_REF_TO_ACT;
-
-              a_req <= 1'b1;
-              r_dly <= 0;
-              w_dly <= 0;
             end
 
             CMD_MODE: begin
               // Set MODE register
               state <= ST_MODE;
               delay <= DELAY_MRD_TO_CMD;
-
-              l_dly <= 1'b0;
-              b_dly <= DELAY_MRD_TO_CMD;
-              c_dly <= DELAY_MRD_TO_CMD;
-
-              a_req <= 1'b1;
-              r_dly <= 0;
-              w_dly <= 0;
             end
 
             CMD_ZQCL: begin
@@ -354,14 +314,6 @@ module ddr3_ddl (
               state <= ST_ZQCL;
               count <= DDR_CZQINIT;
               busy  <= 1'b1;
-
-              l_dly <= 1'b1;  // long delay
-              b_dly <= 0;
-              c_dly <= 0;
-
-              a_req <= 1'b1;
-              r_dly <= 0;
-              w_dly <= 0;
             end
 
             CMD_NOOP: begin
@@ -389,27 +341,12 @@ module ddr3_ddl (
           //  - WRIT
           case (ctl_cmd_i)
             CMD_READ: begin
-              state <= ST_READ;
               if (ctl_pre_w) begin
+                state <= ST_IDLE;
                 delay <= DELAY_RDA_TO_ACT;
-
-                l_dly <= 1'b0;
-                b_dly <= DELAY_RDA_TO_ACT;
-                c_dly <= DELAY_RDA_TO_ACT;
-
-                a_req <= 1'b1;
-                r_dly <= 0;
-                w_dly <= 0;
               end else begin
+                state <= ST_READ;
                 delay <= DELAY__RD_TO__RD;
-
-                l_dly <= 1'b0;
-                b_dly <= DELAY_ACT_TO_ACT_L;
-                c_dly <= DELAY_ACT_TO_ACT_S;
-
-                a_req <= 1'b0;
-                r_dly <= DELAY__RD_TO__RD;
-                w_dly <= DELAY__RD_TO__WR;
               end
             end
 
@@ -417,25 +354,9 @@ module ddr3_ddl (
               if (ctl_pre_w) begin
                 state <= ST_IDLE;
                 delay <= DELAY_WRA_TO_ACT;
-
-                l_dly <= 1'b0;
-                b_dly <= DELAY_WRA_TO_ACT;
-                c_dly <= 1;
-
-                a_req <= 1'b1;
-                r_dly <= 0;
-                w_dly <= 0;
               end else begin
                 state <= ST_WRIT;
                 delay <= DELAY__WR_TO__WR;
-
-                l_dly <= 1'b0;
-                b_dly <= DELAY_ACT_TO_ACT_L;
-                c_dly <= DELAY_ACT_TO_ACT_S;
-
-                a_req <= 1'b0;
-                r_dly <= DELAY__WR_TO__RD;
-                w_dly <= DELAY__WR_TO__WR;
               end
             end
 
@@ -443,14 +364,6 @@ module ddr3_ddl (
               // todo: delay depends on if same bank, or different
               state <= ST_ACTV;
               delay <= DELAY_ACT_TO_ACT_S;
-
-              l_dly <= 1'b0;
-              b_dly <= DELAY_ACT_TO_ACT_L;
-              c_dly <= DELAY_ACT_TO_ACT_S;
-
-              a_req <= 1'b0;
-              r_dly <= DELAY_ACT_TO_R_W;
-              w_dly <= DELAY_ACT_TO_R_W;
             end
 
             default: begin
@@ -463,37 +376,27 @@ module ddr3_ddl (
         end
 
         ST_READ: begin
-          l_dly <= 1'b0;
-          b_dly <= DELAY_ACT_TO_ACT_L;
-
           case (ctl_cmd_i)
             CMD_READ: begin
-              // RD -> RD (default: 4 cycles)
-              delay <= DELAY__RD_TO__RD;
-
               if (ctl_pre_w) begin
-                c_dly <= DELAY_RDA_TO_ACT;
-                a_req <= 1'b1;
-                r_dly <= 0;
-                w_dly <= 0;
+                state <= ST_IDLE;
+                delay <= DELAY_RDA_TO_ACT;
               end else begin
-                c_dly <= 1;
-                a_req <= 1'b0;
-                r_dly <= DELAY__RD_TO__RD;
-                w_dly <= DELAY__RD_TO__WR;
+                // RD -> RD (default: 4 cycles)
+                delay <= DELAY__RD_TO__RD;
               end
             end
 
             CMD_WRIT: begin
               // RD -> WR (default: 6 cycles)
-              state <= ST_WRIT;
               delay <= DELAY__RD_TO__WR;
+              state <= ST_WRIT;
             end
 
             CMD_ACTV: begin
               // RD -> ACT (default: 4 cycles)
-              state <= ST_ACTV;
               delay <= 2;
+              state <= ST_ACTV;
             end
 
             default: begin

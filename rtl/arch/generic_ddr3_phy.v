@@ -1,8 +1,12 @@
 `timescale 1ns / 100ps
 /**
+ * Generic PHY -- that probably won't synthesise correctly, due to how the
+ * (read-)data is registered ...
+ *
  * Todo:
  *  - remove all of the shift-registers;
  *  - only instantiate IOB registers, and the minimum of other logic;
+ *  - better method for registering the DQ inputs;
  */
 module generic_ddr3_phy (
     clock,

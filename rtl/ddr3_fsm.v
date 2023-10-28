@@ -281,16 +281,10 @@ module ddr3_fsm (
             fetch <= 1'b0;
             req_q <= 1'b1;
             cmd_q <= CMD_REFR;
-          end else if (byp_req || mem_rdreq_i && !mem_wrreq_i) begin
+          end else if (byp_req || mem_rdreq_i || mem_wrreq_i) begin
             state <= ST_ACTV;
-            store <= 1'b0;
-            fetch <= 1'b1;
-            req_q <= 1'b1;  // 1st command, RAS#
-            cmd_q <= CMD_ACTV;
-          end else if (mem_wrreq_i) begin
-            state <= ST_ACTV;
-            store <= 1'b1;
-            fetch <= 1'b0;
+            store <= ~(byp_req | mem_rdreq_i);
+            fetch <= byp_req | mem_rdreq_i;
             req_q <= 1'b1;  // 1st command, RAS#
             cmd_q <= CMD_ACTV;
           end else begin
@@ -305,7 +299,7 @@ module ddr3_fsm (
           adr_q <= row_w;
         end
 
-        ST_ACTV: begin
+        ST_ACTV, ST_WRIT, ST_READ: begin
           // Row-activation command issued
           if (ddl_rdy_i) begin
             state <= snext;
@@ -317,41 +311,8 @@ module ddr3_fsm (
           end
         end
 
-        ST_READ: begin
-          if (ddl_rdy_i) begin
-            state <= snext;
-            req_q <= req_x;
-            seq_q <= seq_x;
-            cmd_q <= cmd_x;
-            ba_q  <= ba_x;
-            adr_q <= adr_x;
-          end
-        end
-
-        ST_WRIT: begin
-          if (ddl_rdy_i) begin
-            state <= snext;
-            req_q <= req_x;
-            seq_q <= seq_x;
-            cmd_q <= cmd_x;
-            ba_q  <= ba_x;
-            adr_q <= adr_x;
-          end
-        end
-
-        ST_PREC: begin
-          // PRECHARGE-delay, following an auto-PRECHARGE ??
-          // todo: this pattern shows up alot, make moar-betterer ?!
-          if (ddl_rdy_i) begin
-            state <= snext;
-            req_q <= req_x;
-            cmd_q <= cmd_x;
-          end
-          seq_q <= 1'bx;
-        end
-
-        ST_PREA: begin
-          // PRECHARGE ALL banks (usually preceding a self-REFRESH)
+        ST_PREC, ST_PREA: begin
+          // Typically a PRECHARGE-ALL banks (usually preceding a self-REFRESH)
           if (ddl_rdy_i) begin
             state <= snext;
             req_q <= req_x;
@@ -390,45 +351,48 @@ module ddr3_fsm (
 
   // -- Acknowledge Signals -- //
 
+  reg fastp;
+
   always @(posedge clock) begin
     if (reset) begin
       wrack <= 1'b0;
       rdack <= 1'b0;
       byack <= 1'b0;
+      fastp <= 1'b0;
     end else begin
       case (state)
         ST_IDLE: begin
-          if (byp_rdreq_i) begin
+          if (byp_rdreq_i || refresh) begin
             wrack <= 1'b0;
             rdack <= 1'b0;
-            byack <= 1'b1;
-          end else if (mem_rdreq_i) begin
-            wrack <= 1'b0;
-            rdack <= 1'b1;
-            byack <= 1'b0;
-          end else if (mem_wrreq_i) begin
-            wrack <= 1'b1;
-            rdack <= 1'b0;
-            byack <= 1'b0;
+            byack <= byp_rdreq_i;
+            fastp <= byp_rdreq_i;
           end else begin
-            wrack <= 1'b0;
-            rdack <= 1'b0;
+            wrack <= mem_wrreq_i & ~mem_rdreq_i;
+            rdack <= mem_rdreq_i;
             byack <= 1'b0;
+            fastp <= 1'b0;
           end
         end
 
-        ST_WRIT: begin
+        ST_WRIT, ST_READ: begin
           if (ddl_rdy_i && req_x) begin
-            wrack <= 1'b1;
+            wrack <= store;
+            rdack <= fetch & ~fastp;
+            byack <= fetch & fastp;
           end else begin
             wrack <= 1'b0;
+            rdack <= 1'b0;
+            byack <= 1'b0;
           end
+          fastp <= fastp;
         end
 
         default: begin
           wrack <= 1'b0;
           rdack <= 1'b0;
           byack <= 1'b0;
+          fastp <= fastp;
         end
 
       endcase
@@ -515,16 +479,12 @@ module ddr3_fsm (
     end else begin
       case (state)
         ST_IDLE: begin
-          if (byp_req) begin
-            seq_s <= ~byp_rdlst_i;
-          end else if (refresh) begin
-            seq_s <= 1'b0;
-          end else if (mem_wrreq_i) begin
-            seq_s <= ~mem_wrlst_i;
-          end else if (mem_rdreq_i) begin
-            seq_s <= ~mem_rdlst_i;
+          // On read-/write- request, if the 'last' signal is not asserted, then
+          // operation is part of a sequence (to the same SDRAM page)
+          if (byp_req || refresh) begin
+            seq_s <= byp_req & ~byp_rdlst_i;
           end else begin
-            seq_s <= 1'b0;
+            seq_s <= (mem_wrreq_i & ~mem_wrlst_i) | (mem_rdreq_i & ~mem_rdlst_i);
           end
           req_s <= 1'b0;
           cmd_s <= 'bx;
@@ -532,31 +492,13 @@ module ddr3_fsm (
           col_s <= 'bx;
         end
 
-        ST_ACTV: begin
-          if (seq_x && store && mem_wrreq_i) begin
-            seq_s <= ~mem_wrlst_i;
-            req_s <= 1'b1;
-            cmd_s <= cmd_x;
-            ba_s  <= ba_x;
-            col_s <= col_w;
-          end else if (seq_x && fetch && mem_rdreq_i) begin
-            seq_s <= ~mem_rdlst_i;
-            req_s <= 1'b1;
-            cmd_s <= cmd_x;
-            ba_s  <= ba_x;
-            col_s <= col_w;
-          end else begin
-            seq_s <= 1'b0;
-            req_s <= 1'b0;
-            cmd_s <= 'bx;
-            ba_s  <= 'bx;
-            col_s <= 'bx;
-          end
-        end
-
-        ST_WRIT: begin
-          if (seq_x && store && mem_wrreq_i) begin
-            seq_s <= ~mem_wrlst_i;
+        ST_ACTV, ST_WRIT, ST_READ: begin
+          // Attempt to queue up another command, if part of a sequence, and
+          // the next command is already waiting to be dispatched
+          if (seq_x) begin
+            seq_s <= (store & mem_wrreq_i & ~mem_wrlst_i)
+                   | (fetch & ~fastp & mem_rdreq_i & ~mem_rdlst_i)
+                   | (fetch & fastp & byp_rdreq_i & ~byp_rdlst_i);
             req_s <= 1'b1;
             cmd_s <= cmd_x;
             ba_s  <= ba_x;

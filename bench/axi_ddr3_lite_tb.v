@@ -5,6 +5,26 @@ module axi_ddr3_lite_tb;
   // -- Simulation Settings -- //
 
   localparam DDR_FREQ_MHZ = 100;
+  `include "ddr3_settings.vh"
+
+  localparam DDR_ROW_BITS = 13;
+  localparam RSB = DDR_ROW_BITS - 1;
+
+  parameter DDR_COL_BITS = 10;
+  localparam CSB = DDR_COL_BITS - 1;
+
+  // Data-path and address settings
+  localparam WIDTH = 32;
+  localparam MSB = WIDTH - 1;
+
+  localparam MASKS = WIDTH / 8;
+  localparam SSB = MASKS - 1;
+
+  localparam ADDRS = DDR_COL_BITS + DDR_ROW_BITS + 3 - 1;
+  localparam ASB = ADDRS - 1;
+
+  localparam REQID = 4;
+  localparam ISB = REQID - 1;
 
 
   // -- Simulation Data -- //
@@ -299,6 +319,55 @@ module axi_ddr3_lite_tb;
       .ddr3_dqs_n_io(ddr_dqs_n_w),
       .ddr3_dq_io(ddr_dq_w)
   );
+
+`else
+
+  // Generic PHY -- that probably won't synthesise correctly, due to how the
+  // (read-)data is registered ...
+  generic_ddr3_phy #(
+      .DDR3_WIDTH(16),  // (default)
+      .ADDR_BITS(DDR_ROW_BITS)  // default: 14
+  ) ddr3_phy_inst (
+      .clock  (clock),
+      .reset  (reset),
+      .clk_ddr(clk_ddr),
+
+      .dfi_cke_i (dfi_cke),
+      .dfi_rst_ni(dfi_rst_n),
+      .dfi_cs_ni (dfi_cs_n),
+      .dfi_ras_ni(dfi_ras_n),
+      .dfi_cas_ni(dfi_cas_n),
+      .dfi_we_ni (dfi_we_n),
+      .dfi_odt_i (dfi_odt),
+      .dfi_bank_i(dfi_bank),
+      .dfi_addr_i(dfi_addr),
+
+      .dfi_wstb_i(dfi_wstb),
+      .dfi_wren_i(dfi_wren),
+      .dfi_mask_i(dfi_mask),
+      .dfi_data_i(dfi_wdata),
+
+      .dfi_rden_i(dfi_rden),
+      .dfi_rvld_o(dfi_valid),
+      .dfi_data_o(dfi_rdata),
+
+      .ddr3_ck_po(ddr_ck_p),
+      .ddr3_ck_no(ddr_ck_n),
+      .ddr3_cke_o(ddr_cke),
+      .ddr3_rst_no(ddr_rst_n),
+      .ddr3_cs_no(ddr_cs_n),
+      .ddr3_ras_no(ddr_ras_n),
+      .ddr3_cas_no(ddr_cas_n),
+      .ddr3_we_no(ddr_we_n),
+      .ddr3_odt_o(ddr_odt),
+      .ddr3_ba_o(ddr_ba),
+      .ddr3_a_o(ddr_a),
+      .ddr3_dm_o(ddr_dm),
+      .ddr3_dqs_pio(ddr_dqs_p),
+      .ddr3_dqs_nio(ddr_dqs_n),
+      .ddr3_dq_io(ddr_dq)
+  );
+
 `endif
 
 

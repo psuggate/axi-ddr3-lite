@@ -1,20 +1,20 @@
 [*]
 [*] GTKWave Analyzer v3.3.104 (w)1999-2020 BSI
-[*] Sat Oct 28 04:56:13 2023
+[*] Sat Oct 28 21:24:02 2023
 [*]
 [dumpfile] "./ddr3_fsm_tb.vcd"
-[dumpfile_mtime] "Sat Oct 28 04:55:56 2023"
-[dumpfile_size] 35993
+[dumpfile_mtime] "Sat Oct 28 21:23:51 2023"
+[dumpfile_size] 43935
 [savefile] "./ddr3_fsm_tb.gtkw"
 [timestart] 0
-[size] 1920 1043
+[size] 2560 1376
 [pos] -1 -1
-*-16.718224 615000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+*-16.785892 680000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] ddr3_fsm_tb.
 [sst_width] 233
 [signals_width] 150
 [sst_expanded] 1
-[sst_vpaned_height] 298
+[sst_vpaned_height] 414
 @28
 ddr3_fsm_tb.clock
 ddr3_fsm_tb.reset
@@ -42,6 +42,12 @@ ddr3_fsm_tb.fsm_wrlst
 ddr3_fsm_tb.fsm_wrack
 @1000200
 -Write
+@28
+ddr3_fsm_tb.byp_rdreq
+@29
+ddr3_fsm_tb.byp_rdlst
+@28
+ddr3_fsm_tb.byp_rdack
 @800200
 -FSM
 @820
@@ -97,7 +103,7 @@ ddr3_fsm_tb.ddr_dm[1:0]
 ddr3_fsm_tb.ddr_dq[15:0]
 @1000200
 -DDR
-@c00200
+@800200
 -DDL
 @28
 ddr3_fsm_tb.ddl_req
@@ -116,7 +122,7 @@ ddr3_fsm_tb.ddr3_ddl_inst.delay[18:0]
 ddr3_fsm_tb.ddr3_ddl_inst.dbg_cmd[39:0]
 [color] 6
 ddr3_fsm_tb.ddr3_ddl_inst.dbg_state[79:0]
-@1401200
+@1000200
 -DDL
 @c00200
 -DFI
@@ -166,5 +172,7 @@ ddr3_fsm_tb.dfi_valid
 ddr3_fsm_tb.dfi_rdata[31:0]
 @1401200
 -DFI
+@28
+ddr3_fsm_tb.ddr3_ddl_inst.ready
 [pattern_trace] 1
 [pattern_trace] 0

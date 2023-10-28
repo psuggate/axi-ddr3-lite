@@ -31,9 +31,8 @@ module ddr3_cfg_tb;
 
   initial begin
     $dumpfile("ddr3_cfg_tb.vcd");
-    $dumpvars;
-
-    #80000 $finish;  // todo ...
+    #60000 $dumpvars(0, ddr3_cfg_tb);
+    #20000 $finish;  // todo ...
   end
 
 
@@ -159,7 +158,7 @@ module ddr3_cfg_tb;
       fsm_run <= 1'b0;
       mem_run <= 1'b0;
       rfc <= 1'b0;
-      counter <= 7'd100;
+      counter <= 7'd020;
       fsm_wrreq <= 1'b0;
       fsm_wrlst <= 1'b0;
       fsm_rdreq <= 1'b0;
@@ -192,7 +191,7 @@ module ddr3_cfg_tb;
 
     $display("%10t: STORE", $time);
     @(posedge clock);
-    mem_store(0, 1, 1, 'bx);
+    mem_store(16, 1, 1, 'bx);
 
     @(posedge clock);
     @(posedge clock);
@@ -208,7 +207,8 @@ module ddr3_cfg_tb;
 
     $display("%10t: FETCH", $time);
     @(posedge clock);
-    mem_fetch(0, 1, data);
+    mem_fetch(8, 0, 5, data);
+    mem_fetch(16, 1, 5, data);
 
     @(posedge clock);
     @(posedge clock);
@@ -468,11 +468,12 @@ module ddr3_cfg_tb;
 
   task mem_fetch;
     input [ASB:0] addr;
+    input last;
     input [ISB:0] tid;
     output [127:0] data;
     begin
       fsm_rdreq <= 1'b1;
-      fsm_rdlst <= 1'b1;
+      fsm_rdlst <= last;
       fsm_rdtid <= tid;
       fsm_rdadr <= addr;
 
@@ -486,7 +487,6 @@ module ddr3_cfg_tb;
       @(posedge clock);
 
       // todo: rx data stuffs
-      @(posedge clock);
     end
   endtask  // mem_fetch
 

@@ -290,7 +290,6 @@ module ddr3_cfg (
             req_q <= 1'b1;
             cmd_q <= CMD_ZQCL;
             {ba_q, adr_q} <= {3'bx, 2'bx, 1'b1, 10'bx};
-            // {ba_q, adr_q} <= 'bx;
           end
         end
 
@@ -311,7 +310,7 @@ module ddr3_cfg (
             state <= ST_REFR;
             req_q <= 1'b1;
             cmd_q <= CMD_REFR;
-            {ba_q, adr_q} <= {3'h0, 2'h0, 1'b1, 10'h000};
+            {ba_q, adr_q} <= 'bx;
           end
         end
 
@@ -322,6 +321,7 @@ module ddr3_cfg (
             req_q <= 1'b0;
             cmd_q <= CMD_NOOP;
           end
+          {ba_q, adr_q} <= 'bx;
         end
 
         ST_DONE: begin
@@ -330,6 +330,7 @@ module ddr3_cfg (
             state <= ST_DONE;
             run_q <= 1'b1;
           end
+          {ba_q, adr_q} <= 'bx;
         end
 
         default: begin
@@ -338,6 +339,7 @@ module ddr3_cfg (
           rst_nq <= 1'b0;
           cke_q  <= 1'b0;
           cs_nq  <= 1'b1;
+          {ba_q, adr_q} <= 'bx;
         end
       endcase
     end

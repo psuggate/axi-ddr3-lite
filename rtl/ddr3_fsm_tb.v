@@ -7,6 +7,8 @@ module ddr3_fsm_tb;
   localparam DDR_FREQ_MHZ = 100;
   `include "ddr3_settings.vh"
 
+  localparam BYPASS_ENABLE = 1'b1;
+
   localparam DDR_ROW_BITS = 13;
   localparam RSB = DDR_ROW_BITS - 1;
   localparam DDR_COL_BITS = 10;
@@ -32,7 +34,7 @@ module ddr3_fsm_tb;
     $dumpfile("ddr3_fsm_tb.vcd");
     $dumpvars;
 
-    #800 $finish;  // todo ...
+    #1200 $finish;  // todo ...
   end
 
 
@@ -60,12 +62,10 @@ module ddr3_fsm_tb;
   assign reset = rst | ~locked;
 
 
-  reg fsm_wrreq, fsm_wrlst;
-  wire fsm_wrack, fsm_wrerr;
-  reg fsm_rdreq, fsm_rdlst;
-  wire fsm_rdack, fsm_rderr;
-  reg [ISB:0] fsm_wrtid, fsm_rdtid;
-  reg [ASB:0] fsm_wradr, fsm_rdadr;
+  reg fsm_wrreq, fsm_wrlst, fsm_rdreq, fsm_rdlst, byp_rdreq, byp_rdlst;
+  wire fsm_rdack, fsm_rderr, fsm_wrack, fsm_wrerr, byp_rdack, byp_rderr;
+  reg [ISB:0] fsm_wrtid, fsm_rdtid, byp_rdtid;
+  reg [ASB:0] fsm_wradr, fsm_rdadr, byp_rdadr;
 
   // AXI <-> {FSM, DDL} signals
   wire wr_ready, rd_valid, rd_last;
@@ -119,6 +119,8 @@ module ddr3_fsm_tb;
       fsm_wrlst <= 1'b0;
       fsm_rdreq <= 1'b0;
       fsm_rdlst <= 1'b0;
+      byp_rdreq <= 1'b0;
+      byp_rdlst <= 1'b0;
     end else if (!cfg_run && counter > 0) begin
       ddl_cke <= 1'b1;
       counter <= counter - 1;
@@ -145,7 +147,7 @@ module ddr3_fsm_tb;
 
     $display("%10t: STORE", $time);
     @(posedge clock);
-    mem_store(0, 1, 1, 'bx);
+    mem_store(16, 1, 1, 'bx);
 
     @(posedge clock);
     @(posedge clock);
@@ -161,7 +163,23 @@ module ddr3_fsm_tb;
 
     $display("%10t: FETCH", $time);
     @(posedge clock);
-    mem_fetch(0, 1, data);
+    mem_fetch(0, 1, 5, data);
+
+    @(posedge clock);
+    @(posedge clock);
+
+    $display("%10t: FETCH", $time);
+    @(posedge clock);
+    mem_fetch( 8, 0, 3, data);
+    mem_fetch(16, 1, 3, data);
+
+    @(posedge clock);
+    @(posedge clock);
+
+    $display("%10t: BYPASS", $time);
+    @(posedge clock);
+    byp_fetch( 8, 0, 6, data);
+    byp_fetch( 0, 1, 6, data);
 
     @(posedge clock);
     @(posedge clock);
@@ -292,22 +310,13 @@ module ddr3_fsm_tb;
 
   // -- Module Under Test -- //
 
-  wire byp_rdack, byp_rderr;
-  wire byp_rdreq = 1'b0;
-  wire byp_rdlst = 1'b0;
-  wire [ISB:0] byp_rdtid;
-  wire [ASB:0] byp_rdadr;
-
-  assign byp_rdtid = 0;
-  assign byp_rdadr = 0;
-
   ddr3_fsm #(
       .DDR_FREQ_MHZ(DDR_FREQ_MHZ),
       .DDR_ROW_BITS(DDR_ROW_BITS),
       .DDR_COL_BITS(DDR_COL_BITS),
       .REQID(REQID),
       .ADDRS(ADDRS),
-      .BYPASS_ENABLE(1'b0)
+      .BYPASS_ENABLE(BYPASS_ENABLE)
   ) ddr3_fsm_inst (
       .clock(clock),
       .reset(reset),
@@ -350,7 +359,7 @@ module ddr3_fsm_tb;
   );
 
 
-  // -- Perform write transfer (128-bit) -- //
+  // -- Perform write transaction (128-bit) -- //
 
   task mem_store;
     input [ASB:0] addr;
@@ -375,15 +384,16 @@ module ddr3_fsm_tb;
   endtask  // mem_store
 
 
-  // -- Perform read transfer (128-bit) -- //
+  // -- Perform read transaction (128-bit) -- //
 
   task mem_fetch;
     input [ASB:0] addr;
+    input last;
     input [ISB:0] tid;
     output [127:0] data;
     begin
       fsm_rdreq <= 1'b1;
-      fsm_rdlst <= 1'b1;
+      fsm_rdlst <= last;
       fsm_rdtid <= tid;
       fsm_rdadr <= addr;
 
@@ -397,7 +407,33 @@ module ddr3_fsm_tb;
       @(posedge clock);
 
       // todo: rx data stuffs
+    end
+  endtask  // mem_fetch
+
+
+  // -- Perform fast-path read transaction (128-bit) -- //
+
+  task byp_fetch;
+    input [ASB:0] addr;
+    input last;
+    input [ISB:0] tid;
+    output [127:0] data;
+    begin
+      byp_rdreq <= 1'b1;
+      byp_rdlst <= last;
+      byp_rdtid <= tid;
+      byp_rdadr <= addr;
+
       @(posedge clock);
+
+      while (!byp_rdack) begin
+        @(posedge clock);
+      end
+
+      byp_rdreq <= 1'b0;
+      @(posedge clock);
+
+      // todo: rx data stuffs
     end
   endtask  // mem_fetch
 
