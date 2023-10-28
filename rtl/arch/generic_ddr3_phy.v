@@ -145,7 +145,7 @@ module generic_ddr3_phy (
     if (reset) begin
       cke_q  <= 1'b0;
       rst_nq <= 1'b0;
-      cs_nq  <= 1'b0;  // todo: 1'b1 ??
+      cs_nq  <= 1'b1;  // todo: 1'b1 ??
       ras_nq <= 1'b0;  // todo: 1'b1 ??
       cas_nq <= 1'b0;  // todo: 1'b1 ??
       we_nq  <= 1'b0;  // todo: 1'b1 ??

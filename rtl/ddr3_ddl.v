@@ -726,30 +726,13 @@ module ddr3_ddl (
     case (cmd_q)
       CMD_MODE: dbg_cmd = "MRS";
       CMD_REFR: dbg_cmd = "REF";
-      CMD_PREC: begin
-        if (adr_q[10]) begin
-          dbg_cmd = "PREA";
-        end else begin
-          dbg_cmd = "PRE";
-        end
-      end
+      CMD_PREC: dbg_cmd = adr_q[10] ? "PREA" : "PRE";
       CMD_ACTV: dbg_cmd = "ACT";
-      CMD_WRIT: begin
-        if (adr_q[10]) begin
-          dbg_cmd = "WR-A";
-        end else begin
-          dbg_cmd = "WR";
-        end
-      end
-      CMD_READ: begin
-        if (adr_q[10]) begin
-          dbg_cmd = "RD-A";
-        end else begin
-          dbg_cmd = "RD";
-        end
-      end
+      CMD_WRIT: dbg_cmd = adr_q[10] ? "WR-A" : "WR";
+      CMD_READ: dbg_cmd = adr_q[10] ? "RD-A" : "RD";
       CMD_ZQCL: dbg_cmd = "ZQCL";
-      default:  dbg_cmd = "---";
+      CMD_NOOP: dbg_cmd = "---";
+      default:  dbg_cmd = "XXX";
     endcase
   end
 `endif

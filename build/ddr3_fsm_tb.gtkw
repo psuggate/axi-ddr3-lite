@@ -1,76 +1,120 @@
 [*]
 [*] GTKWave Analyzer v3.3.104 (w)1999-2020 BSI
-[*] Fri Oct 27 21:46:04 2023
+[*] Sat Oct 28 02:43:09 2023
 [*]
 [dumpfile] "./ddr3_fsm_tb.vcd"
-[dumpfile_mtime] "Fri Oct 27 21:41:54 2023"
-[dumpfile_size] 102625
+[dumpfile_mtime] "Sat Oct 28 02:40:39 2023"
+[dumpfile_size] 103550
 [savefile] "./ddr3_fsm_tb.gtkw"
 [timestart] 0
-[size] 2560 1376
+[size] 1920 1043
 [pos] -1 -1
-*-16.522858 475000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+*-16.522858 255000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] ddr3_fsm_tb.
 [sst_width] 233
 [signals_width] 150
 [sst_expanded] 1
-[sst_vpaned_height] 414
+[sst_vpaned_height] 298
 @28
 ddr3_fsm_tb.clock
 ddr3_fsm_tb.reset
+@c00200
+-TB
+@28
 ddr3_fsm_tb.cfg_run
 ddr3_fsm_tb.cfg_ref
 ddr3_fsm_tb.ddl_cke
+@1401200
+-TB
+@c00200
+-Read
+@28
+ddr3_fsm_tb.fsm_rdreq
+ddr3_fsm_tb.fsm_rdlst
+ddr3_fsm_tb.fsm_rdack
+@1401200
+-Read
 @800200
--Control
+-Write
 @28
 ddr3_fsm_tb.fsm_wrreq
 ddr3_fsm_tb.fsm_wrlst
 ddr3_fsm_tb.fsm_wrack
+@1000200
+-Write
 @800200
 -FSM
 @820
 [color] 7
 ddr3_fsm_tb.ddr3_fsm_inst.dbg_cmd[39:0]
-[color] 2
+[color] 3
 ddr3_fsm_tb.ddr3_fsm_inst.dbg_state[39:0]
-@c00201
+[color] 2
+ddr3_fsm_tb.ddr3_fsm_inst.dbg_snext[39:0]
+@800200
 -Internal
-@22
-ddr3_fsm_tb.ddr3_fsm_inst.state[3:0]
-ddr3_fsm_tb.ddr3_fsm_inst.snext[3:0]
 @28
+[color] 3
+ddr3_fsm_tb.ddr3_fsm_inst.req_q
+[color] 3
+ddr3_fsm_tb.ddr3_fsm_inst.ddl_rdy_i
+[color] 4
+ddr3_fsm_tb.ddr3_fsm_inst.seq_q
 ddr3_fsm_tb.ddr3_fsm_inst.cmd_q[2:0]
+ddr3_fsm_tb.ddr3_fsm_inst.ba_q[2:0]
+@22
+ddr3_fsm_tb.ddr3_fsm_inst.adr_q[12:0]
+@28
+[color] 2
+ddr3_fsm_tb.ddr3_fsm_inst.req_x
 ddr3_fsm_tb.ddr3_fsm_inst.cmd_x[2:0]
+ddr3_fsm_tb.ddr3_fsm_inst.req_s
+ddr3_fsm_tb.ddr3_fsm_inst.cmd_s[2:0]
 ddr3_fsm_tb.ddr3_fsm_inst.asel[1:0]
-ddr3_fsm_tb.ddr3_fsm_inst.autop
 @22
 ddr3_fsm_tb.ddr3_fsm_inst.row_w[12:0]
 ddr3_fsm_tb.ddr3_fsm_inst.col_w[12:0]
-@1401201
--Internal
 @1000200
+-Internal
 -FSM
--Control
 @800200
--DDL
+-DDR
 @28
+ddr3_fsm_tb.ddr_ck_p
+ddr3_fsm_tb.ddr_ras_n
+ddr3_fsm_tb.ddr_cas_n
+ddr3_fsm_tb.ddr_we_n
+ddr3_fsm_tb.ddr_odt
+ddr3_fsm_tb.ddr_ba[2:0]
+@22
+ddr3_fsm_tb.ddr_a[12:0]
+@28
+ddr3_fsm_tb.ddr_dqs_p[1:0]
+ddr3_fsm_tb.ddr_dqs_n[1:0]
+ddr3_fsm_tb.ddr_dm[1:0]
+@22
+ddr3_fsm_tb.ddr_dq[15:0]
+@1000200
+-DDR
+@800201
+-DDL
+@29
 ddr3_fsm_tb.ddl_req
+[color] 3
 ddr3_fsm_tb.ddl_rdy
 ddr3_fsm_tb.ddl_cmd[2:0]
 ddr3_fsm_tb.ddl_ba[2:0]
-@22
+@23
 ddr3_fsm_tb.ddl_adr[12:0]
-@820
+@821
 [color] 2
 ddr3_fsm_tb.ddr3_ddl_inst.dbg_cmd[39:0]
 [color] 6
 ddr3_fsm_tb.ddr3_ddl_inst.dbg_state[79:0]
-@1000200
+@1000201
 -DDL
-@800200
--DFI
 @c00200
+-DFI
 -Internal
 @28
 ddr3_fsm_tb.ddr3_ddl_inst.store_w
@@ -110,30 +154,7 @@ ddr3_fsm_tb.dfi_wren
 @22
 ddr3_fsm_tb.dfi_mask[3:0]
 ddr3_fsm_tb.dfi_wdata[31:0]
-@1000200
+@1401200
 -DFI
-@800200
--DDR
-@28
-ddr3_fsm_tb.ddr_ck_p
-ddr3_fsm_tb.ddr_ck_n
-ddr3_fsm_tb.ddr_rst_n
-ddr3_fsm_tb.ddr_cke
-ddr3_fsm_tb.ddr_cs_n
-ddr3_fsm_tb.ddr_ras_n
-ddr3_fsm_tb.ddr_cas_n
-ddr3_fsm_tb.ddr_we_n
-ddr3_fsm_tb.ddr_odt
-ddr3_fsm_tb.ddr_ba[2:0]
-@22
-ddr3_fsm_tb.ddr_a[12:0]
-@28
-ddr3_fsm_tb.ddr_dqs_p[1:0]
-ddr3_fsm_tb.ddr_dqs_n[1:0]
-ddr3_fsm_tb.ddr_dm[1:0]
-@22
-ddr3_fsm_tb.ddr_dq[15:0]
-@1000200
--DDR
 [pattern_trace] 1
 [pattern_trace] 0
