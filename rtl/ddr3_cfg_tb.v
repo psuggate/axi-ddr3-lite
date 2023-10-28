@@ -101,7 +101,7 @@ module ddr3_cfg_tb;
   wire [15:0] ddr_dq;
 
 
-  assign rd_ready  = 1'b1;
+  assign rd_ready = 1'b1;
 
 
   // -- Manage the REFRESH Requests -- //
@@ -134,7 +134,7 @@ module ddr3_cfg_tb;
   end
 
 
-// -- Use the Memory Controller FSM to Generate Requests -- //
+  // -- Use the Memory Controller FSM to Generate Requests -- //
 
   reg fsm_wrreq, fsm_wrlst;
   reg fsm_rdreq, fsm_rdlst;
@@ -156,10 +156,10 @@ module ddr3_cfg_tb;
 
   always @(posedge clock) begin
     if (reset) begin
-      fsm_run   <= 1'b0;
-      mem_run   <= 1'b0;
+      fsm_run <= 1'b0;
+      mem_run <= 1'b0;
       rfc <= 1'b0;
-      counter   <= 7'd100;
+      counter <= 7'd100;
       fsm_wrreq <= 1'b0;
       fsm_wrlst <= 1'b0;
       fsm_rdreq <= 1'b0;
@@ -386,7 +386,7 @@ module ddr3_cfg_tb;
       .byp_rdtid_i(byp_rdtid),
       .byp_rdadr_i(byp_rdadr),
 
-//       .cfg_run_i(cfg_run),  // Configuration port
+      //       .cfg_run_i(cfg_run),  // Configuration port
       .cfg_run_i(fsm_run),  // Configuration port
       .cfg_req_i(cfg_req),
       .cfg_rdy_o(cfg_rdy),
@@ -396,7 +396,7 @@ module ddr3_cfg_tb;
 
       .ddl_req_o(ddl_req),  // Controller <-> DFI
       .ddl_rdy_i(ddl_rdy),
-      .ddl_ref_i(cfg_ref), // todo ...
+      .ddl_ref_i(cfg_ref),  // todo ...
       .ddl_cmd_o(ddl_cmd),
       .ddl_tid_o(ddl_tid),
       .ddl_ba_o (ddl_ba),

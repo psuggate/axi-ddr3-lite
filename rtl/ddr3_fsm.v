@@ -502,8 +502,8 @@ module ddr3_fsm (
     end
   end
 
-// Determines if any requests (RD, WR, BYP) allow for additional sequences of
-// commands to be issued, for any of the open banks/rows.
+  // Determines if any requests (RD, WR, BYP) allow for additional sequences of
+  // commands to be issued, for any of the open banks/rows.
   // todo:
   always @(posedge clock) begin
     if (!cfg_run_i) begin
