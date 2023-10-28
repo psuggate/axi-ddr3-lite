@@ -170,8 +170,10 @@ module ddr3_ddl (
   localparam DELAY__RD_TO__WR = 1 << (CYCLES__RD_TO__WR - 2);
   localparam DELAY__WR_TO__RD = 1 << (CYCLES__WR_TO__RD - 2);
   localparam DELAY__WR_TO__WR = 1 << (CYCLES__WR_TO__WR - 2);
-  localparam DELAY_RDA_TO_ACT = 1 << (CYCLES_RDA_TO_ACT + 2);
-  localparam DELAY_WRA_TO_ACT = 1 << (CYCLES_WRA_TO_ACT + 2);
+
+  // todo: fix/finalise these timings ...
+  localparam DELAY_RDA_TO_ACT = 1 << (CYCLES_RDA_TO_ACT - 1);
+  localparam DELAY_WRA_TO_ACT = 1 << (CYCLES_WRA_TO_ACT - 1);
 
 
   reg [WSB:0] wr_delay, rd_delay;
