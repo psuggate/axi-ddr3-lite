@@ -202,24 +202,19 @@ module ddr3_fsm (
   localparam [3:0] ST_REFR = 4'b1000;
 
 
-  reg wrack, rdack, byack, req_q, req_x, req_s, seq_q, seq_x, seq_s, store, fetch;
+  reg wrack, rdack, byack;
+  wire byp_req, mem_req, refresh;
 
-  reg same_row, same_cmd;
-  reg [2:0] prev_wr_bank, prev_rd_bank;
+  reg req_q, req_x, req_s, seq_q, seq_x, seq_s;
   reg [2:0] cmd_q, cmd_x, cmd_s, ba_q, ba_x, ba_s;
   reg [RSB:0] adr_q, adr_x, col_s;
 
-  reg [7:0] bank_actv;  // '1' if activated
-  reg [RSB:0] actv_rows[0:7];  // row-address for each active bank
-
-  reg [3:0] state, snext;
-
-wire byp_req, mem_req, refresh;
   wire auto_w;
   wire [RSB:0] row_w, col_w;
   wire [2:0] bank_w;
-  wire banks_active, bank_switch;
-  wire same_row_w, same_cmd_w;
+
+  reg store, fetch;
+  reg [3:0] state, snext;
 
 
   assign cfg_rdy_o = ddl_rdy_i;
@@ -260,8 +255,6 @@ wire byp_req, mem_req, refresh;
                 : mem_rdreq_i ? mem_rdlst_i
                 : mem_wrreq_i & mem_wrlst_i;
 
-assign banks_active = 1'b0; // |bank_actv;
-
 
   // -- Main State Machine -- //
 
@@ -275,8 +268,6 @@ assign banks_active = 1'b0; // |bank_actv;
       req_q <= cfg_req_i;
       seq_q <= 1'b0;
       cmd_q <= cfg_cmd_i;
-      // ba_q  <= cfg_ba_i;
-      // adr_q <= cfg_adr_i;
       ba_q  <= bank_w;
       adr_q <= row_w;
     end else begin
@@ -427,7 +418,6 @@ assign banks_active = 1'b0; // |bank_actv;
         end
 
         ST_WRIT: begin
-          // if (ddl_rdy_i && same_row && same_cmd) begin
           if (ddl_rdy_i && req_x) begin
             wrack <= 1'b1;
           end else begin
@@ -446,24 +436,22 @@ assign banks_active = 1'b0; // |bank_actv;
   end
 
 
-// -- Next-Command Logic -- //
+  // -- Next-Command Logic -- //
 
-assign byp_req = byp_rdreq_i & BYPASS_ENABLE;
-assign mem_req = mem_wrreq_i | mem_rdreq_i;
-assign refresh = ddl_ref_i && !banks_active;
+  assign byp_req = byp_rdreq_i & BYPASS_ENABLE;
+  assign mem_req = mem_wrreq_i | mem_rdreq_i;
+  assign refresh = ddl_ref_i;
 
-// todo:
-//  - needs to latch the column-address on RD & WR requests
-always @(posedge clock) begin
-  if (!cfg_run_i) begin
-    snext <= ST_IDLE;
-    seq_x <= 1'b0;
-    req_x <= 1'b0;
-    cmd_x <= CMD_NOOP;
-    ba_x  <= 'bx;
-    adr_x <= 'bx;
-  end else begin
-    case (state)
+  always @(posedge clock) begin
+    if (!cfg_run_i) begin
+      snext <= ST_IDLE;
+      seq_x <= 1'b0;
+      req_x <= 1'b0;
+      cmd_x <= CMD_NOOP;
+      ba_x  <= 'bx;
+      adr_x <= 'bx;
+    end else begin
+      case (state)
         ST_IDLE: begin
           if (!byp_req && (refresh || !mem_req)) begin
             snext <= ST_IDLE;
@@ -510,19 +498,20 @@ always @(posedge clock) begin
             adr_x <= 'bx;
           end
         end
-    endcase
+      endcase
+    end
   end
-end
 
-always @(posedge clock) begin
-  if (!cfg_run_i) begin
-    seq_s <= 1'b0;
-    req_s <= 1'b0;
-    cmd_s <= 'bx;
-    ba_s  <= 'bx;
-    col_s <= 'bx;
-  end else begin
-    case (state)
+  // todo:
+  always @(posedge clock) begin
+    if (!cfg_run_i) begin
+      seq_s <= 1'b0;
+      req_s <= 1'b0;
+      cmd_s <= 'bx;
+      ba_s  <= 'bx;
+      col_s <= 'bx;
+    end else begin
+      case (state)
         ST_IDLE: begin
           if (byp_req) begin
             seq_s <= ~byp_rdlst_i;
@@ -580,34 +569,9 @@ always @(posedge clock) begin
           ba_s  <= 'bx;
           col_s <= 'bx;
         end
-    endcase
-  end
-end
-
-/*
-  // todo:
-  //  - combine (BL8) bursts into "sequences"
-  wire [2:0] cmd_w;
-  reg  [2:0] cmd_n;
-
-  assign cmd_w = byp_rdreq_i & BYPASS_ENABLE ? CMD_ACTV : cmd_n;
-
-  always @(posedge clock) begin
-    if (reset) begin
-      cmd_n <= CMD_NOOP;
-      same_row <= 1'b0;
-      same_cmd <= 1'b0;
-    end else begin
-      case (state)
-        default: begin
-          cmd_n <= CMD_NOOP;
-          same_row <= same_row_w;
-          same_cmd <= same_cmd_w;
-        end
       endcase
     end
   end
-*/
 
 
   // -- Simulation Only -- //

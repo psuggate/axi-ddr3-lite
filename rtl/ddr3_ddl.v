@@ -95,7 +95,7 @@ module ddr3_ddl (
   // From/to DDR3 Controller
   // Note: all state-transitions are gated by the 'ctl_rdy_o' signal
   input ctl_req_i;
-  input ctl_seq_i; // Burst-sequence indicator
+  input ctl_seq_i;  // Burst-sequence indicator
   output ctl_rdy_o;
   input [2:0] ctl_cmd_i;
   input [2:0] ctl_ba_i;
@@ -720,7 +720,7 @@ module ddr3_ddl (
     endcase
   end
 
-  reg  [39:0] dbg_cmd;
+  reg [39:0] dbg_cmd;
 
   always @* begin
     case (cmd_q)
