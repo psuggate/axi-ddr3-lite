@@ -1,5 +1,5 @@
 `timescale 1ns / 100ps
-`define __gowin_for_the_win
+// `define __gowin_for_the_win
 module axi_ddr3_lite_tb;
 
   // -- Simulation Settings -- //
@@ -13,14 +13,19 @@ module axi_ddr3_lite_tb;
   parameter DDR_COL_BITS = 10;
   localparam CSB = DDR_COL_BITS - 1;
 
-  // Data-path and address settings
+
+  // -- Data-path and address settings -- //
+
   localparam WIDTH = 32;
   localparam MSB = WIDTH - 1;
+  localparam HSB = WIDTH / 2 - 1;
 
   localparam MASKS = WIDTH / 8;
   localparam SSB = MASKS - 1;
+  localparam QSB = MASKS / 2 - 1;
 
-  localparam ADDRS = DDR_COL_BITS + DDR_ROW_BITS + 3 - 1;
+  // note: (AXI4) byte address, not burst-aligned address
+  localparam ADDRS = DDR_COL_BITS + DDR_ROW_BITS + 4;
   localparam ASB = ADDRS - 1;
 
   localparam REQID = 4;
@@ -30,8 +35,8 @@ module axi_ddr3_lite_tb;
   // -- Simulation Data -- //
 
   initial begin
-    $dumpfile("ddr3_core_tb.vcd");
-    $dumpvars(0, ddr3_core_tb);
+    $dumpfile("axi_ddr3_lite_tb.vcd");
+    $dumpvars(0, axi_ddr3_lite_tb);
 
     #80000 $finish;  // todo ...
   end
@@ -82,99 +87,40 @@ module axi_ddr3_lite_tb;
 
   // -- DDR3 and Controller Signals -- //
 
-  wire         ddr3_clk_w;
-  wire         ddr3_cke_w;
-  wire         ddr3_reset_n_w;
-  wire         ddr3_ras_n_w;
-  wire         ddr3_cas_n_w;
-  wire         ddr3_we_n_w;
-  wire         ddr3_cs_n_w;
-  wire [  2:0] ddr3_ba_w;
-  wire [ 14:0] ddr3_addr_w;
-  wire         ddr3_odt_w;
-  wire [  1:0] ddr3_dm_w;
-  wire [  1:0] ddr3_dqs_w;
-  wire [ 15:0] ddr3_dq_w;
-
-  wire [ 14:0] dfi_address;
+  // DFI <-> PHY
+  wire dfi_rst_n, dfi_cke, dfi_cs_n, dfi_ras_n, dfi_cas_n, dfi_we_n;
+  wire dfi_odt, dfi_wstb, dfi_wren, dfi_rden, dfi_valid;
   wire [  2:0] dfi_bank;
-  wire         dfi_cas_n;
-  wire         dfi_cke;
-  wire         dfi_cs_n;
-  wire         dfi_odt;
-  wire         dfi_ras_n;
-  wire         dfi_reset_n;
-  wire         dfi_we_n;
-  wire [ 31:0] dfi_wrdata;
-  wire         dfi_wrdata_en;
-  wire [  3:0] dfi_wrdata_mask;
-  wire         dfi_rddata_en;
-  wire [ 31:0] dfi_rddata;
-  wire         dfi_rddata_dnv;
-  wire         dfi_rddata_valid;
+  wire [RSB:0] dfi_addr;
+  wire [SSB:0] dfi_mask;
+  wire [MSB:0] dfi_wdata, dfi_rdata;
 
-  reg  [ 15:0] ram_wr;
-  reg          ram_rd;
-  reg  [ 31:0] ram_addr;
-  reg  [127:0] ram_write_data;
-  reg  [ 15:0] ram_req_id;
-  wire         ram_accept;
-  wire         ram_ack;
-  wire         ram_error;
-  wire [ 15:0] ram_resp_id;
-  wire [127:0] ram_read_data;
+  // PHY <-> DDR3
+  wire ddr_ck_p, ddr_ck_n;
+  wire ddr_rst_n, ddr_cke, ddr_cs_n, ddr_ras_n, ddr_cas_n, ddr_we_n;
+  wire ddr_odt;
+  wire [2:0] ddr_ba;
+  wire [RSB:0] ddr_a;
+  wire [QSB:0] ddr_dm, ddr_dqs_p, ddr_dqs_n;
+  wire [HSB:0] ddr_dq;
 
-
-  // -- Initialisation -- //
-
-  reg  [127:0] data;
-
-  initial begin : Stimulus
-    ram_wr         = 0;
-    ram_rd         = 0;
-    ram_addr       = 0;
-    ram_write_data = 0;
-    ram_req_id     = 0;
-
-    @(posedge clock);
-
-    ram_write(0, 128'hffeeddccbbaa99887766554433221100, 16'hFFFF);
-    ram_write(16, 128'hbeaffeadd0d0600d5555AAAA00000000, 16'hFFFF);
-    ram_write(32, 128'hffffffff111111112222222233333333, 16'hFFFF);
-
-    ram_read(0, data);
-    if (data != 128'hffeeddccbbaa99887766554433221100) begin
-      $fatal(1, "ERROR: Data mismatch!");
-    end
-
-    ram_read(16, data);
-    if (data != 128'hbeaffeadd0d0600d5555AAAA00000000) begin
-      $fatal(1, "ERROR: Data mismatch!");
-    end
-
-    ram_read(32, data);
-    if (data != 128'hffffffff111111112222222233333333) begin
-      $fatal(1, "ERROR: Data mismatch!");
-    end
-
-    #1000 @(posedge clock);
-    $finish;
-  end
-
-
-  reg awvalid, wvalid, wlast, bready, arvalid, rready, accept, error, rd_valid, rd_last, wr_ready;
-  reg [3:0] awid, arid, respi;
-  reg [7:0] awlen, arlen;
-  reg [1:0] awburst, arburst;
-  reg [ASB:0] awaddr, araddr;
+  // AXI4 Signals to/from the Memory Controller
+  reg awvalid, wvalid, wlast, bready, arvalid, rready;
+  reg abvalid, dbready;
+  reg accept, error, rd_valid, rd_last, wr_ready;
+  reg [ISB:0] awid, arid, byid, respi;
+  reg [7:0] awlen, arlen, bylen;
+  reg [1:0] awburst, arburst, byburst;
+  reg [ASB:0] awaddr, araddr, byaddr;
   // reg [MSB:0] rd_data;
   reg [SSB:0] wstrb;
   wire awready, wready, bvalid, arready, rvalid, rlast, fetch, store, rd_ready, wr_valid, wr_last;
-  wire [3:0] bid, rid, reqid;
-  wire [1:0] bresp, rresp;
+  wire abready, dbvalid, dblast;
+  wire [ISB:0] bid, rid, dbid, reqid;
+  wire [1:0] bresp, rresp, dbresp;
   wire [ASB:0] maddr;
   wire [SSB:0] wr_mask;
-  wire [MSB:0] rdata, rd_data, wr_data;
+  wire [MSB:0] rdata, bdata, rd_data, wr_data;
 
 
   // -- Initialisation -- //
@@ -202,6 +148,10 @@ module axi_ddr3_lite_tb;
       araddr <= 0;
     end
 
+    while (!awready || !arready) begin
+      @(posedge clock);
+    end
+
     @(posedge clock);
     @(posedge clock);
     data <= {$urandom, $urandom, $urandom, $urandom};
@@ -227,23 +177,6 @@ module axi_ddr3_lite_tb;
 
   // -- DDR3 Simulation Model from Micron -- //
 
-  // DFI <-> PHY
-  wire dfi_rst_n, dfi_cke, dfi_cs_n, dfi_ras_n, dfi_cas_n, dfi_we_n;
-  wire dfi_odt, dfi_wren, dfi_rden, dfi_valid;
-  wire [  2:0] dfi_bank;
-  wire [ 13:0] dfi_addr;
-  wire [SSB:0] dfi_mask;
-  wire [MSB:0] dfi_wdata, dfi_rdata;
-
-  // PHY <-> DDR3
-  wire ddr_ck_p, ddr_ck_n;
-  wire ddr_rst_n, ddr_cke, ddr_cs_n, ddr_ras_n, ddr_cas_n, ddr_we_n;
-  wire ddr_odt;
-  wire [2:0] ddr_ba;
-  wire [13:0] ddr_a;
-  wire [1:0] ddr_dm, ddr_dqs_p, ddr_dqs_n;
-  wire [15:0] ddr_dq;
-
   ddr3 ddr3_sdram_inst (
       .rst_n(ddr_rst_n),
       .ck(ddr_ck_p),
@@ -255,7 +188,7 @@ module axi_ddr3_lite_tb;
       .we_n(ddr_we_n),
       .dm_tdqs(ddr_dm),
       .ba(ddr_ba),
-      .addr(ddr_a),
+      .addr({1'b0, ddr_a}),
       .dq(ddr_dq),
       .dqs(ddr_dqs_p),
       .dqs_n(ddr_dqs_n),
@@ -286,7 +219,7 @@ module axi_ddr3_lite_tb;
       .cfg_data_i ({16'h0000, 4'h4, 4'h4, 8'h00}),
 
       .dfi_cke_i(dfi_cke),
-      .dfi_reset_n_i(dfi_reset_n),
+      .dfi_reset_n_i(dfi_rst_n),
       .dfi_cs_n_i(dfi_cs_n),
       .dfi_ras_n_i(dfi_ras_n),
       .dfi_cas_n_i(dfi_cas_n),
@@ -332,8 +265,8 @@ module axi_ddr3_lite_tb;
       .reset  (reset),
       .clk_ddr(clk_ddr),
 
-      .dfi_cke_i (dfi_cke),
       .dfi_rst_ni(dfi_rst_n),
+      .dfi_cke_i (dfi_cke),
       .dfi_cs_ni (dfi_cs_n),
       .dfi_ras_ni(dfi_ras_n),
       .dfi_cas_ni(dfi_cas_n),
@@ -376,15 +309,21 @@ module axi_ddr3_lite_tb;
   ///
 
   axi_ddr3_lite #(
-      .DDR_FREQ_MHZ(DDR_FREQ_MHZ),
-      .USE_GENERIC_PHY(0)
+      .DDR_FREQ_MHZ (DDR_FREQ_MHZ),
+      .DDR_ROW_BITS (DDR_ROW_BITS),
+      .DDR_COL_BITS (DDR_COL_BITS),
+      .DDR_DQ_WIDTH (WIDTH / 2),
+      .AXI_ID_WIDTH (REQID),
+      .MEM_ID_WIDTH (REQID),
+      .BYPASS_ENABLE(0)
   ) ddr_core_inst (
       .clock(clock),  // system clock
       .reset(reset),  // synchronous reset
 
       .axi_awvalid_i(awvalid),
       .axi_awready_o(awready),
-      .axi_awaddr_i(awaddr),
+      // .axi_awaddr_i(awaddr),
+      .axi_awaddr_i(awaddr[ASB:4]),  // todo
       .axi_awid_i(awid),
       .axi_awlen_i(awlen),
       .axi_awburst_i(awburst),
@@ -402,7 +341,8 @@ module axi_ddr3_lite_tb;
 
       .axi_arvalid_i(arvalid),
       .axi_arready_o(arready),
-      .axi_araddr_i(araddr),
+      // .axi_araddr_i(araddr),
+      .axi_araddr_i(araddr[ASB:4]),  // todo
       .axi_arid_i(arid),
       .axi_arlen_i(arlen),
       .axi_arburst_i(arburst),
@@ -414,21 +354,37 @@ module axi_ddr3_lite_tb;
       .axi_rid_o(rid),
       .axi_rdata_o(rdata),
 
-      .dfi_rst_no (dfi_rst_n),
-      .dfi_cke_o  (dfi_cke),
-      .dfi_cs_no  (dfi_cs_n),
-      .dfi_ras_no (dfi_ras_n),
-      .dfi_cas_no (dfi_cas_n),
-      .dfi_we_no  (dfi_we_n),
-      .dfi_odt_o  (dfi_odt),
-      .dfi_bank_o (dfi_bank),
-      .dfi_addr_o (dfi_addr),
-      .dfi_wren_o (dfi_wren),
-      .dfi_mask_o (dfi_mask),
-      .dfi_data_o (dfi_wdata),
-      .dfi_rden_o (dfi_rden),
-      .dfi_valid_i(dfi_valid),
-      .dfi_data_i (dfi_rdata)
+      .byp_arvalid_i(abvalid),  // [optional] fast-read port
+      .byp_arready_o(abready),
+      // .byp_araddr_i(byaddr),
+      .byp_araddr_i(byaddr[ASB:4]),  // todo
+      .byp_arid_i(byid),
+      .byp_arlen_i(bylen),
+      .byp_arburst_i(byburst),
+
+      .byp_rready_i(dbready),
+      .byp_rvalid_o(dbvalid),
+      .byp_rlast_o(dblast),
+      .byp_rresp_o(dbresp),
+      .byp_rid_o(dbid),
+      .byp_rdata_o(bdata),
+
+      .dfi_rst_no(dfi_rst_n),
+      .dfi_cke_o (dfi_cke),
+      .dfi_cs_no (dfi_cs_n),
+      .dfi_ras_no(dfi_ras_n),
+      .dfi_cas_no(dfi_cas_n),
+      .dfi_we_no (dfi_we_n),
+      .dfi_odt_o (dfi_odt),
+      .dfi_bank_o(dfi_bank),
+      .dfi_addr_o(dfi_addr),
+      .dfi_wstb_o(dfi_wren),
+      .dfi_wren_o(dfi_wren),
+      .dfi_mask_o(dfi_mask),
+      .dfi_data_o(dfi_wdata),
+      .dfi_rden_o(dfi_rden),
+      .dfi_rvld_i(dfi_valid),
+      .dfi_data_i(dfi_rdata)
   );
 
 

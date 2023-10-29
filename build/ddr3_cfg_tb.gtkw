@@ -1,10 +1,10 @@
 [*]
 [*] GTKWave Analyzer v3.3.104 (w)1999-2020 BSI
-[*] Sat Oct 28 21:24:18 2023
+[*] Sat Oct 28 23:08:17 2023
 [*]
 [dumpfile] "./ddr3_cfg_tb.vcd"
-[dumpfile_mtime] "Sat Oct 28 21:22:16 2023"
-[dumpfile_size] 690425
+[dumpfile_mtime] "Sat Oct 28 23:07:48 2023"
+[dumpfile_size] 715738
 [savefile] "./ddr3_cfg_tb.gtkw"
 [timestart] 66103800
 [size] 2560 1376
@@ -32,9 +32,9 @@ ddr3_cfg_tb.ddr_cas_n
 ddr3_cfg_tb.ddr_we_n
 ddr3_cfg_tb.ddr_odt
 ddr3_cfg_tb.ddr_ba[2:0]
-@c00023
+@c00022
 ddr3_cfg_tb.ddr_a[12:0]
-@29
+@28
 (0)ddr3_cfg_tb.ddr_a[12:0]
 (1)ddr3_cfg_tb.ddr_a[12:0]
 (2)ddr3_cfg_tb.ddr_a[12:0]
@@ -48,7 +48,7 @@ ddr3_cfg_tb.ddr_a[12:0]
 (10)ddr3_cfg_tb.ddr_a[12:0]
 (11)ddr3_cfg_tb.ddr_a[12:0]
 (12)ddr3_cfg_tb.ddr_a[12:0]
-@1401201
+@1401200
 -group_end
 @28
 ddr3_cfg_tb.ddr_dqs_p[1:0]
@@ -98,7 +98,10 @@ ddr3_cfg_tb.ddr3_ddl_inst.dbg_state[79:0]
 -FSM
 @28
 ddr3_cfg_tb.ddr3_fsm_inst.ddl_ref_i
+[color] 3
 ddr3_cfg_tb.ddr3_fsm_inst.ddl_req_o
+@29
+[color] 3
 ddr3_cfg_tb.ddr3_fsm_inst.ddl_rdy_i
 @820
 [color] 5

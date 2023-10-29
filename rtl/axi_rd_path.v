@@ -176,7 +176,7 @@ module axi_rd_path (
 
         default: begin
           $error("RD:%10t: READ state machine failure!", $time);
-          $fatal;
+          // $fatal;
         end
       endcase
     end

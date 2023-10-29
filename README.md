@@ -42,6 +42,8 @@ These include:
 
 + optimise the various state-machine encodings, for LUT4-based FPGA implementations
 
++ AXI4 error-responses for failed transactions
+
 ## DDR3 FSM
 
 Notes:

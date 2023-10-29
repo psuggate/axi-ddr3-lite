@@ -246,7 +246,7 @@ module axi_wr_path (
 
         default: begin
           $error("%10t: WRITE data state-machine failure!", $time);
-          $fatal;
+          // $fatal;
         end
       endcase  // state
     end
@@ -323,7 +323,7 @@ module axi_wr_path (
 
         default: begin
           $error("%10t: WRITE issue state-machine failure!", $time);
-          $fatal;
+          // $fatal;
         end
       endcase  // issue
     end

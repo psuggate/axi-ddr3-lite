@@ -13,7 +13,7 @@
  */
 module ddr3_fsm (
     clock,
-    reset,
+    rst_n,
 
     mem_wrreq_i,  // Write port
     mem_wrlst_i,
@@ -36,8 +36,7 @@ module ddr3_fsm (
     byp_rdack_o,
     byp_rderr_o,
 
-    cfg_run_i,  // Configuration port
-    cfg_req_i,
+    cfg_req_i,  // Configuration port
     cfg_rdy_o,
     cfg_cmd_i,
     cfg_ba_i,
@@ -58,15 +57,14 @@ module ddr3_fsm (
   `include "ddr3_settings.vh"
 
   // Enables the (read-) bypass port
-  // todo:
   parameter BYPASS_ENABLE = 1'b0;
 
   // If enabled, the {wrlst, rdlst} are used to decide when to ACTIVATE and
   // PRECHARGE rows
   // todo:
-  parameter WRLAST_ENABLE = 1'b0;
-  parameter RDLAST_ENABLE = 1'b0;
-  parameter BYLAST_ENABLE = 1'b0;
+  parameter WRLAST_ENABLE = 1'b1;
+  parameter RDLAST_ENABLE = 1'b1;
+  parameter BYLAST_ENABLE = 1'b1;
 
   // Allows reads to be moved ahead of writes, and writes moved ahead of reads
   // (for same-bank accesses), in order to reduce turn-around costs
@@ -98,6 +96,7 @@ module ddr3_fsm (
   // need PRECHARGE commands. Enabling this alternate {bank, row, col} ordering
   // may help for some workloads; e.g., when all but the upper (burst) addresses
   // are not correlated in time?
+  // todo: ...
   parameter BANK_ROW_COL = 0;
 
   // Note: all addresses for requests must be word- and burst- aligned. Therefore,
@@ -117,7 +116,7 @@ module ddr3_fsm (
 
 
   input clock;  // Shared clock domain for the memory-controller
-  input reset;  // Synchronous reset
+  input rst_n;  // Synchronous reset
 
   // Write-request port
   input mem_wrreq_i;
@@ -144,7 +143,6 @@ module ddr3_fsm (
   input [ASB:0] byp_rdadr_i;
 
   // Configuration port
-  input cfg_run_i;
   input cfg_req_i;
   output cfg_rdy_o;
   input [2:0] cfg_cmd_i;
@@ -193,13 +191,12 @@ module ddr3_fsm (
 
 
   // DDR3 controller states
-  localparam [3:0] ST_IDLE = 4'b0001;
-  localparam [3:0] ST_READ = 4'b0010;
-  localparam [3:0] ST_WRIT = 4'b0011;
-  localparam [3:0] ST_PREC = 4'b0100;
-  localparam [3:0] ST_PREA = 4'b0110;
-  localparam [3:0] ST_ACTV = 4'b0111;
-  localparam [3:0] ST_REFR = 4'b1000;
+  localparam [3:0] ST_IDLE = 4'b0111;
+  localparam [3:0] ST_READ = 4'b0101;
+  localparam [3:0] ST_WRIT = 4'b0100;
+  localparam [3:0] ST_ACTV = 4'b0011;
+  localparam [3:0] ST_PREA = 4'b0010;
+  localparam [3:0] ST_REFR = 4'b0001;
 
 
   reg wrack, rdack, byack;
@@ -213,7 +210,7 @@ module ddr3_fsm (
   wire [RSB:0] row_w, col_w;
   wire [2:0] bank_w;
 
-  reg store, fetch;
+  reg store, fetch, fastp;
   reg [3:0] state, snext;
 
 
@@ -237,7 +234,7 @@ module ddr3_fsm (
 
   assign cfg_col_w = {DDR_COL_BITS{1'bx}};
 
-  assign asel = !cfg_run_i ? 2'b11
+  assign asel = !rst_n ? 2'b11
               : byp_rdreq_i & BYPASS_ENABLE ? 2'b00
               : mem_rdreq_i ? 2'b01
               : mem_wrreq_i ? 2'b10
@@ -259,9 +256,9 @@ module ddr3_fsm (
   // -- Main State Machine -- //
 
   always @(posedge clock) begin
-    if (!cfg_run_i) begin
+    if (!rst_n) begin
       // Forward the initialisation and configuration commands on to the DFI,
-      // until the configuration module asserts 'cfg_run_i'.
+      // until the configuration module asserts 'rst_n'.
       state <= ST_IDLE;
       store <= 1'b0;
       fetch <= 1'b0;
@@ -311,7 +308,7 @@ module ddr3_fsm (
           end
         end
 
-        ST_PREC, ST_PREA: begin
+        ST_PREA: begin
           // Typically a PRECHARGE-ALL banks (usually preceding a self-REFRESH)
           if (ddl_rdy_i) begin
             state <= snext;
@@ -351,10 +348,8 @@ module ddr3_fsm (
 
   // -- Acknowledge Signals -- //
 
-  reg fastp;
-
   always @(posedge clock) begin
-    if (reset) begin
+    if (!rst_n) begin
       wrack <= 1'b0;
       rdack <= 1'b0;
       byack <= 1'b0;
@@ -407,7 +402,7 @@ module ddr3_fsm (
   assign refresh = ddl_ref_i;
 
   always @(posedge clock) begin
-    if (!cfg_run_i) begin
+    if (!rst_n) begin
       snext <= ST_IDLE;
       seq_x <= 1'b0;
       req_x <= 1'b0;
@@ -470,7 +465,7 @@ module ddr3_fsm (
   // commands to be issued, for any of the open banks/rows.
   // todo:
   always @(posedge clock) begin
-    if (!cfg_run_i) begin
+    if (!rst_n) begin
       seq_s <= 1'b0;
       req_s <= 1'b0;
       cmd_s <= 'bx;
@@ -495,13 +490,15 @@ module ddr3_fsm (
         ST_ACTV, ST_WRIT, ST_READ: begin
           // Attempt to queue up another command, if part of a sequence, and
           // the next command is already waiting to be dispatched
+          // todo: can this fail, if the 'last' command does not show up, in-
+          //   time ??
           if (seq_x) begin
             seq_s <= (store & mem_wrreq_i & ~mem_wrlst_i)
                    | (fetch & ~fastp & mem_rdreq_i & ~mem_rdlst_i)
                    | (fetch & fastp & byp_rdreq_i & ~byp_rdlst_i);
             req_s <= 1'b1;
             cmd_s <= cmd_x;
-            ba_s  <= ba_x;
+            ba_s <= ba_x;
             col_s <= col_w;
           end else begin
             seq_s <= 1'b0;
@@ -531,20 +528,18 @@ module ddr3_fsm (
 
   always @* begin
     case (state)
-      ST_IDLE: dbg_state = cfg_run_i ? "IDLE" : "INIT";
+      ST_IDLE: dbg_state = rst_n ? "IDLE" : "INIT";
       ST_READ: dbg_state = adr_q[10] ? "RD-A" : "RD";
       ST_WRIT: dbg_state = adr_q[10] ? "WR-A" : "WR";
-      ST_PREC: dbg_state = "PRE";
       ST_PREA: dbg_state = "PREA";
       ST_ACTV: dbg_state = "ACT";
       ST_REFR: dbg_state = "REF";
       default: dbg_state = "XXX";
     endcase
     case (snext)
-      ST_IDLE: dbg_snext = cfg_run_i ? "IDLE" : "INIT";
+      ST_IDLE: dbg_snext = rst_n ? "IDLE" : "INIT";
       ST_READ: dbg_snext = adr_q[10] ? "RD-A" : "RD";
       ST_WRIT: dbg_snext = adr_q[10] ? "WR-A" : "WR";
-      ST_PREC: dbg_snext = "PRE";
       ST_PREA: dbg_snext = "PREA";
       ST_ACTV: dbg_snext = "ACT";
       ST_REFR: dbg_snext = "REF";

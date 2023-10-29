@@ -1,0 +1,60 @@
+[*]
+[*] GTKWave Analyzer v3.3.104 (w)1999-2020 BSI
+[*] Sun Oct 29 01:05:10 2023
+[*]
+[dumpfile] "./axi_ddr3_lite_tb.vcd"
+[dumpfile_mtime] "Sun Oct 29 01:03:48 2023"
+[dumpfile_size] 2009879
+[savefile] "./axi_ddr3_lite_tb.gtkw"
+[timestart] 66146400
+[size] 2560 1376
+[pos] -1 -1
+*-15.395294 66410000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] axi_ddr3_lite_tb.
+[treeopen] axi_ddr3_lite_tb.ddr_core_inst.
+[sst_width] 233
+[signals_width] 150
+[sst_expanded] 1
+[sst_vpaned_height] 414
+@28
+axi_ddr3_lite_tb.clock
+axi_ddr3_lite_tb.reset
+axi_ddr3_lite_tb.awready
+axi_ddr3_lite_tb.arready
+@800200
+-DDR
+@28
+axi_ddr3_lite_tb.ddr_ck_p
+axi_ddr3_lite_tb.ddr_ras_n
+axi_ddr3_lite_tb.ddr_cas_n
+axi_ddr3_lite_tb.ddr_we_n
+axi_ddr3_lite_tb.ddr_ba[2:0]
+@22
+axi_ddr3_lite_tb.ddr_a[12:0]
+@28
+axi_ddr3_lite_tb.ddr_dm[1:0]
+axi_ddr3_lite_tb.ddr_dqs_p[1:0]
+axi_ddr3_lite_tb.ddr_dqs_n[1:0]
+@22
+axi_ddr3_lite_tb.ddr_dq[15:0]
+@1000200
+-DDR
+@800201
+-FSM
+@29
+axi_ddr3_lite_tb.ddr_core_inst.ddr3_fsm_inst.rst_n
+[color] 3
+axi_ddr3_lite_tb.ddr_core_inst.ddr3_fsm_inst.ddl_req_o
+[color] 3
+axi_ddr3_lite_tb.ddr_core_inst.ddr3_fsm_inst.ddl_rdy_i
+@23
+axi_ddr3_lite_tb.ddr_core_inst.ddr3_fsm_inst.row_w[12:0]
+axi_ddr3_lite_tb.ddr_core_inst.ddr3_fsm_inst.col_w[12:0]
+axi_ddr3_lite_tb.ddr_core_inst.ddr3_fsm_inst.adr_q[12:0]
+axi_ddr3_lite_tb.ddr_core_inst.ddr3_fsm_inst.state[3:0]
+@821
+axi_ddr3_lite_tb.ddr_core_inst.ddr3_fsm_inst.dbg_state[39:0]
+@1000201
+-FSM
+[pattern_trace] 1
+[pattern_trace] 0

@@ -121,10 +121,10 @@ module ddr3_ddl_tb;
   assign dfi_cs_n  = 1'b1;
 
   ddr3_ddl #(
-      .DDR_FREQ_MHZ  (100),
-      .DDR_ROW_BITS  (DDR3_ROW_BITS),
-      .DDR_COL_BITS  (DDR3_COL_BITS),
-      .DFI_DATA_WIDTH(WIDTH)
+      .DDR_FREQ_MHZ(100),
+      .DDR_ROW_BITS(DDR3_ROW_BITS),
+      .DDR_COL_BITS(DDR3_COL_BITS),
+      .DFI_DQ_WIDTH(WIDTH)
   ) ddr3_ddl_inst (
       .clock(clock),
       .reset(reset),

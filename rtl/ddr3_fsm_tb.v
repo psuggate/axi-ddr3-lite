@@ -62,6 +62,7 @@ module ddr3_fsm_tb;
   assign reset = rst | ~locked;
 
 
+  // Requests/responses to/from the Memory Controller
   reg fsm_wrreq, fsm_wrlst, fsm_rdreq, fsm_rdlst, byp_rdreq, byp_rdlst;
   wire fsm_rdack, fsm_rderr, fsm_wrack, fsm_wrerr, byp_rdack, byp_rderr;
   reg [ISB:0] fsm_wrtid, fsm_rdtid, byp_rdtid;
@@ -170,7 +171,7 @@ module ddr3_fsm_tb;
 
     $display("%10t: FETCH", $time);
     @(posedge clock);
-    mem_fetch( 8, 0, 3, data);
+    mem_fetch(8, 0, 3, data);
     mem_fetch(16, 1, 3, data);
 
     @(posedge clock);
@@ -178,8 +179,8 @@ module ddr3_fsm_tb;
 
     $display("%10t: BYPASS", $time);
     @(posedge clock);
-    byp_fetch( 8, 0, 6, data);
-    byp_fetch( 0, 1, 6, data);
+    byp_fetch(8, 0, 6, data);
+    byp_fetch(0, 1, 6, data);
 
     @(posedge clock);
     @(posedge clock);
@@ -262,10 +263,10 @@ module ddr3_fsm_tb;
   // Inserts NOP's between memory-controller commands to satisfy DDR3 timing
   // parameters.
   ddr3_ddl #(
-      .DDR_FREQ_MHZ  (DDR_FREQ_MHZ),
-      .DDR_ROW_BITS  (DDR_ROW_BITS),
-      .DDR_COL_BITS  (DDR_COL_BITS),
-      .DFI_DATA_WIDTH(WIDTH)
+      .DDR_FREQ_MHZ(DDR_FREQ_MHZ),
+      .DDR_ROW_BITS(DDR_ROW_BITS),
+      .DDR_COL_BITS(DDR_COL_BITS),
+      .DFI_DQ_WIDTH(WIDTH)
   ) ddr3_ddl_inst (
       .clock(clock),
       .reset(reset),
@@ -319,7 +320,7 @@ module ddr3_fsm_tb;
       .BYPASS_ENABLE(BYPASS_ENABLE)
   ) ddr3_fsm_inst (
       .clock(clock),
-      .reset(reset),
+      .rst_n(cfg_run),
 
       .mem_wrreq_i(fsm_wrreq),  // Bus -> Controller requests
       .mem_wrlst_i(fsm_wrlst),
@@ -342,8 +343,7 @@ module ddr3_fsm_tb;
       .byp_rdtid_i(byp_rdtid),
       .byp_rdadr_i(byp_rdadr),
 
-      .cfg_run_i(cfg_run),  // Configuration port
-      .cfg_req_i(cfg_req),
+      .cfg_req_i(cfg_req),  // Configuration port
       .cfg_rdy_o(cfg_rdy),
       .cfg_cmd_i(cfg_cmd),
       .cfg_ba_i (cfg_ba),

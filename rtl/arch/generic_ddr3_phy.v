@@ -223,9 +223,9 @@ module generic_ddr3_phy (
 
   reg [MSB:0] data_l, data_n, data_h;
 
-always @(posedge clock) begin
-  valid_q <= dfi_rden_i;
-end
+  always @(posedge clock) begin
+    valid_q <= dfi_rden_i;
+  end
 
   always @(posedge clock) begin
     data_l <= data_n;

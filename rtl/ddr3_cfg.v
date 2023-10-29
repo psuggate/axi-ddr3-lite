@@ -335,10 +335,10 @@ module ddr3_cfg (
 
         default: begin
           $error("%10t: CFG: Unhandled CFG state: %1x", $time, state);
-          state  <= ST_RSTN;
+          state <= ST_RSTN;
           rst_nq <= 1'b0;
-          cke_q  <= 1'b0;
-          cs_nq  <= 1'b1;
+          cke_q <= 1'b0;
+          cs_nq <= 1'b1;
           {ba_q, adr_q} <= 'bx;
         end
       endcase

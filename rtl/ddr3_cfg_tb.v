@@ -7,6 +7,8 @@ module ddr3_cfg_tb;
   localparam DDR_FREQ_MHZ = 100;
   `include "ddr3_settings.vh"
 
+  localparam BYPASS_ENABLE = 1'b1;
+
   localparam DDR_ROW_BITS = 13;
   localparam RSB = DDR_ROW_BITS - 1;
 
@@ -67,13 +69,21 @@ module ddr3_cfg_tb;
   wire [ISB:0] ddl_tid;
   wire [RSB:0] ddl_adr;
 
+  // Memory Controller Signals (to the DDL/PHY)
   wire ctl_req, ctl_seq, ctl_run, ctl_rdy, ctl_ref;
   wire [2:0] ctl_cmd, ctl_ba;
   wire [RSB:0] ctl_adr;
 
+  // SDRAM Configuration Signals
   wire cfg_req, cfg_run, cfg_rdy, cfg_ref;
   wire [2:0] cfg_cmd, cfg_ba;
   wire [RSB:0] cfg_adr;
+
+  // Requests/responses to/from the Memory Controller
+  reg fsm_wrreq, fsm_wrlst, fsm_rdreq, fsm_rdlst, byp_rdreq, byp_rdlst;
+  wire fsm_rdack, fsm_rderr, fsm_wrack, fsm_wrerr, byp_rdack, byp_rderr;
+  reg [ISB:0] fsm_wrtid, fsm_rdtid, byp_rdtid;
+  reg [ASB:0] fsm_wradr, fsm_rdadr, byp_rdadr;
 
   // AXI <-> {FSM, DDL} signals
   wire wr_ready, rd_valid, rd_last;
@@ -135,21 +145,6 @@ module ddr3_cfg_tb;
 
   // -- Use the Memory Controller FSM to Generate Requests -- //
 
-  reg fsm_wrreq, fsm_wrlst;
-  reg fsm_rdreq, fsm_rdlst;
-  wire fsm_wrack, fsm_wrerr, fsm_rdack, fsm_rderr;
-  reg [ISB:0] fsm_wrtid, fsm_rdtid;
-  reg [ASB:0] fsm_wradr, fsm_rdadr;
-
-  wire byp_rdack, byp_rderr;
-  wire byp_rdreq = 1'b0;
-  wire byp_rdlst = 1'b0;
-  wire [ISB:0] byp_rdtid;
-  wire [ASB:0] byp_rdadr;
-
-  assign byp_rdtid = 0;
-  assign byp_rdadr = 0;
-
   reg [6:0] counter;
   reg fsm_run, mem_run, rfc;
 
@@ -163,6 +158,8 @@ module ddr3_cfg_tb;
       fsm_wrlst <= 1'b0;
       fsm_rdreq <= 1'b0;
       fsm_rdlst <= 1'b0;
+      byp_rdreq <= 1'b0;
+      byp_rdlst <= 1'b0;
     end else if (cfg_run && counter > 0) begin
       counter <= counter - 1;
       fsm_run <= counter == 7'd001;
@@ -209,6 +206,22 @@ module ddr3_cfg_tb;
     @(posedge clock);
     mem_fetch(8, 0, 5, data);
     mem_fetch(16, 1, 5, data);
+
+    @(posedge clock);
+    @(posedge clock);
+
+    $display("%10t: FETCH", $time);
+    @(posedge clock);
+    mem_fetch(8, 0, 3, data);
+    mem_fetch(16, 1, 3, data);
+
+    @(posedge clock);
+    @(posedge clock);
+
+    $display("%10t: BYPASS", $time);
+    @(posedge clock);
+    byp_fetch(8, 0, 6, data);
+    byp_fetch(0, 1, 6, data);
 
     @(posedge clock);
     @(posedge clock);
@@ -271,8 +284,8 @@ module ddr3_cfg_tb;
       .reset  (reset),
       .clk_ddr(clk_ddr),
 
-      .dfi_cke_i (dfi_cke),
       .dfi_rst_ni(dfi_rst_n),
+      .dfi_cke_i (dfi_cke),
       .dfi_cs_ni (dfi_cs_n),
       .dfi_ras_ni(dfi_ras_n),
       .dfi_cas_ni(dfi_cas_n),
@@ -310,10 +323,10 @@ module ddr3_cfg_tb;
   // Inserts NOP's between memory-controller commands to satisfy DDR3 timing
   // parameters.
   ddr3_ddl #(
-      .DDR_FREQ_MHZ  (DDR_FREQ_MHZ),
-      .DDR_ROW_BITS  (DDR_ROW_BITS),
-      .DDR_COL_BITS  (DDR_COL_BITS),
-      .DFI_DATA_WIDTH(WIDTH)
+      .DDR_FREQ_MHZ(DDR_FREQ_MHZ),
+      .DDR_ROW_BITS(DDR_ROW_BITS),
+      .DDR_COL_BITS(DDR_COL_BITS),
+      .DFI_DQ_WIDTH(WIDTH)
   ) ddr3_ddl_inst (
       .clock(clock),
       .reset(reset),
@@ -360,10 +373,10 @@ module ddr3_cfg_tb;
       .DDR_COL_BITS(DDR_COL_BITS),
       .REQID(REQID),
       .ADDRS(ADDRS),
-      .BYPASS_ENABLE(1'b0)
+      .BYPASS_ENABLE(BYPASS_ENABLE)
   ) ddr3_fsm_inst (
       .clock(clock),
-      .reset(reset),
+      .rst_n(fsm_run),
 
       .mem_wrreq_i(fsm_wrreq),  // Bus -> Controller requests
       .mem_wrlst_i(fsm_wrlst),
@@ -386,15 +399,14 @@ module ddr3_cfg_tb;
       .byp_rdtid_i(byp_rdtid),
       .byp_rdadr_i(byp_rdadr),
 
-      //       .cfg_run_i(cfg_run),  // Configuration port
-      .cfg_run_i(fsm_run),  // Configuration port
-      .cfg_req_i(cfg_req),
+      .cfg_req_i(cfg_req),  // Configuration port
       .cfg_rdy_o(cfg_rdy),
       .cfg_cmd_i(cfg_cmd),
       .cfg_ba_i (cfg_ba),
       .cfg_adr_i(cfg_adr),
 
       .ddl_req_o(ddl_req),  // Controller <-> DFI
+      .ddl_seq_o(ddl_seq),
       .ddl_rdy_i(ddl_rdy),
       .ddl_ref_i(cfg_ref),  // todo ...
       .ddl_cmd_o(ddl_cmd),
@@ -484,6 +496,33 @@ module ddr3_cfg_tb;
       end
 
       fsm_rdreq <= 1'b0;
+      @(posedge clock);
+
+      // todo: rx data stuffs
+    end
+  endtask  // mem_fetch
+
+
+  // -- Perform fast-path read transaction (128-bit) -- //
+
+  task byp_fetch;
+    input [ASB:0] addr;
+    input last;
+    input [ISB:0] tid;
+    output [127:0] data;
+    begin
+      byp_rdreq <= 1'b1;
+      byp_rdlst <= last;
+      byp_rdtid <= tid;
+      byp_rdadr <= addr;
+
+      @(posedge clock);
+
+      while (!byp_rdack) begin
+        @(posedge clock);
+      end
+
+      byp_rdreq <= 1'b0;
       @(posedge clock);
 
       // todo: rx data stuffs

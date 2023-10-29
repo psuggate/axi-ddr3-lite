@@ -12,11 +12,12 @@ MISC_V	:= $(wildcard $(RTLDIR)/misc/*.v)
 MISC	:= $(filter-out %_tb.v, $(MISC_V))
 DDR3_V	:= $(wildcard $(RTLDIR)/*.v)
 DDR3	:= $(filter-out %_tb.v, $(DDR3_V))
-ARCH	:= $(wildcard $(RTLDIR)/arch/g2wa*.v) arch/gw2a_prim_sim.v
+FIFO	:= $(wildcard $(RTLDIR)/fifo/*.v)
+ARCH	:= $(wildcard $(RTLDIR)/arch/*.v) arch/gw2a_prim_sim.v
 SIMSRC	:= $(wildcard *.v)
 SRC	:= $(filter-out %_tb.v, $(SIMSRC))
 
-LIB	:= $(MISC) $(DDR3) $(ARCH) $(SRC)
+LIB	:= $(MISC) $(FIFO) $(DDR3) $(ARCH) $(SRC)
 TOP	?= $(wildcard *_tb.v)
 OUT	?= $(TOP:%.v=../build/%.out)
 

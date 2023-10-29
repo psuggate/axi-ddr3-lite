@@ -63,17 +63,17 @@ module ddr3_ddl (
   `include "ddr3_settings.vh"
 
   // Data-path and address settings
-  parameter DDR_COL_BITS = 10;
-  localparam CSB = DDR_COL_BITS - 1;
-
   parameter DDR_ROW_BITS = 13;
   localparam RSB = DDR_ROW_BITS - 1;
 
-  parameter DFI_DATA_WIDTH = 32;
-  localparam MSB = DFI_DATA_WIDTH - 1;
+  parameter DDR_COL_BITS = 10;
+  localparam CSB = DDR_COL_BITS - 1;
 
-  parameter DFI_MASK_WIDTH = DFI_DATA_WIDTH / 8;
-  localparam SSB = DFI_MASK_WIDTH - 1;
+  parameter DFI_DQ_WIDTH = 32;
+  localparam MSB = DFI_DQ_WIDTH - 1;
+
+  parameter DFI_DM_WIDTH = DFI_DQ_WIDTH / 8;
+  localparam SSB = DFI_DM_WIDTH - 1;
 
 
   // -- PHY Settings -- //
@@ -84,6 +84,7 @@ module ddr3_ddl (
   parameter PHY_RD_LATENCY = 1;
 
   // A DDR3 burst has length of 8 transfers (DDR), so four clock/memory cycles
+  // todo: ...
   localparam PHY_BURST_LEN = 4;
 
 
@@ -235,8 +236,8 @@ module ddr3_ddl (
   localparam ST_ZQCL = 4'd11;
   localparam ST_MODE = 4'd12;
 
-  reg [3:0] state;
-  reg [DSB:0] delay;
+  reg  [  3:0] state;
+  reg  [DSB:0] delay;
   reg  [XSB:0] count;
   wire [XSB:0] cnext;
 
