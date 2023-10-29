@@ -62,6 +62,9 @@ module ddr3_ddl (
   parameter DDR_FREQ_MHZ = 100;
   `include "ddr3_settings.vh"
 
+  // Trims an additional clock-cycle of latency, if '1'
+  parameter LOW_LATENCY = 1'b1;  // 0 or 1
+
   // Data-path and address settings
   parameter DDR_ROW_BITS = 13;
   localparam RSB = DDR_ROW_BITS - 1;
@@ -80,8 +83,8 @@ module ddr3_ddl (
 
   // Note: these latencies are due to the registers and IOBs in the PHY for the
   //   commands, addresses, and the data-paths.
-  parameter PHY_WR_LATENCY = 1;
-  parameter PHY_RD_LATENCY = 1;
+  parameter PHY_WR_LATENCY = 1 + LOW_LATENCY;
+  parameter PHY_RD_LATENCY = 1 + LOW_LATENCY;
 
   // A DDR3 burst has length of 8 transfers (DDR), so four clock/memory cycles
   // todo: ...
@@ -175,16 +178,17 @@ module ddr3_ddl (
   // todo: fix/finalise these timings ...
   localparam DELAY_RDA_TO_ACT = 1 << (CYCLES_RDA_TO_ACT - 1);
   // localparam DELAY_WRA_TO_ACT = 1 << (CYCLES_WRA_TO_ACT - 1);
-  localparam DELAY_WRA_TO_ACT = 1 << (CYCLES_WRA_TO_ACT + 1); // todo
+  localparam DELAY_WRA_TO_ACT = 1 << (CYCLES_WRA_TO_ACT + 1);  // todo
 
 
   reg [WSB:0] wr_delay, rd_delay;
   reg wr_strob, wr_ready, rd_ready;
   reg run_q, ready, busy;
-  reg [2:0] cmd_q, ba_q;
-  reg [RSB:0] adr_q;
+  reg [XSB:0] count;
+  reg [DSB:0] delay;
 
-  wire ctl_pre_w;
+  wire ctl_pre_w, nop_w;
+  wire [XSB:0] cnext;
 
 
   // -- Connect to Upstream Controller & Data-paths -- //
@@ -194,69 +198,104 @@ module ddr3_ddl (
   assign ctl_pre_w = ctl_adr_i[10];
 
   assign mem_wready_o = wr_ready;
+  assign mem_rvalid_o = dfi_rvld_i;
+  assign mem_rddata_o = dfi_data_i;
 
 
-  // -- Connect FIFO's to the DDR IOB's -- //
+  // -- Internal Control Signals -- //
 
-  assign dfi_ras_no = cmd_q[2];
-  assign dfi_cas_no = cmd_q[1];
-  assign dfi_we_no = cmd_q[0];
+  // assign nop_w = ~ctl_req_i | ~ready | busy;
+  assign nop_w = ~ctl_req_i | ~ready;
+  assign cnext = count - 1;
+
+
+  // -- Connect to the DDR PHY IOB's -- //
+
   assign dfi_odt_o = 1'b0;
-  assign dfi_bank_o = ba_q;
-  assign dfi_addr_o = adr_q;
   assign dfi_wstb_o = wr_strob;
   assign dfi_wren_o = wr_ready;
   assign dfi_mask_o = mem_wrmask_i;
   assign dfi_data_o = mem_wrdata_i;
   assign dfi_rden_o = rd_ready;
 
-  assign mem_rvalid_o = dfi_rvld_i;
-  assign mem_rddata_o = dfi_data_i;
+  generate
+    if (LOW_LATENCY) begin : g_low_latency
 
+      // -- Version for Direct Connection: FSM -> PHY -- //
+
+      assign dfi_ras_no = nop_w ? CMD_NOOP : ctl_cmd_i[2];
+      assign dfi_cas_no = nop_w ? CMD_NOOP : ctl_cmd_i[1];
+      assign dfi_we_no  = nop_w ? CMD_NOOP : ctl_cmd_i[0];
+      assign dfi_addr_o = ctl_adr_i;
+      assign dfi_bank_o = ctl_ba_i;
+
+    end else begin : g_med_latency
+
+      // -- Registered-commands Version -- //
+
+      reg [2:0] cmd_q, ba_q;
+      reg [RSB:0] adr_q;
+
+      assign dfi_ras_no = cmd_q[2];
+      assign dfi_cas_no = cmd_q[1];
+      assign dfi_we_no  = cmd_q[0];
+      assign dfi_bank_o = ba_q;
+      assign dfi_addr_o = adr_q;
+
+      always @(posedge clock) begin
+        if (nop_w || !ddr_cke_i) begin
+          cmd_q <= CMD_NOOP;
+        end else begin
+          cmd_q <= ctl_cmd_i;
+        end
+
+        ba_q  <= ctl_ba_i;
+        adr_q <= ctl_adr_i;
+      end
+
+    end
+  endgenerate
+
+
+  // -- Upstream-enable Logic -- //
+
+  // todo: this can be used to bring a SDRAM out of power-down mode ??
+  always @(posedge clock) begin
+    run_q <= run_q | delay[0] & ~ddr_cke_i;
+  end
+
+
+  // -- Main DDR3 PHY-control State Machine -- //
 
   // todo:
-  //  - (row) activate delays
-  //  - read sequencing
-  //  - write sequencing
   //  - read -> read sequencing
   //  - read -> write sequencing
   //  - write -> write sequencing
   //  - write -> read sequencing
   //  - (row) precharge delays
-  //  - refresh delays
-  //  - precharge -> refresh sequencing
-  //  - mode-register read & write sequencing
+  //  - optimise the FSM-encoding for LUT4-based FPGAs
+  //  - can use last command as the state-value ??
 
-  localparam ST_IDLE = 4'b0001;
-  localparam ST_ACTV = 4'b0010;
-  localparam ST_READ = 4'b0100;
-  localparam ST_WRIT = 4'b0101;
-  localparam ST_PREC = 4'b1101;
-  localparam ST_PREA = 4'b1110;
-  localparam ST_REFR = 4'b1111;
-  localparam ST_ZQCL = 4'd11;
-  localparam ST_MODE = 4'd12;
+  localparam ST_IDLE = 3'b111;
+  localparam ST_ZQCL = 3'b110;
+  localparam ST_READ = 3'b101;
+  localparam ST_WRIT = 3'b100;
+  localparam ST_ACTV = 3'b011;
+  localparam ST_PREC = 3'b010;
+  localparam ST_REFR = 3'b001;
+  localparam ST_MODE = 3'b000;
 
-  reg  [  3:0] state;
-  reg  [DSB:0] delay;
-  reg  [XSB:0] count;
-  wire [XSB:0] cnext;
+  reg [2:0] state;
 
-  assign cnext = count - 1;
-
-  // todo: needs one of these per-bank ??
   always @(posedge clock) begin
     if (reset || !ddr_cke_i) begin
       state <= ST_IDLE;
       ready <= 1'b0;
       busy  <= 1'b0;
       delay <= DINIT;
-      run_q <= 1'b0;
-      cmd_q <= CMD_NOOP;
       count <= CZERO;
     end else if (busy || !ready) begin
       delay <= {1'b0, delay[DSB:1]};
-      cmd_q <= CMD_NOOP;
       if (busy) begin
         count <= cnext;
       end
@@ -265,13 +304,9 @@ module ddr3_ddl (
         ready <= 1'b1;
       end else begin
         ready <= delay[0];
-        run_q <= run_q | delay[0];
       end
-    end else if (ctl_req_i && ready) begin
+    end else if (!nop_w) begin
       ready <= 1'b0;
-      cmd_q <= ctl_cmd_i;
-      ba_q  <= ctl_ba_i;
-      adr_q <= ctl_adr_i;  // todo: auto-precharge bit (A[10])
 
       case (state)
         ST_IDLE: begin
@@ -327,9 +362,11 @@ module ddr3_ddl (
 
             default: begin
               $error("%10t: DDL: Invalid command: 0x%1x", $time, ctl_cmd_i);
-              state <= ST_IDLE;
-              busy  <= 1'b1;
-              count <= DDR_CZQINIT;
+              state <= 'bx;
+              ready <= 1'bx;
+              busy  <= 1'bx;
+              count <= 'bx;
+              delay <= 'bx;
             end
           endcase
         end
@@ -422,17 +459,20 @@ module ddr3_ddl (
                 delay <= DELAY__WR_TO__WR;
               end
             end
+
             CMD_READ: begin
               // WR -> RD (default: 14 + 4 cycles)
               state <= ST_READ;
               delay <= DELAY__WR_TO__RD;
             end
+
             CMD_ACTV: begin
               // WR -> ACT (default: 4 cycles, different bank)
               // WR -> PRE -> ACT (default: 16 cycles, same bank)
               state <= ST_ACTV;
               delay <= 2;
             end
+
             default: begin
               state <= 'bx;
               delay <= 'bx;
@@ -563,85 +603,93 @@ module ddr3_ddl (
         default: begin
           $error("%10t: DDL: Unexpected state: 0x%02x", $time, state);
           state <= ST_IDLE;
+          ready <= 1'bx;
+          busy  <= 1'bx;
+          count <= 'bx;
+          delay <= 'bx;
         end
       endcase
     end else if (ready) begin
       // No follow-up command, so IDLE
       state <= ST_IDLE;
-      cmd_q <= CMD_NOOP;
     end
   end
 
 
-  // -- Write Data-Path -- //
+  // -- READ- and WRITE- Data-Paths -- //
 
   localparam [WSB:0] WR_SHIFTS = DDR_CWL - PHY_WR_LATENCY - 2;
-
-  wire store_w, wr_rdy_w;
-
-  assign store_w = ctl_cmd_i == CMD_WRIT && ready;
-
-  always @(posedge clock) begin
-    if (reset) begin
-      wr_delay <= {WDLYS{1'b0}};
-      wr_strob <= 1'b0;
-      wr_ready <= 1'b0;
-    end else begin
-      if (store_w) begin
-        wr_delay <= {WDLYS{1'b1}};
-      end else begin
-        wr_delay <= {1'b0, wr_delay[WSB:1]};
-      end
-
-      wr_strob <= wr_rdy_w;
-      wr_ready <= wr_strob;
-    end
-  end
-
-  shift_register #(
-      .WIDTH(1),
-      .DEPTH(16)
-  ) wr_srl_inst (
-      .clock (clock),
-      .wren_i(1'b1),
-      .addr_i(WR_SHIFTS),
-      .data_i(wr_delay[0]),
-      .data_o(wr_rdy_w)
-  );
-
-
-  // -- Read Data-Path -- //
-
   localparam [WSB:0] RD_SHIFTS = DDR_CL - PHY_RD_LATENCY - 2;
 
+  wire store_w, wr_rdy_w;
   wire fetch_w, rd_rdy_w;
 
+  assign store_w = ctl_cmd_i == CMD_WRIT && ready;
   assign fetch_w = ctl_cmd_i == CMD_READ && ready;
 
   always @(posedge clock) begin
-    if (reset) begin
-      rd_delay <= {WDLYS{1'b0}};
-      rd_ready <= 1'b0;
+    if (store_w) begin
+      wr_delay <= {WDLYS{1'b1}};
     end else begin
-      if (fetch_w) begin
-        rd_delay <= {WDLYS{1'b1}};
-      end else begin
-        rd_delay <= {1'b0, rd_delay[WSB:1]};
-      end
-      rd_ready <= rd_rdy_w;
+      wr_delay <= {1'b0, wr_delay[WSB:1]};
     end
+
+    if (fetch_w) begin
+      rd_delay <= {WDLYS{1'b1}};
+    end else begin
+      rd_delay <= {1'b0, rd_delay[WSB:1]};
+    end
+
+    wr_strob <= wr_rdy_w;  // Enables 'DQS' one cycle earlier
+    wr_ready <= wr_strob;
+
+    rd_ready <= rd_rdy_w;
   end
 
-  shift_register #(
-      .WIDTH(1),
-      .DEPTH(16)
-  ) rd_srl_inst (
-      .clock (clock),
-      .wren_i(1'b1),
-      .addr_i(RD_SHIFTS),
-      .data_i(rd_delay[0]),
-      .data_o(rd_rdy_w)
-  );
+  generate
+    if (WR_SHIFTS == RD_SHIFTS) begin : g_one_srl
+      // Use just a single, double-wide SRL
+      // todo: is this more efficient on non-Xilinx ??
+
+      initial $display("== Using combined W/R-delays SRL");
+
+      shift_register #(
+          .WIDTH(2),
+          .DEPTH(16)
+      ) wr_rd_srl_inst (
+          .clock (clock),
+          .wren_i(1'b1),
+          .addr_i(WR_SHIFTS),
+          .data_i({wr_delay[0], rd_delay[0]}),
+          .data_o({wr_rdy_w, rd_rdy_w})
+      );
+
+    end else begin : g_two_srl
+
+      shift_register #(
+          .WIDTH(1),
+          .DEPTH(16)
+      ) wr_srl_inst (
+          .clock (clock),
+          .wren_i(1'b1),
+          .addr_i(WR_SHIFTS),
+          .data_i(wr_delay[0]),
+          .data_o(wr_rdy_w)
+      );
+
+      shift_register #(
+          .WIDTH(1),
+          .DEPTH(16)
+      ) rd_srl_inst (
+          .clock (clock),
+          .wren_i(1'b1),
+          .addr_i(RD_SHIFTS),
+          .data_i(rd_delay[0]),
+          .data_o(rd_rdy_w)
+      );
+
+    end
+  endgenerate
 
 
   // -- Simulation Only -- //
@@ -655,8 +703,7 @@ module ddr3_ddl (
       ST_ACTV: dbg_state = "ACTIVATE";
       ST_READ: dbg_state = "READ";
       ST_WRIT: dbg_state = "WRITE";
-      ST_PREC: dbg_state = "PRECHARGE";
-      ST_PREA: dbg_state = "PRE-ALL";
+      ST_PREC: dbg_state = dfi_addr_o[10] ? "PRE-ALL" : "PRECHARGE";
       ST_REFR: dbg_state = "REFRESH";
       ST_ZQCL: dbg_state = "ZQCL";
       ST_MODE: dbg_state = "MODE REG";
@@ -667,18 +714,30 @@ module ddr3_ddl (
   reg [39:0] dbg_cmd;
 
   always @* begin
-    case (cmd_q)
+    case ({
+      dfi_ras_no, dfi_cas_no, dfi_we_no
+    })
       CMD_MODE: dbg_cmd = "MRS";
       CMD_REFR: dbg_cmd = "REF";
-      CMD_PREC: dbg_cmd = adr_q[10] ? "PREA" : "PRE";
+      CMD_PREC: dbg_cmd = dfi_addr_o[10] ? "PREA" : "PRE";
       CMD_ACTV: dbg_cmd = "ACT";
-      CMD_WRIT: dbg_cmd = adr_q[10] ? "WR-A" : "WR";
-      CMD_READ: dbg_cmd = adr_q[10] ? "RD-A" : "RD";
+      CMD_WRIT: dbg_cmd = dfi_addr_o[10] ? "WR-A" : "WR";
+      CMD_READ: dbg_cmd = dfi_addr_o[10] ? "RD-A" : "RD";
       CMD_ZQCL: dbg_cmd = "ZQCL";
       CMD_NOOP: dbg_cmd = "---";
       default:  dbg_cmd = "XXX";
     endcase
   end
+
+  always @(posedge clock) begin
+    if (!reset && ddr_cke_i && !ddr_cs_ni) begin
+      if (busy && ready) begin
+        $error("%10t: Can not by BUSY && READY at the same time!", $time);
+        $fatal;
+      end
+    end
+  end
+
 `endif
 
 

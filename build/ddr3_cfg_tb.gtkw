@@ -1,10 +1,10 @@
 [*]
 [*] GTKWave Analyzer v3.3.104 (w)1999-2020 BSI
-[*] Sun Oct 29 01:21:16 2023
+[*] Sun Oct 29 03:09:34 2023
 [*]
 [dumpfile] "./ddr3_cfg_tb.vcd"
-[dumpfile_mtime] "Sun Oct 29 01:20:38 2023"
-[dumpfile_size] 715845
+[dumpfile_mtime] "Sun Oct 29 03:06:32 2023"
+[dumpfile_size] 717742
 [savefile] "./ddr3_cfg_tb.gtkw"
 [timestart] 66153800
 [size] 2560 1376
@@ -85,8 +85,6 @@ ddr3_cfg_tb.ddr3_ddl_inst.ready
 @22
 ddr3_cfg_tb.ddr3_ddl_inst.count[8:0]
 ddr3_cfg_tb.ddr3_ddl_inst.state[3:0]
-@28
-ddr3_cfg_tb.ddr3_ddl_inst.cmd_q[2:0]
 @820
 [color] 2
 ddr3_cfg_tb.ddr3_ddl_inst.dbg_cmd[39:0]

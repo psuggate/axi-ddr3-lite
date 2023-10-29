@@ -7,6 +7,9 @@ module ddr3_fsm_tb;
   localparam DDR_FREQ_MHZ = 100;
   `include "ddr3_settings.vh"
 
+  // Trims an additional clock-cycle of latency, if '1'
+  parameter LOW_LATENCY = 1'b1;  // 0 or 1
+
   localparam BYPASS_ENABLE = 1'b1;
 
   localparam DDR_ROW_BITS = 13;
@@ -266,6 +269,7 @@ module ddr3_fsm_tb;
       .DDR_FREQ_MHZ(DDR_FREQ_MHZ),
       .DDR_ROW_BITS(DDR_ROW_BITS),
       .DDR_COL_BITS(DDR_COL_BITS),
+      .LOW_LATENCY (LOW_LATENCY ),
       .DFI_DQ_WIDTH(WIDTH)
   ) ddr3_ddl_inst (
       .clock(clock),

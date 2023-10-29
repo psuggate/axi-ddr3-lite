@@ -186,6 +186,7 @@ module ddr3_cfg (
   // todo:
   //  - CKE: 0 -> 1 in 500 us
   //  - mode-register read & write sequencing
+  //  - optimise the FSM-encoding for LUT4-based FPGAs
 
   localparam [3:0] ST_RSTN = 4'b0000;  // internal SDRAM reset
   localparam [3:0] ST_INIT = 4'b0001;  // power to stabilise

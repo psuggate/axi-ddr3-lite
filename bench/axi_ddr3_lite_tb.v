@@ -13,6 +13,8 @@ module axi_ddr3_lite_tb;
   parameter DDR_COL_BITS = 10;
   localparam CSB = DDR_COL_BITS - 1;
 
+  // Trims an additional clock-cycle of latency, if '1'
+  parameter LOW_LATENCY = 1'b1;  // 0 or 1
 
   // -- Data-path and address settings -- //
 
@@ -313,6 +315,7 @@ module axi_ddr3_lite_tb;
       .DDR_ROW_BITS (DDR_ROW_BITS),
       .DDR_COL_BITS (DDR_COL_BITS),
       .DDR_DQ_WIDTH (WIDTH / 2),
+      .LOW_LATENCY  (LOW_LATENCY ),
       .AXI_ID_WIDTH (REQID),
       .MEM_ID_WIDTH (REQID),
       .BYPASS_ENABLE(0)
