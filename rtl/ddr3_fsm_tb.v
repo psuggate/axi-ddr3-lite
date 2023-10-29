@@ -269,7 +269,7 @@ module ddr3_fsm_tb;
       .DDR_FREQ_MHZ(DDR_FREQ_MHZ),
       .DDR_ROW_BITS(DDR_ROW_BITS),
       .DDR_COL_BITS(DDR_COL_BITS),
-      .LOW_LATENCY (LOW_LATENCY ),
+      .LOW_LATENCY (LOW_LATENCY),
       .DFI_DQ_WIDTH(WIDTH)
   ) ddr3_ddl_inst (
       .clock(clock),

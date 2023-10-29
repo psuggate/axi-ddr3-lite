@@ -187,7 +187,7 @@ module ddr3_ddl (
   reg [XSB:0] count;
   reg [DSB:0] delay;
 
-  wire ctl_pre_w, nop_w;
+  wire precharge, nop_w;
   wire [XSB:0] cnext;
 
 
@@ -195,7 +195,7 @@ module ddr3_ddl (
 
   assign ctl_run_o = run_q;
   assign ctl_rdy_o = ready;
-  assign ctl_pre_w = ctl_adr_i[10];
+  assign precharge = ctl_adr_i[10];
 
   assign mem_wready_o = wr_ready;
   assign mem_rvalid_o = dfi_rvld_i;
@@ -204,7 +204,6 @@ module ddr3_ddl (
 
   // -- Internal Control Signals -- //
 
-  // assign nop_w = ~ctl_req_i | ~ready | busy;
   assign nop_w = ~ctl_req_i | ~ready;
   assign cnext = count - 1;
 
@@ -276,20 +275,10 @@ module ddr3_ddl (
   //  - optimise the FSM-encoding for LUT4-based FPGAs
   //  - can use last command as the state-value ??
 
-  localparam ST_IDLE = 3'b111;
-  localparam ST_ZQCL = 3'b110;
-  localparam ST_READ = 3'b101;
-  localparam ST_WRIT = 3'b100;
-  localparam ST_ACTV = 3'b011;
-  localparam ST_PREC = 3'b010;
-  localparam ST_REFR = 3'b001;
-  localparam ST_MODE = 3'b000;
-
   reg [2:0] state;
 
   always @(posedge clock) begin
-    if (reset || !ddr_cke_i) begin
-      state <= ST_IDLE;
+    if (!ddr_cke_i) begin
       ready <= 1'b0;
       busy  <= 1'b0;
       delay <= DINIT;
@@ -305,64 +294,68 @@ module ddr3_ddl (
       end else begin
         ready <= delay[0];
       end
-    end else if (!nop_w) begin
+    end else if (ctl_req_i && ready) begin
+      ready <= 1'b0;
+    end
+  end
+
+  always @(posedge clock) begin
+    if (reset || !ddr_cke_i) begin
+      state <= CMD_NOOP;
+      ready <= 1'b0;
+      busy  <= 1'b0;
+      delay <= DINIT;
+      count <= CZERO;
+    end else if (busy || !ready) begin
+      delay <= {1'b0, delay[DSB:1]};
+      if (busy) begin
+        count <= cnext;
+      end
+      if (cnext == CZERO) begin
+        busy  <= 1'b0;
+        ready <= 1'b1;
+      end else begin
+        ready <= delay[0];
+      end
+    end else if (ctl_req_i && ready) begin
+      // All commands are spaced by at least one NOP, with this implementation
       ready <= 1'b0;
 
       case (state)
-        ST_IDLE: begin
-          // Possible transitions:
-          //  - ACTV  --  precedes RD/WR commands
-          //  - PREC  --  precedes REFR (but we don't keep pages ACTV + IDLE) ??
-          //  - REFR  --  REFRESH periodically
-          //  - MODE  --  during initialisation
-          //  - ZQCL  --  as the last step during initialisation
+        CMD_NOOP: begin
+          state <= ctl_cmd_i;
+
           case (ctl_cmd_i)
-            CMD_ACTV: begin
-              // Row-ACTIVATE, which precedes RD/WR
-              // Default activation time is 6 cycles (DLL=off) ??
-              state <= ST_ACTV;
-              delay <= DELAY_ACT_TO_R_W;
-            end
+            // Row-ACTIVATE, which precedes RD/WR
+            // Default activation time is 6 cycles (DLL=off) ??
+            CMD_ACTV: delay <= DELAY_ACT_TO_R_W;
 
-            CMD_PREC: begin
-              // Bank (and row) PRECHARGE
-              // Note: usually a PRECHARGE ALL command
-              // Default is 2 cycles (DLL=off)
-              state <= ST_PREC;
-              delay <= DELAY_PRE_TO_ACT;
-            end
+            // Bank (and row) PRECHARGE
+            // Note: usually a PRECHARGE ALL command
+            // Default is 2 cycles (DLL=off)
+            CMD_PREC: delay <= DELAY_PRE_TO_ACT;
 
-            CMD_REFR: begin
-              // REFRESH the SDRAM contents
-              // Defaults to 11 cycles, at 100 MHz (DLL=off)
-              state <= ST_REFR;
-              delay <= DELAY_REF_TO_ACT;
-            end
+            // REFRESH the SDRAM contents
+            // Defaults to 11 cycles, at 100 MHz (DLL=off)
+            CMD_REFR: delay <= DELAY_REF_TO_ACT;
 
-            CMD_MODE: begin
-              // Set MODE register
-              state <= ST_MODE;
-              delay <= DELAY_MRD_TO_CMD;
-            end
+            // Set MODE register
+            CMD_MODE: delay <= DELAY_MRD_TO_CMD;
 
+            // Impedance calibration
+            // Defaults to 512 cycles, with DLL=off
             CMD_ZQCL: begin
-              // Impedance calibration
-              // Defaults to 512 cycles, with DLL=off
-              state <= ST_ZQCL;
               count <= DDR_CZQINIT;
               busy  <= 1'b1;
             end
 
-            CMD_NOOP: begin
-              // Ignore these, other than noting that the memory-contoller is
-              // being a bit weird ...
-              $display("%10t: DDL: Unnecessary NOP request", $time);
-              ready <= 1'b1;
-            end
+            // Ignore these, other than noting that the memory-contoller is
+            // being a bit weird ...
+            CMD_NOOP: $display("%10t: DDL: Unnecessary NOP request", $time);
 
             default: begin
               $error("%10t: DDL: Invalid command: 0x%1x", $time, ctl_cmd_i);
-              state <= 'bx;
+              state <= ctl_cmd_i;
               ready <= 1'bx;
               busy  <= 1'bx;
               count <= 'bx;
@@ -371,42 +364,25 @@ module ddr3_ddl (
           endcase
         end
 
-        ST_ACTV: begin
+        CMD_ACTV: begin
           // ACTIVATE a row/page within a bank
-          // Possible transitions:
-          //  - ACTV  --  allow back-to-back ACTIVATIONs ??
-          //  - PREC  --  weird, but legit. ??
-          //  - READ
-          //  - WRIT
+          // Note: the command has been issued in parallel with this clause, so
+          //   we are just determing the delay-length, and which state we'll be
+          //   in for the next command
+          if (precharge && (ctl_cmd_i == CMD_READ || ctl_cmd_i == CMD_WRIT)) begin
+            // AUTO-PRECHARGE issued with the command, so back to IDLE ...
+            state <= CMD_NOOP;
+          end else begin
+            // Else, just make the state match the command ...
+            state <= ctl_cmd_i;
+          end
+
+          // todo: probably would be easy to support more commands ??
           case (ctl_cmd_i)
-            CMD_READ: begin
-              if (ctl_pre_w) begin
-                state <= ST_IDLE;
-                delay <= DELAY_RDA_TO_ACT;
-              end else begin
-                state <= ST_READ;
-                delay <= DELAY__RD_TO__RD;
-              end
-            end
-
-            CMD_WRIT: begin
-              if (ctl_pre_w) begin
-                state <= ST_IDLE;
-                delay <= DELAY_WRA_TO_ACT;
-              end else begin
-                state <= ST_WRIT;
-                delay <= DELAY__WR_TO__WR;
-              end
-            end
-
-            CMD_ACTV: begin
-              // todo: delay depends on if same bank, or different
-              state <= ST_ACTV;
-              delay <= DELAY_ACT_TO_ACT_S;
-            end
-
+            CMD_READ: delay <= precharge ? DELAY_RDA_TO_ACT : DELAY__RD_TO__RD;
+            CMD_WRIT: delay <= precharge ? DELAY_WRA_TO_ACT : DELAY__WR_TO__WR;
+            CMD_ACTV: delay <= DELAY_ACT_TO_ACT_S;
             default: begin
-              state <= 'bx;
               delay <= 'bx;
               $error("%10t: DDL: Unexpected command (0x%1x) in 'ST_ACTV'", $time, ctl_cmd_i);
               $fatal;
@@ -414,32 +390,24 @@ module ddr3_ddl (
           endcase
         end
 
-        ST_READ: begin
+        CMD_READ: begin
+          if (precharge && (ctl_cmd_i == CMD_READ || ctl_cmd_i == CMD_WRIT)) begin
+            // AUTO-PRECHARGE issued with the command, so back to IDLE ...
+            state <= CMD_NOOP;
+          end else begin
+            // Else, just make the state match the command ...
+            state <= ctl_cmd_i;
+          end
+
+          // todo: check timings and testbenches
+          //  - RD -> RD (default: 4 cycles)
+          //  - RD -> WR (default: 6 cycles)
+          //  - RD -> ACT (default: 4 cycles)
           case (ctl_cmd_i)
-            CMD_READ: begin
-              if (ctl_pre_w) begin
-                state <= ST_IDLE;
-                delay <= DELAY_RDA_TO_ACT;
-              end else begin
-                // RD -> RD (default: 4 cycles)
-                delay <= DELAY__RD_TO__RD;
-              end
-            end
-
-            CMD_WRIT: begin
-              // RD -> WR (default: 6 cycles)
-              delay <= DELAY__RD_TO__WR;
-              state <= ST_WRIT;
-            end
-
-            CMD_ACTV: begin
-              // RD -> ACT (default: 4 cycles)
-              delay <= 2;
-              state <= ST_ACTV;
-            end
-
+            CMD_READ: delay <= precharge ? DELAY_RDA_TO_ACT : DELAY__RD_TO__RD;
+            CMD_WRIT: delay <= precharge ? DELAY_WRA_TO_ACT : DELAY__RD_TO__WR;
+            CMD_ACTV: delay <= 2;
             default: begin
-              state <= 'bx;
               delay <= 'bx;
               $error("%10t: DDL: Unexpected command (0x%1x) in 'ST_READ'", $time, ctl_cmd_i);
               $fatal;
@@ -447,34 +415,26 @@ module ddr3_ddl (
           endcase
         end
 
-        ST_WRIT: begin
+        CMD_WRIT: begin
+          if (precharge && (ctl_cmd_i == CMD_READ || ctl_cmd_i == CMD_WRIT)) begin
+            // AUTO-PRECHARGE issued with the command, so back to IDLE ...
+            state <= CMD_NOOP;
+          end else begin
+            // Else, just make the state match the command ...
+            state <= ctl_cmd_i;
+          end
+
+          // todo: check timings and testbenches
+          //  - WR + AUTO-PRECHARGE (default: 14 cycles)
+          //  - WR -> WR (default: 4 cycles)
+          //  - WR -> RD (default: 14 + 4 cycles)
+          //  - WR -> ACT (default: 4 cycles, different bank)
+          //  - WR -> PRE -> ACT (default: 16 cycles, same bank)
           case (ctl_cmd_i)
-            CMD_WRIT: begin
-              if (ctl_pre_w) begin
-                // WR + AUTO-PRECHARGE (default: 14 cycles)
-                delay <= DELAY_WRA_TO_ACT;
-                state <= ST_IDLE;
-              end else begin
-                // WR -> WR (default: 4 cycles)
-                delay <= DELAY__WR_TO__WR;
-              end
-            end
-
-            CMD_READ: begin
-              // WR -> RD (default: 14 + 4 cycles)
-              state <= ST_READ;
-              delay <= DELAY__WR_TO__RD;
-            end
-
-            CMD_ACTV: begin
-              // WR -> ACT (default: 4 cycles, different bank)
-              // WR -> PRE -> ACT (default: 16 cycles, same bank)
-              state <= ST_ACTV;
-              delay <= 2;
-            end
-
+            CMD_WRIT: delay <= precharge ? DELAY_WRA_TO_ACT : DELAY__WR_TO__WR;
+            CMD_READ: delay <= precharge ? DELAY_RDA_TO_ACT : DELAY__WR_TO__RD;
+            CMD_ACTV: delay <= 2;
             default: begin
-              state <= 'bx;
               delay <= 'bx;
               $error("%10t: DDL: Unexpected command (0x%1x) in 'ST_WRIT'", $time, ctl_cmd_i);
               $fatal;
@@ -482,32 +442,13 @@ module ddr3_ddl (
           endcase
         end
 
-        ST_PREC: begin
-          // Wait until timer has elapsed, for a PRECHARGE
-          // Possible transitions:
-          //  - ACTV
-          //  - REFR
-          //  - IDLE
-          //  - MODE  --  weird, but legit. ??
-          // plus unsupported stuff, like power-down.
+        CMD_PREC: begin  // PRECHARGE
+          state <= ctl_cmd_i;
+
           case (ctl_cmd_i)
-            CMD_ACTV: begin
-              state <= ST_ACTV;
-              delay <= DELAY_PRE_TO_ACT;
-            end
-
-            CMD_REFR: begin
-              state <= ST_REFR;
-              delay <= 1 << PRE_CYCLES;
-            end
-
-            CMD_NOOP: begin
-              state <= ST_IDLE;
-              delay <= 1 << PRE_CYCLES;
-            end
-
+            CMD_ACTV: delay <= DELAY_PRE_TO_ACT;
+            CMD_REFR: delay <= DELAY_REF_TO_ACT;
             default: begin
-              state <= 'bx;
               delay <= 'bx;
               $error("%10t: DDL: Unexpected command (0x%1x) in 'ST_PREC'", $time, ctl_cmd_i);
               $fatal;
@@ -515,26 +456,16 @@ module ddr3_ddl (
           endcase
         end
 
-        ST_REFR: begin
-          // Wait until timer has elapsed
-          // Possible transitions:
-          //  - ACTV
-          //  - IDLE
-          //  - MODE  --  weird, but legit. ??
-          //  - REFR  --  up to 16x REFR can be issued within 2*tREFI
-          case (ctl_cmd_i)
-            CMD_ACTV: begin
-              state <= ST_ACTV;
-              delay <= DELAY_ACT_TO_R_W;
-            end
+        CMD_REFR: begin  // REFRESH
+          state <= ctl_cmd_i;
 
+          case (ctl_cmd_i)
+            CMD_ACTV: delay <= DELAY_ACT_TO_R_W;
             CMD_REFR: begin
               $display("%10t: DDL: Back-to-back REFRESH commands issued", $time);
               delay <= DELAY_REF_TO_ACT;
             end
-
             default: begin
-              state <= 'bx;
               delay <= 'bx;
               $error("%10t: DDL: Unexpected command (0x%1x) in 'ST_REFR'", $time, ctl_cmd_i);
               $fatal;
@@ -542,30 +473,18 @@ module ddr3_ddl (
           endcase
         end
 
-        ST_MODE: begin
+        CMD_MODE: begin  // SET MODE REG
+          state <= ctl_cmd_i;
+
           case (ctl_cmd_i)
-            CMD_MODE: begin
-              delay <= DELAY_MRD_TO_CMD;
-            end
-
-            CMD_REFR: begin
-              state <= ST_REFR;
-              delay <= DELAY_REF_TO_ACT;
-            end
-
-            CMD_PREC: begin
-              state <= ST_PREC;
-              delay <= DELAY_PRE_TO_ACT;
-            end
-
+            CMD_MODE: delay <= DELAY_MRD_TO_CMD;
+            CMD_REFR: delay <= DELAY_REF_TO_ACT;
+            CMD_PREC: delay <= DELAY_PRE_TO_ACT;
             CMD_ZQCL: begin
-              state <= ST_ZQCL;
               busy  <= 1'b1;
               count <= DDR_CZQINIT;
             end
-
             default: begin
-              state <= 'bx;
               delay <= 'bx;
               $error("%10t: DDL: Unexpected command (0x%1x) in 'ST_MODE'", $time, ctl_cmd_i);
               $fatal;
@@ -573,26 +492,14 @@ module ddr3_ddl (
           endcase
         end
 
-        ST_ZQCL: begin
-          state <= ST_IDLE;
+        CMD_ZQCL: begin  // CALIBRATE
+          state <= ctl_cmd_i;
+
           case (ctl_cmd_i)
-            CMD_ACTV: begin
-              state <= ST_ACTV;
-              delay <= DELAY_ACT_TO_R_W;
-            end
-
-            CMD_REFR: begin
-              state <= ST_REFR;
-              delay <= DELAY_REF_TO_ACT;
-            end
-
-            CMD_PREC: begin
-              state <= ST_PREC;
-              delay <= DELAY_PRE_TO_ACT;
-            end
-
+            CMD_ACTV: delay <= DELAY_ACT_TO_R_W;
+            CMD_REFR: delay <= DELAY_REF_TO_ACT;
+            CMD_PREC: delay <= DELAY_PRE_TO_ACT;
             default: begin
-              state <= 'bx;
               delay <= 'bx;
               $error("%10t: DDL: Unexpected command (0x%1x) in 'ST_ZQCL'", $time, ctl_cmd_i);
               $fatal;
@@ -602,7 +509,7 @@ module ddr3_ddl (
 
         default: begin
           $error("%10t: DDL: Unexpected state: 0x%02x", $time, state);
-          state <= ST_IDLE;
+          state <= ctl_cmd_i;
           ready <= 1'bx;
           busy  <= 1'bx;
           count <= 'bx;
@@ -611,7 +518,7 @@ module ddr3_ddl (
       endcase
     end else if (ready) begin
       // No follow-up command, so IDLE
-      state <= ST_IDLE;
+      state <= CMD_NOOP;
     end
   end
 
@@ -699,15 +606,15 @@ module ddr3_ddl (
 
   always @* begin
     case (state)
-      ST_IDLE: dbg_state = ddr_cke_i & ~ddr_cs_ni & ~reset ? "IDLE" : "INIT";
-      ST_ACTV: dbg_state = "ACTIVATE";
-      ST_READ: dbg_state = "READ";
-      ST_WRIT: dbg_state = "WRITE";
-      ST_PREC: dbg_state = dfi_addr_o[10] ? "PRE-ALL" : "PRECHARGE";
-      ST_REFR: dbg_state = "REFRESH";
-      ST_ZQCL: dbg_state = "ZQCL";
-      ST_MODE: dbg_state = "MODE REG";
-      default: dbg_state = "UNKNOWN";
+      CMD_NOOP: dbg_state = ddr_cke_i & ~ddr_cs_ni & ~reset ? "IDLE" : "INIT";
+      CMD_ACTV: dbg_state = "ACTIVATE";
+      CMD_READ: dbg_state = "READ";
+      CMD_WRIT: dbg_state = "WRITE";
+      CMD_PREC: dbg_state = dfi_addr_o[10] ? "PRE-ALL" : "PRECHARGE";
+      CMD_REFR: dbg_state = "REFRESH";
+      CMD_ZQCL: dbg_state = "ZQCL";
+      CMD_MODE: dbg_state = "MODE REG";
+      default:  dbg_state = "UNKNOWN";
     endcase
   end
 

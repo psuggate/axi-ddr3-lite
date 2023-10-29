@@ -196,7 +196,7 @@ module axi_ddr3_lite (
   wire [SSB:0] wr_mask;
   wire [MSB:0] wr_data, rd_data;
 
-  wire ddl_run, ddl_req, ddl_seq, ddl_rdy, ddl_ref;
+  wire ddl_run, ddl_req, ddl_seq, ddl_ref, ddl_rdy;
   wire [2:0] ddl_cmd, ddl_ba;
   wire [ISB:0] ddl_tid;
   wire [RSB:0] ddl_adr;
@@ -204,6 +204,13 @@ module axi_ddr3_lite (
   wire cfg_req, cfg_run, cfg_rdy, cfg_ref;
   wire [2:0] cfg_cmd, cfg_ba;
   wire [RSB:0] cfg_adr;
+
+  wire ctl_run, ctl_req, ctl_seq, ctl_rdy;
+  wire [2:0] ctl_cmd, ctl_ba;
+  wire [RSB:0] ctl_adr;
+
+  wire by_valid, by_ready, by_last;
+  wire [MSB:0] by_data;
 
 
   assign fsm_wrlst = 1'b1;
@@ -336,13 +343,117 @@ module axi_ddr3_lite (
       .ddl_req_o(ddl_req),  // Controller <-> DFI
       .ddl_seq_o(ddl_seq),
       .ddl_rdy_i(ddl_rdy),
-      .ddl_ref_i(cfg_ref),
+      .ddl_ref_i(ddl_ref),
       .ddl_cmd_o(ddl_cmd),
       .ddl_tid_o(ddl_tid),
       .ddl_ba_o (ddl_ba),
       .ddl_adr_o(ddl_adr)
   );
 
+  ddr3_bypass #(
+      .DDR_FREQ_MHZ(DDR_FREQ_MHZ),
+      .DDR_ROW_BITS(DDR_ROW_BITS),
+      .DDR_COL_BITS(DDR_COL_BITS),
+      .WIDTH(AXI_DAT_BITS),
+      .ADDRS(ADDRS),
+      .REQID(AXI_ID_WIDTH),
+      .BYPASS_ENABLE(1'b0)
+  ) ddr3_bypass_inst (
+      .clock(clock),
+      .reset(~cfg_run),
+
+      .axi_arvalid_i(byp_arvalid_i),  // AXI4 fast-path, read-only port
+      .axi_arready_o(byp_arready_o),
+      .axi_araddr_i(byp_araddr_i),
+      .axi_arid_i(byp_arid_i),
+      .axi_arlen_i(byp_arlen_i),
+      .axi_arburst_i(byp_arburst_i),
+
+      .axi_rready_i(byp_rready_i),
+      .axi_rvalid_o(byp_rvalid_o),
+      .axi_rlast_o(byp_rlast_o),
+      .axi_rresp_o(byp_rresp_o),
+      .axi_rid_o(byp_rid_o),
+      .axi_rdata_o(byp_rdata_o),
+
+      .ddl_rvalid_i(rd_valid),  // DDL READ data-path
+      .ddl_rready_o(rd_ready),
+      .ddl_rlast_i (rd_last),
+      .ddl_rdata_i (rd_data),
+
+      .byp_run_i(ctl_run),  // Connects to the DDL
+      .byp_req_o(ctl_req),
+      .byp_seq_o(ctl_seq),
+      .byp_ref_i(cfg_ref),
+      .byp_rdy_i(ctl_rdy),
+      .byp_cmd_o(ctl_cmd),
+      .byp_ba_o (ctl_ba),
+      .byp_adr_o(ctl_adr),
+
+      .ctl_run_o(),  // Intercepts these memory controller -> DDL signals
+      .ctl_req_i(ddl_req),
+      .ctl_seq_i(ddl_seq),
+      .ctl_ref_o(ddl_ref),
+      .ctl_rdy_o(ddl_rdy),
+      .ctl_cmd_i(ddl_cmd),
+      .ctl_ba_i(ddl_ba),
+      .ctl_adr_i(ddl_adr),
+
+      .ctl_rvalid_o(by_valid),  // READ data from DDL -> memory controller data-path
+      .ctl_rready_i(by_ready),
+      .ctl_rlast_o (by_last),
+      .ctl_rdata_o (by_data)
+  );
+
+
+  // -- Coordinate with the DDR3 to PHY Interface -- //
+
+  ddr3_ddl #(
+      .DDR_FREQ_MHZ(DDR_FREQ_MHZ),
+      .DDR_ROW_BITS(DDR_ROW_BITS),
+      .DDR_COL_BITS(DDR_COL_BITS),
+      .LOW_LATENCY (LOW_LATENCY),
+      .DFI_DQ_WIDTH(PHY_DAT_BITS),
+      .DFI_DM_WIDTH(PHY_STB_BITS)
+  ) ddr3_ddl_inst (
+      .clock(clock),
+      .reset(reset),
+
+      .ddr_cke_i(dfi_cke_o),
+      .ddr_cs_ni(dfi_cs_no),
+
+      .ctl_run_o(ctl_run),
+      .ctl_req_i(ctl_req),
+      .ctl_seq_i(ctl_seq),
+      .ctl_rdy_o(ctl_rdy),
+      .ctl_cmd_i(ctl_cmd),
+      .ctl_ba_i (ctl_ba),
+      .ctl_adr_i(ctl_adr),
+
+      .mem_wvalid_i(wr_valid),
+      .mem_wready_o(wr_ready),
+      .mem_wlast_i (wr_last),
+      .mem_wrmask_i(wr_mask),
+      .mem_wrdata_i(wr_data),
+
+      .mem_rvalid_o(by_valid),
+      .mem_rready_i(by_ready),
+      .mem_rlast_o (by_last),
+      .mem_rddata_o(by_data),
+
+      .dfi_ras_no(dfi_ras_no),
+      .dfi_cas_no(dfi_cas_no),
+      .dfi_we_no (dfi_we_no),
+      .dfi_bank_o(dfi_bank_o),
+      .dfi_addr_o(dfi_addr_o),
+      .dfi_wstb_o(dfi_wstb_o),
+      .dfi_wren_o(dfi_wren_o),
+      .dfi_mask_o(dfi_mask_o),
+      .dfi_data_o(dfi_data_o),
+      .dfi_rden_o(dfi_rden_o),
+      .dfi_rvld_i(dfi_rvld_i),
+      .dfi_data_i(dfi_data_i)
+  );
 
   ddr3_cfg #(
       .DDR_FREQ_MHZ(DDR_FREQ_MHZ),
@@ -366,56 +477,6 @@ module axi_ddr3_lite (
       .ctl_ref_o(cfg_ref),
       .ctl_ba_o (cfg_ba),
       .ctl_adr_o(cfg_adr)
-  );
-
-
-  // -- Coordinate with the DDR3 to PHY Interface -- //
-
-  ddr3_ddl #(
-      .DDR_FREQ_MHZ(DDR_FREQ_MHZ),
-      .DDR_ROW_BITS(DDR_ROW_BITS),
-      .DDR_COL_BITS(DDR_COL_BITS),
-      .LOW_LATENCY (LOW_LATENCY ),
-      .DFI_DQ_WIDTH(PHY_DAT_BITS),
-      .DFI_DM_WIDTH(PHY_STB_BITS)
-  ) ddr3_ddl_inst (
-      .clock(clock),
-      .reset(reset),
-
-      .ddr_cke_i(dfi_cke_o),
-      .ddr_cs_ni(dfi_cs_no),
-
-      .ctl_run_o(ddl_run),
-      .ctl_req_i(ddl_req),
-      .ctl_seq_i(ddl_seq),
-      .ctl_rdy_o(ddl_rdy),
-      .ctl_cmd_i(ddl_cmd),
-      .ctl_ba_i (ddl_ba),
-      .ctl_adr_i(ddl_adr),
-
-      .mem_wvalid_i(wr_valid),
-      .mem_wready_o(wr_ready),
-      .mem_wlast_i (wr_last),
-      .mem_wrmask_i(wr_mask),
-      .mem_wrdata_i(wr_data),
-
-      .mem_rvalid_o(rd_valid),
-      .mem_rready_i(rd_ready),
-      .mem_rlast_o (rd_last),
-      .mem_rddata_o(rd_data),
-
-      .dfi_ras_no(dfi_ras_no),
-      .dfi_cas_no(dfi_cas_no),
-      .dfi_we_no (dfi_we_no),
-      .dfi_bank_o(dfi_bank_o),
-      .dfi_addr_o(dfi_addr_o),
-      .dfi_wstb_o(dfi_wstb_o),
-      .dfi_wren_o(dfi_wren_o),
-      .dfi_mask_o(dfi_mask_o),
-      .dfi_data_o(dfi_data_o),
-      .dfi_rden_o(dfi_rden_o),
-      .dfi_rvld_i(dfi_rvld_i),
-      .dfi_data_i(dfi_data_i)
   );
 
 
