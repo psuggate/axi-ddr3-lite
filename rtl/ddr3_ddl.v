@@ -174,7 +174,8 @@ module ddr3_ddl (
 
   // todo: fix/finalise these timings ...
   localparam DELAY_RDA_TO_ACT = 1 << (CYCLES_RDA_TO_ACT - 1);
-  localparam DELAY_WRA_TO_ACT = 1 << (CYCLES_WRA_TO_ACT - 1);
+  // localparam DELAY_WRA_TO_ACT = 1 << (CYCLES_WRA_TO_ACT - 1);
+  localparam DELAY_WRA_TO_ACT = 1 << (CYCLES_WRA_TO_ACT + 1); // todo
 
 
   reg [WSB:0] wr_delay, rd_delay;

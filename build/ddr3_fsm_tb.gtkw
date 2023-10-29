@@ -1,10 +1,10 @@
 [*]
 [*] GTKWave Analyzer v3.3.104 (w)1999-2020 BSI
-[*] Sat Oct 28 21:24:02 2023
+[*] Sun Oct 29 01:21:31 2023
 [*]
 [dumpfile] "./ddr3_fsm_tb.vcd"
-[dumpfile_mtime] "Sat Oct 28 21:23:51 2023"
-[dumpfile_size] 43935
+[dumpfile_mtime] "Sun Oct 29 01:20:38 2023"
+[dumpfile_size] 44017
 [savefile] "./ddr3_fsm_tb.gtkw"
 [timestart] 0
 [size] 2560 1376

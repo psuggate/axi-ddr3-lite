@@ -378,7 +378,7 @@ module axi_ddr3_lite_tb;
       .dfi_odt_o (dfi_odt),
       .dfi_bank_o(dfi_bank),
       .dfi_addr_o(dfi_addr),
-      .dfi_wstb_o(dfi_wren),
+      .dfi_wstb_o(dfi_wstb),
       .dfi_wren_o(dfi_wren),
       .dfi_mask_o(dfi_mask),
       .dfi_data_o(dfi_wdata),
