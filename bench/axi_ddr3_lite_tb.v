@@ -177,6 +177,20 @@ module axi_ddr3_lite_tb;
   end
 
 
+// -- Stimulus for the Bypass-Port -- //
+
+always @(posedge clock) begin
+  if (reset) begin
+    abvalid <= 1'b0;
+    byaddr <= 0;
+    byid <= 0;
+    bylen <= 3; // (3 + 1) * 32b
+    byburst <= 2'b01; // INCR
+    dbready <= 1'b0; // todo: 1'b1;
+  end
+end
+
+
   // -- DDR3 Simulation Model from Micron -- //
 
   ddr3 ddr3_sdram_inst (
