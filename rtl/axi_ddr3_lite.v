@@ -307,8 +307,7 @@ module axi_ddr3_lite (
       .DDR_COL_BITS(DDR_COL_BITS),
       .DDR_FREQ_MHZ(DDR_FREQ_MHZ),
       .WIDTH(AXI_DAT_BITS),
-      .ADDRS(ADDRS),
-      .BYPASS_ENABLE(BYPASS_ENABLE)
+      .ADDRS(ADDRS)
   ) ddr3_fsm_inst (
       .clock(clock),
       .rst_n(cfg_run),
@@ -326,13 +325,6 @@ module axi_ddr3_lite (
       .mem_rderr_o(fsm_rderr),
       .mem_rdtid_i(fsm_rdtid),
       .mem_rdadr_i(fsm_rdadr),
-
-      .byp_rdreq_i(byp_arvalid_i),
-      .byp_rdlst_i(byp_rdlst),  // todo
-      .byp_rdack_o(byp_arready_o),
-      .byp_rderr_o(),  // todo
-      .byp_rdtid_i(byp_arid_i),
-      .byp_rdadr_i(byp_araddr_i),
 
       .cfg_req_i(cfg_req),  // Configuration port
       .cfg_rdy_o(cfg_rdy),

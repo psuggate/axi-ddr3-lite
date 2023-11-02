@@ -5,11 +5,6 @@
  * Specifics of DDR3 initialisation and timings are handled one level down, by
  * the "DFI" module. This module schedules row-activations, bank-precharging,
  * read-requests, and data-writes.
- * 
- * Note:
- *  - if enabled, "fast-path" read-requests can use the bypass ('byp_*') ports
- *    for low-latency, high-priority reads; e.g., to service fetch-requests from
- *    a processor (i.e., one of its caches);
  */
 module ddr3_fsm (
     clock,
@@ -28,13 +23,6 @@ module ddr3_fsm (
     mem_rdadr_i,
     mem_rdack_o,
     mem_rderr_o,
-
-    byp_rdreq_i,  // Read bypass-/fast- path port
-    byp_rdlst_i,
-    byp_rdtid_i,
-    byp_rdadr_i,
-    byp_rdack_o,
-    byp_rderr_o,
 
     cfg_req_i,  // Configuration port
     cfg_rdy_o,
@@ -56,22 +44,11 @@ module ddr3_fsm (
   parameter DDR_FREQ_MHZ = 100;
   `include "ddr3_settings.vh"
 
-  // Enables the (read-) bypass port
-  parameter BYPASS_ENABLE = 1'b0;
-
   // If enabled, the {wrlst, rdlst} are used to decide when to ACTIVATE and
   // PRECHARGE rows
   // todo:
   parameter WRLAST_ENABLE = 1'b1;
   parameter RDLAST_ENABLE = 1'b1;
-  parameter BYLAST_ENABLE = 1'b1;
-
-  // Allows reads to be moved ahead of writes, and writes moved ahead of reads
-  // (for same-bank accesses), in order to reduce turn-around costs
-  // todo:
-  //  - design & implement;
-  //  - is this a good idea; i.e., is it worth the resources & complexity ??
-  parameter OUT_OF_ORDER = 0;
 
   // Data-path and address settings
   parameter WIDTH = 32;
@@ -134,14 +111,6 @@ module ddr3_fsm (
   input [ISB:0] mem_rdtid_i;
   input [ASB:0] mem_rdadr_i;
 
-  // Bypass (fast-read) port
-  input byp_rdreq_i;
-  input byp_rdlst_i;  // If asserted, then LAST of burst
-  output byp_rdack_o;
-  output byp_rderr_o;
-  input [ISB:0] byp_rdtid_i;
-  input [ASB:0] byp_rdadr_i;
-
   // Configuration port
   input cfg_req_i;
   output cfg_rdy_o;
@@ -199,8 +168,8 @@ module ddr3_fsm (
   localparam [3:0] ST_REFR = 4'b0001;
 
 
-  reg wrack, rdack, byack;
-  wire byp_req, mem_req, refresh;
+  reg wrack, rdack;
+  wire mem_req, refresh;
 
   reg req_q, req_x, req_s, seq_q, seq_x, seq_s;
   reg [2:0] cmd_q, cmd_x, cmd_s, ba_q, ba_x, ba_s;
@@ -210,7 +179,7 @@ module ddr3_fsm (
   wire [RSB:0] row_w, col_w;
   wire [2:0] bank_w;
 
-  reg store, fetch, fastp;
+  reg store, fetch;
   reg [3:0] state, snext;
 
 
@@ -218,7 +187,6 @@ module ddr3_fsm (
 
   assign mem_wrack_o = wrack;
   assign mem_rdack_o = rdack;
-  assign byp_rdack_o = byack;
 
   assign ddl_req_o = req_q;
   assign ddl_seq_o = seq_q;
@@ -234,23 +202,24 @@ module ddr3_fsm (
 
   assign cfg_col_w = {DDR_COL_BITS{1'bx}};
 
+// todo: make sure that a single 4:1 MUX can be used for setting the value of
+//   'adr_q' (from 'rdadr, wradr, cfg_adr, adr_x') ??
+assign row_addr_sel = ddl_rdy_i && (state == ST_ACTV || state == ST_READ || state == ST_WRIT);
+
   assign asel = !rst_n ? 2'b11
-              : byp_rdreq_i & BYPASS_ENABLE ? 2'b00
+              : row_addr_sel ? 2'b00
               : mem_rdreq_i ? 2'b01
               : mem_wrreq_i ? 2'b10
-              : BYPASS_ENABLE ? 2'b00
-              : 2'b01 ;
+              : 2'b00 ;
 
   assign {row_w, bank_w, col_l} = asel == 2'b11 ? {cfg_adr_i, cfg_ba_i, cfg_col_w}
                                 : asel == 2'b10 ? mem_wradr_i
                                 : asel == 2'b01 ? mem_rdadr_i
-                                : byp_rdadr_i ;
+                                : adr_x ;
   assign {col_w[RSB:11], col_w[9:0]} = {{(DDR_ROW_BITS - DDR_COL_BITS - 1) {1'b0}}, col_l};
   assign col_w[10] = auto_w;
 
-  assign auto_w = byp_rdreq_i & BYPASS_ENABLE ? byp_rdlst_i
-                : mem_rdreq_i ? mem_rdlst_i
-                : mem_wrreq_i & mem_wrlst_i;
+  assign auto_w = mem_rdreq_i ? mem_rdlst_i : mem_wrreq_i & mem_wrlst_i;
 
 
   // -- Main State Machine -- //
@@ -271,17 +240,17 @@ module ddr3_fsm (
       case (state)
         ST_IDLE: begin
           // Wait for read-/write- requests -- refresh and precharging, as required
-          if (refresh && !byp_req) begin
+          if (refresh) begin
             // Note: we do not 'IDLE' with 'ACTIVE' banks
             state <= ST_REFR;
             store <= 1'b0;
             fetch <= 1'b0;
             req_q <= 1'b1;
             cmd_q <= CMD_REFR;
-          end else if (byp_req || mem_rdreq_i || mem_wrreq_i) begin
+          end else if (mem_rdreq_i || mem_wrreq_i) begin
             state <= ST_ACTV;
-            store <= ~(byp_req | mem_rdreq_i);
-            fetch <= byp_req | mem_rdreq_i;
+            store <= ~mem_rdreq_i;
+            fetch <= mem_rdreq_i;
             req_q <= 1'b1;  // 1st command, RAS#
             cmd_q <= CMD_ACTV;
           end else begin
@@ -352,42 +321,31 @@ module ddr3_fsm (
     if (!rst_n) begin
       wrack <= 1'b0;
       rdack <= 1'b0;
-      byack <= 1'b0;
-      fastp <= 1'b0;
     end else begin
       case (state)
         ST_IDLE: begin
-          if (byp_rdreq_i || refresh) begin
+          if (refresh) begin
             wrack <= 1'b0;
             rdack <= 1'b0;
-            byack <= byp_rdreq_i;
-            fastp <= byp_rdreq_i;
           end else begin
             wrack <= mem_wrreq_i & ~mem_rdreq_i;
             rdack <= mem_rdreq_i;
-            byack <= 1'b0;
-            fastp <= 1'b0;
           end
         end
 
         ST_WRIT, ST_READ: begin
           if (ddl_rdy_i && req_x) begin
             wrack <= store;
-            rdack <= fetch & ~fastp;
-            byack <= fetch & fastp;
+            rdack <= fetch;
           end else begin
             wrack <= 1'b0;
             rdack <= 1'b0;
-            byack <= 1'b0;
           end
-          fastp <= fastp;
         end
 
         default: begin
           wrack <= 1'b0;
           rdack <= 1'b0;
-          byack <= 1'b0;
-          fastp <= fastp;
         end
 
       endcase
@@ -397,7 +355,6 @@ module ddr3_fsm (
 
   // -- Next-Command Logic -- //
 
-  assign byp_req = byp_rdreq_i & BYPASS_ENABLE;
   assign mem_req = mem_wrreq_i | mem_rdreq_i;
   assign refresh = ddl_ref_i;
 
@@ -412,7 +369,7 @@ module ddr3_fsm (
     end else begin
       case (state)
         ST_IDLE: begin
-          if (!byp_req && (refresh || !mem_req)) begin
+          if (refresh) begin
             snext <= ST_IDLE;
             seq_x <= 1'b0;
             req_x <= 1'b0;
@@ -424,9 +381,9 @@ module ddr3_fsm (
             ba_x  <= bank_w;
             adr_x <= col_w;
 
-            if (byp_req || !mem_wrreq_i) begin
+            if (mem_rdreq_i) begin
               snext <= ST_READ;
-              seq_x <= byp_req ? ~byp_rdlst_i : ~mem_rdlst_i;
+              seq_x <= ~mem_rdlst_i;
               cmd_x <= CMD_READ;
             end else begin
               snext <= ST_WRIT;
@@ -461,7 +418,7 @@ module ddr3_fsm (
     end
   end
 
-  // Determines if any requests (RD, WR, BYP) allow for additional sequences of
+  // Determines if any requests (RD, WR) allow for additional sequences of
   // commands to be issued, for any of the open banks/rows.
   // todo:
   always @(posedge clock) begin
@@ -476,8 +433,8 @@ module ddr3_fsm (
         ST_IDLE: begin
           // On read-/write- request, if the 'last' signal is not asserted, then
           // operation is part of a sequence (to the same SDRAM page)
-          if (byp_req || refresh) begin
-            seq_s <= byp_req & ~byp_rdlst_i;
+          if (refresh) begin
+            seq_s <= 1'b0;
           end else begin
             seq_s <= (mem_wrreq_i & ~mem_wrlst_i) | (mem_rdreq_i & ~mem_rdlst_i);
           end
@@ -494,8 +451,7 @@ module ddr3_fsm (
           //   time ??
           if (seq_x) begin
             seq_s <= (store & mem_wrreq_i & ~mem_wrlst_i)
-                   | (fetch & ~fastp & mem_rdreq_i & ~mem_rdlst_i)
-                   | (fetch & fastp & byp_rdreq_i & ~byp_rdlst_i);
+                   | (fetch & mem_rdreq_i & ~mem_rdlst_i);
             req_s <= 1'b1;
             cmd_s <= cmd_x;
             ba_s <= ba_x;

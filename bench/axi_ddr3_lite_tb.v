@@ -493,5 +493,33 @@ end
     end
   endtask  // axi_fetch
 
+/*
+  // -- Perform fast-path read transaction (128-bit) -- //
+
+  task byp_fetch;
+    input [ASB:0] addr;
+    input last;
+    input [ISB:0] tid;
+    output [127:0] data;
+    begin
+      byp_rdreq <= 1'b1;
+      byp_rdlst <= last;
+      byp_rdtid <= tid;
+      byp_rdadr <= addr;
+
+      @(posedge clock);
+
+      while (!byp_rdack) begin
+        @(posedge clock);
+      end
+
+      byp_rdreq <= 1'b0;
+      @(posedge clock);
+
+      // todo: rx data stuffs
+    end
+  endtask  // mem_fetch
+*/
+
 
 endmodule  // axi_ddr3_lite
