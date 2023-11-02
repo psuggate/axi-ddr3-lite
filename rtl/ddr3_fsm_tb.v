@@ -35,7 +35,7 @@ module ddr3_fsm_tb;
     $dumpfile("ddr3_fsm_tb.vcd");
     $dumpvars;
 
-    #1200 $finish;  // todo ...
+    #1000 $finish;  // todo ...
   end
 
 
@@ -311,7 +311,7 @@ module ddr3_fsm_tb;
       .ADDRS(ADDRS)
   ) ddr3_fsm_inst (
       .clock(clock),
-      .rst_n(cfg_run),
+      .reset(~cfg_run),
 
       .mem_wrreq_i(fsm_wrreq),  // Bus -> Controller requests
       .mem_wrlst_i(fsm_wrlst),

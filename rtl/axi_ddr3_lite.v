@@ -310,7 +310,8 @@ module axi_ddr3_lite (
       .ADDRS(ADDRS)
   ) ddr3_fsm_inst (
       .clock(clock),
-      .rst_n(cfg_run),
+      // .reset(~cfg_run),
+      .reset(~enable),
 
       .mem_wrreq_i(fsm_wrreq),  // Bus -> Controller requests
       .mem_wrlst_i(fsm_wrlst),
@@ -352,7 +353,8 @@ module axi_ddr3_lite (
       .BYPASS_ENABLE(1'b0)
   ) ddr3_bypass_inst (
       .clock(clock),
-      .reset(~cfg_run),
+      // .reset(~cfg_run),
+      .reset(~enable),
 
       .axi_arvalid_i(byp_arvalid_i),  // AXI4 fast-path, read-only port
       .axi_arready_o(byp_arready_o),

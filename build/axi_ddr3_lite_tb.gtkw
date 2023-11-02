@@ -1,15 +1,15 @@
 [*]
 [*] GTKWave Analyzer v3.3.104 (w)1999-2020 BSI
-[*] Sun Oct 29 05:57:06 2023
+[*] Thu Nov  2 20:11:30 2023
 [*]
-[dumpfile] "./axi_ddr3_lite_tb.vcd"
-[dumpfile_mtime] "Sun Oct 29 05:55:58 2023"
-[dumpfile_size] 2018563
-[savefile] "./axi_ddr3_lite_tb.gtkw"
-[timestart] 65962900
+[dumpfile] "/home/patrick/dev/axi-ddr3-lite/build/axi_ddr3_lite_tb.vcd"
+[dumpfile_mtime] "Thu Nov  2 20:07:42 2023"
+[dumpfile_size] 2412127
+[savefile] "/home/patrick/dev/axi-ddr3-lite/build/axi_ddr3_lite_tb.gtkw"
+[timestart] 66061400
 [size] 2560 1376
 [pos] -1 -1
-*-16.395294 66715000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+*-16.395294 66520000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] axi_ddr3_lite_tb.
 [treeopen] axi_ddr3_lite_tb.ddr_core_inst.
 [sst_width] 233

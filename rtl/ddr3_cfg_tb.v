@@ -367,7 +367,7 @@ module ddr3_cfg_tb;
       .ADDRS(ADDRS)
   ) ddr3_fsm_inst (
       .clock(clock),
-      .rst_n(fsm_run),
+      .reset(~fsm_run),
 
       .mem_wrreq_i(fsm_wrreq),  // Bus -> Controller requests
       .mem_wrlst_i(fsm_wrlst),

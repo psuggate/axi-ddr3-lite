@@ -8,7 +8,7 @@
  */
 module ddr3_fsm (
     clock,
-    rst_n,
+    reset,
 
     mem_wrreq_i,  // Write port
     mem_wrlst_i,
@@ -93,7 +93,7 @@ module ddr3_fsm (
 
 
   input clock;  // Shared clock domain for the memory-controller
-  input rst_n;  // Synchronous reset
+  input reset;  // Synchronous reset
 
   // Write-request port
   input mem_wrreq_i;
@@ -197,17 +197,18 @@ module ddr3_fsm (
 
   // -- Address Logic -- //
 
+  wire row_sel_w;
   wire [CSB:0] col_l, cfg_col_w;
   wire [1:0] asel;
 
   assign cfg_col_w = {DDR_COL_BITS{1'bx}};
 
-// todo: make sure that a single 4:1 MUX can be used for setting the value of
-//   'adr_q' (from 'rdadr, wradr, cfg_adr, adr_x') ??
-assign row_addr_sel = ddl_rdy_i && (state == ST_ACTV || state == ST_READ || state == ST_WRIT);
+  // todo: make sure that a single 4:1 MUX can be used for setting the value of
+  //   'adr_q' (from 'rdadr, wradr, cfg_adr, adr_x') ??
+  assign row_sel_w = ddl_rdy_i && (state == ST_ACTV || state == ST_READ || state == ST_WRIT);
 
-  assign asel = !rst_n ? 2'b11
-              : row_addr_sel ? 2'b00
+  assign asel = reset ? 2'b11
+              : row_sel_w ? 2'b00
               : mem_rdreq_i ? 2'b01
               : mem_wrreq_i ? 2'b10
               : 2'b00 ;
@@ -225,9 +226,9 @@ assign row_addr_sel = ddl_rdy_i && (state == ST_ACTV || state == ST_READ || stat
   // -- Main State Machine -- //
 
   always @(posedge clock) begin
-    if (!rst_n) begin
+    if (reset) begin
       // Forward the initialisation and configuration commands on to the DFI,
-      // until the configuration module asserts 'rst_n'.
+      // until the configuration module asserts 'reset'.
       state <= ST_IDLE;
       store <= 1'b0;
       fetch <= 1'b0;
@@ -318,7 +319,7 @@ assign row_addr_sel = ddl_rdy_i && (state == ST_ACTV || state == ST_READ || stat
   // -- Acknowledge Signals -- //
 
   always @(posedge clock) begin
-    if (!rst_n) begin
+    if (reset) begin
       wrack <= 1'b0;
       rdack <= 1'b0;
     end else begin
@@ -359,7 +360,7 @@ assign row_addr_sel = ddl_rdy_i && (state == ST_ACTV || state == ST_READ || stat
   assign refresh = ddl_ref_i;
 
   always @(posedge clock) begin
-    if (!rst_n) begin
+    if (reset) begin
       snext <= ST_IDLE;
       seq_x <= 1'b0;
       req_x <= 1'b0;
@@ -422,7 +423,7 @@ assign row_addr_sel = ddl_rdy_i && (state == ST_ACTV || state == ST_READ || stat
   // commands to be issued, for any of the open banks/rows.
   // todo:
   always @(posedge clock) begin
-    if (!rst_n) begin
+    if (reset) begin
       seq_s <= 1'b0;
       req_s <= 1'b0;
       cmd_s <= 'bx;
@@ -450,11 +451,10 @@ assign row_addr_sel = ddl_rdy_i && (state == ST_ACTV || state == ST_READ || stat
           // todo: can this fail, if the 'last' command does not show up, in-
           //   time ??
           if (seq_x) begin
-            seq_s <= (store & mem_wrreq_i & ~mem_wrlst_i)
-                   | (fetch & mem_rdreq_i & ~mem_rdlst_i);
+            seq_s <= (store & mem_wrreq_i & ~mem_wrlst_i) | (fetch & mem_rdreq_i & ~mem_rdlst_i);
             req_s <= 1'b1;
             cmd_s <= cmd_x;
-            ba_s <= ba_x;
+            ba_s  <= ba_x;
             col_s <= col_w;
           end else begin
             seq_s <= 1'b0;
@@ -484,7 +484,7 @@ assign row_addr_sel = ddl_rdy_i && (state == ST_ACTV || state == ST_READ || stat
 
   always @* begin
     case (state)
-      ST_IDLE: dbg_state = rst_n ? "IDLE" : "INIT";
+      ST_IDLE: dbg_state = reset ? "INIT" : "IDLE";
       ST_READ: dbg_state = adr_q[10] ? "RD-A" : "RD";
       ST_WRIT: dbg_state = adr_q[10] ? "WR-A" : "WR";
       ST_PREA: dbg_state = "PREA";
@@ -493,7 +493,7 @@ assign row_addr_sel = ddl_rdy_i && (state == ST_ACTV || state == ST_READ || stat
       default: dbg_state = "XXX";
     endcase
     case (snext)
-      ST_IDLE: dbg_snext = rst_n ? "IDLE" : "INIT";
+      ST_IDLE: dbg_snext = reset ? "INIT" : "IDLE";
       ST_READ: dbg_snext = adr_q[10] ? "RD-A" : "RD";
       ST_WRIT: dbg_snext = adr_q[10] ? "WR-A" : "WR";
       ST_PREA: dbg_snext = "PREA";
