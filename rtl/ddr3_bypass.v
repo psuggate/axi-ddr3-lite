@@ -66,7 +66,7 @@ module ddr3_bypass (
 
   // todo:
   //  1. ~~disabled-mode works~~
-  //  2. enabled-mode and no bypass-requests works
+  //  2. ~~enabled-mode and no bypass-requests works~~
   //  3. works as read-only, single-BL8 AXI4 interface (ignores slow-path requests)
   //  4. multi-BL8 reads
   //  5. row & bank detection ??
@@ -170,14 +170,28 @@ module ddr3_bypass (
   output [MSB:0] ctl_rdata_o;
 
 
+  // -- Constants -- //
+
+  // Subset of DDR3 controller commands/states
+  localparam [2:0] ST_IDLE = 3'b111;
+  localparam [2:0] ST_READ = 3'b101;
+  localparam [2:0] ST_ACTV = 3'b011;
+  localparam [2:0] ST_PREC = 3'b010;
+
+
   reg arack, rdack;
   reg req_q, req_x, req_s, seq_q, seq_x, seq_s;
   reg [2:0] cmd_q, cmd_x, cmd_s, ba_q, ba_x, ba_s;
   reg [RSB:0] adr_q, adr_x, col_s;
 
-  wire auto_w, bypass;
-  wire [2:0] bank_w, cmd_w;
+  wire auto_w, bypass, precharge_w, fast_read_w;
+  wire [2:0] ba_w, bank_w, cmd_w;
   wire [RSB:0] row_w, col_w, adr_w;
+  wire [CSB:0] col_l;
+
+  reg autop, active_q;
+  reg [RSB:0] actv_row;
+  reg [2:0] actv_ba;
 
   reg [3:0] state, snext;
 
@@ -187,14 +201,20 @@ module ddr3_bypass (
 
       // -- Use the Bypass Port -- //
 
-      assign axi_arready_o = rdack;
-      assign axi_rvalid_o = arack;
+      assign axi_arready_o = arack;
+      assign axi_rvalid_o = rdack;
+
+      assign ddl_rready_o = req_q & axi_rready_i | ctl_rready_i;
+
+      assign ctl_rvalid_o = ~rdack & ddl_rvalid_i;
+      assign ctl_rlast_o  = req_q ? 1'bx : ddl_rlast_i;
+      assign ctl_rdata_o  = req_q ?  'bx : ddl_rdata_i;
 
       assign byp_req_o = bypass | ctl_req_i;
       assign byp_seq_o = bypass ? seq_q : ctl_seq_i;  // todo
-      assign byp_cmd_o = bypass ? cmd_w : ctl_cmd_i;
-      assign byp_ba_o = bypass ? bank_w : ctl_ba_i;
-      assign byp_adr_o = bypass ? row_w : ctl_adr_i;
+      assign byp_cmd_o = cmd_w;
+      assign byp_ba_o = ba_w;
+      assign byp_adr_o = adr_w;
 
       assign ctl_rdy_o = bypass ? 1'b0 : byp_rdy_i;  // todo
       assign ctl_ref_o = byp_ref_i;
@@ -233,14 +253,20 @@ module ddr3_bypass (
   endgenerate
 
 
+  assign bypass = axi_arvalid_i & arack | req_q;
+
+  assign precharge_w = axi_arvalid_i && arack && active_q && bank_w == actv_ba && row_w != actv_row;
+  assign fast_read_w = axi_arvalid_i && arack && active_q && bank_w == actv_ba && row_w == actv_row;
+
+  // assign cmd_w  = state == ST_IDLE ? CMD_ACTV : cmd_q;
+  assign cmd_w = req_q ? cmd_q
+               : ~axi_arvalid_i | ~arack ? ctl_cmd_i
+               : precharge_w ? CMD_PREC
+               : fast_read_w ? CMD_READ
+               : CMD_ACTV ;
+
+
   // -- Address Logic -- //
-
-  wire [CSB:0] col_l;
-
-  // todo: is this combinational-delay acceptable !?
-  assign adr_w = req_q ? adr_q
-               : axi_arvalid_i & axi_rready_i ? axi_araddr_i[ASB:ADDRS-DDR_ROW_BITS]
-               : ctl_adr_i;
 
   // AUTO-PRECHARGE bit
   // todo: gonna have to detect sequences ourselves ...
@@ -252,6 +278,10 @@ module ddr3_bypass (
   // assemble the column address with this bit.
   assign {col_w[RSB:11], col_w[9:0]} = {{(DDR_ROW_BITS - DDR_COL_BITS - 1) {1'b0}}, col_l};
   assign col_w[10] = auto_w;
+
+  // todo: is this combinational-delay acceptable !?
+  assign ba_w = req_q ? ba_q : axi_arvalid_i & arack ? bank_w : ctl_ba_i;
+  assign adr_w = req_q ? adr_q : axi_arvalid_i & arack ? row_w : ctl_adr_i;
 
 
   // Capture the bypass-address for subsequent stages of the transaction
@@ -280,11 +310,6 @@ module ddr3_bypass (
 
   // -- PRECHARGE Detection -- //
 
-  reg autop;
-  reg active_q;
-  reg [RSB:0] actv_row;
-  reg [2:0] actv_ba;
-
   // If bypass request address requires a different ROW within the currently-
   // ACTIVE BANK, then we need to PRECHARGE, then re-ACTIVATE that same BANK
   // after the fast-path READ completes.
@@ -305,18 +330,38 @@ module ddr3_bypass (
       active_q <= 1'b0;
       actv_ba  <= 'bx;
       actv_row <= 'bx;
-    end else if (ctl_req_i && byp_rdy_i && ctl_cmd_i == CMD_ACTV) begin
-      active_q <= 1'b1;
-      actv_ba  <= ctl_ba_i;
-      actv_row <= ctl_adr_i;
-    end else if (ctl_req_i && byp_rdy_i && ctl_cmd_i == CMD_PREC) begin
-      active_q <= 1'b0;
-      actv_ba  <= 'bx;
-      actv_row <= 'bx;
-    end else begin
-      active_q <= active_q;
-      actv_ba  <= actv_ba;
-      actv_row <= actv_row;
+    end else if (ctl_req_i && byp_rdy_i) begin
+      case (ctl_cmd_i)
+        CMD_ACTV: begin
+          active_q <= 1'b1;
+          actv_ba  <= ctl_ba_i;
+          actv_row <= ctl_adr_i;
+        end
+
+        CMD_READ, CMD_WRIT: begin
+          if (ctl_adr_i[10]) begin
+            active_q <= 1'b0;
+            actv_ba  <= 'bx;
+            actv_row <= 'bx;
+          end else begin
+            active_q <= active_q;
+            actv_ba  <= actv_ba;
+            actv_row <= actv_row;
+          end
+        end
+
+        CMD_PREC: begin
+          active_q <= 1'b0;
+          actv_ba  <= 'bx;
+          actv_row <= 'bx;
+        end
+
+        default: begin
+          active_q <= active_q;
+          actv_ba  <= actv_ba;
+          actv_row <= actv_row;
+        end
+      endcase
     end
   end
 
@@ -330,6 +375,18 @@ module ddr3_bypass (
   // For AXI4 incrementing bursts, perform multiple, sequential (DDR3 SDRAM) BL8
   // reads.
   // todo: ...
+
+  always @(posedge clock or posedge reset) begin
+    if (!reset && axi_arvalid_i && axi_arready_o) begin
+      if (axi_arburst_i != 2'b01) begin
+        $error("%10t: Only AXI4 INCR bursts are supported (BURST = %1d)", $time, axi_arburst_i);
+      end
+      if (axi_arlen_i != 8'h03) begin
+        $error("%10t: Only AXI4 4x32b bursts are supported (LEN = %1d)", $time, axi_arlen_i);
+      end
+    end
+  end
+
 
   always @(posedge clock) begin
     if (reset) begin
@@ -355,15 +412,6 @@ module ddr3_bypass (
   //  - overflow registers for when commands are accepted on both inputs
   //  - implement address-bits -> bank selection
 
-  // Subset of DDR3 controller commands/states
-  localparam [2:0] ST_IDLE = 3'b111;
-  localparam [2:0] ST_READ = 3'b101;
-  localparam [2:0] ST_ACTV = 3'b011;
-  localparam [2:0] ST_PREC = 3'b010;
-
-  assign bypass = axi_arvalid_i & axi_rready_i | req_q;
-  assign cmd_w  = state == ST_IDLE ? CMD_ACTV : cmd_q;
-
   always @(posedge clock) begin
     if (reset) begin
       state <= ST_IDLE;
@@ -373,11 +421,21 @@ module ddr3_bypass (
     end else begin
       case (state)
         ST_IDLE: begin
-          if (axi_arvalid_i && axi_rready_i) begin
+          if (precharge_w) begin
             req_q <= 1'b1;
             state <= ST_ACTV;
-            req_q <= 1'b1;  // 1st command, RAS#
+            req_q <= 1'b1;  // 2nd command, RAS#
             cmd_q <= CMD_ACTV;
+          end else if (fast_read_w) begin
+            req_q <= 1'b1;
+            state <= ST_READ;
+            req_q <= ~byp_rdy_i;  // no 2nd command required
+            cmd_q <= CMD_NOOP; // todo
+          end else if (axi_arvalid_i && arack) begin
+            req_q <= 1'b1;
+            state <= ST_READ;
+            req_q <= 1'b1;  // 2nd command, CAS#
+            cmd_q <= CMD_READ;
           end else begin
             state <= ST_IDLE;
             req_q <= ctl_req_i;  // todo: will need extra "skid" logic ??
@@ -415,11 +473,15 @@ module ddr3_bypass (
       arack <= 1'b0;
       rdack <= 1'b0;
     end else begin
-      case (state)
-        ST_IDLE: {arack, rdack} <= {axi_arvalid_i & axi_rready_i, 1'b0};
-        ST_READ: {arack, rdack} <= {1'b0, byp_rdy_i & req_x};  // todo
-        default: {arack, rdack} <= 2'b00;
-      endcase
+      if (axi_arvalid_i && arack) begin
+        arack <= 1'b0;
+      end else if (!req_q) begin
+        arack <= axi_rready_i;
+      end else begin
+        arack <= arack;
+      end
+
+      rdack <= 1'b0; // todo ...
     end
   end
 

@@ -1,15 +1,15 @@
 [*]
 [*] GTKWave Analyzer v3.3.104 (w)1999-2020 BSI
-[*] Fri Nov  3 03:35:04 2023
+[*] Fri Nov  3 05:29:53 2023
 [*]
 [dumpfile] "./axi_ddr3_lite_tb.vcd"
-[dumpfile_mtime] "Fri Nov  3 03:33:36 2023"
-[dumpfile_size] 2623165
+[dumpfile_mtime] "Fri Nov  3 05:28:33 2023"
+[dumpfile_size] 2430888
 [savefile] "./axi_ddr3_lite_tb.gtkw"
-[timestart] 66434900
+[timestart] 66686500
 [size] 2560 1376
 [pos] -1 -1
-*-16.395294 66890000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+*-15.395294 66915000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] axi_ddr3_lite_tb.
 [treeopen] axi_ddr3_lite_tb.ddr_core_inst.
 [sst_width] 233
@@ -58,26 +58,26 @@ axi_ddr3_lite_tb.ddr_core_inst.ddr3_fsm_inst.adr_q[12:0]
 axi_ddr3_lite_tb.ddr_core_inst.ddr3_fsm_inst.dbg_state[39:0]
 @1000200
 -FSM
-@800201
+@800200
 -Bypass
-@29
+@28
 axi_ddr3_lite_tb.abvalid
 axi_ddr3_lite_tb.abready
-@23
+@22
 axi_ddr3_lite_tb.bylen[7:0]
-@29
+@28
 axi_ddr3_lite_tb.byburst[1:0]
-@23
+@22
 axi_ddr3_lite_tb.byid[3:0]
 axi_ddr3_lite_tb.byaddr[26:0]
-@29
+@28
 axi_ddr3_lite_tb.dbvalid
 axi_ddr3_lite_tb.dbready
 axi_ddr3_lite_tb.dbresp[1:0]
-@23
+@22
 axi_ddr3_lite_tb.dbid[3:0]
 axi_ddr3_lite_tb.bdata[31:0]
-@1000201
+@1000200
 -Bypass
 @c00200
 -Read
@@ -115,6 +115,12 @@ axi_ddr3_lite_tb.ddr_core_inst.by_ready
 axi_ddr3_lite_tb.ddr_core_inst.by_last
 @22
 axi_ddr3_lite_tb.ddr_core_inst.by_data[31:0]
+@28
+axi_ddr3_lite_tb.ddr_core_inst.ddr3_bypass_inst.arack
+axi_ddr3_lite_tb.ddr_core_inst.ddr3_bypass_inst.active_q
+axi_ddr3_lite_tb.ddr_core_inst.ddr3_bypass_inst.actv_ba[2:0]
+@22
+axi_ddr3_lite_tb.ddr_core_inst.ddr3_bypass_inst.actv_row[12:0]
 @1401200
 -Internal
 @800200
@@ -127,5 +133,13 @@ axi_ddr3_lite_tb.ddr_core_inst.dfi_last_i
 axi_ddr3_lite_tb.ddr_core_inst.dfi_data_i[31:0]
 @1000200
 -DFI
+@28
+axi_ddr3_lite_tb.ddr_core_inst.ctl_req
+axi_ddr3_lite_tb.ddr_core_inst.ctl_rdy
+axi_ddr3_lite_tb.ddr_core_inst.ctl_cmd[2:0]
+@29
+axi_ddr3_lite_tb.ddr_core_inst.ddr3_bypass_inst.req_q
+@28
+axi_ddr3_lite_tb.ddr_core_inst.ddr3_bypass_inst.cmd_q[2:0]
 [pattern_trace] 1
 [pattern_trace] 0

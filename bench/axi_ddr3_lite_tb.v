@@ -340,7 +340,7 @@ end
       .LOW_LATENCY  (LOW_LATENCY),
       .AXI_ID_WIDTH (REQID),
       .MEM_ID_WIDTH (REQID),
-      .BYPASS_ENABLE(0)
+      .BYPASS_ENABLE(1)
   ) ddr_core_inst (
       .clock(clock),  // system clock
       .reset(reset),  // synchronous reset

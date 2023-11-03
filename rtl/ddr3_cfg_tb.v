@@ -95,7 +95,7 @@ module ddr3_cfg_tb;
 
   // DFI <-> PHY
   wire dfi_rst_n, dfi_cke, dfi_cs_n, dfi_ras_n, dfi_cas_n, dfi_we_n;
-  wire dfi_odt, dfi_wstb, dfi_wren, dfi_rden, dfi_valid;
+  wire dfi_odt, dfi_wstb, dfi_wren, dfi_rden, dfi_valid, dfi_last;
   wire [  2:0] dfi_bank;
   wire [RSB:0] dfi_addr;
   wire [SSB:0] dfi_mask;
@@ -292,6 +292,7 @@ module ddr3_cfg_tb;
 
       .dfi_rden_i(dfi_rden),
       .dfi_rvld_o(dfi_valid),
+      .dfi_last_o(dfi_last),
       .dfi_data_o(dfi_rdata),
 
       .ddr3_ck_po(ddr_ck_p),
@@ -356,6 +357,7 @@ module ddr3_cfg_tb;
       .dfi_data_o(dfi_wdata),
       .dfi_rden_o(dfi_rden),
       .dfi_rvld_i(dfi_valid),
+      .dfi_last_i(dfi_last),
       .dfi_data_i(dfi_rdata)
   );
 

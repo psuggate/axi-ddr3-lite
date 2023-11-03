@@ -352,7 +352,7 @@ module axi_ddr3_lite (
       .WIDTH(AXI_DAT_BITS),
       .ADDRS(ADDRS),
       .REQID(AXI_ID_WIDTH),
-      .BYPASS_ENABLE(1'b0)
+      .BYPASS_ENABLE(BYPASS_ENABLE)
   ) ddr3_bypass_inst (
       .clock(clock),
       // .reset(~cfg_run),
@@ -479,6 +479,7 @@ module axi_ddr3_lite (
 
   // -- De-MUX the READ data-path (to either RD or BYP port) -- //
 
+/*
   generate
     if (BYPASS_ENABLE) begin : g_bypass
 
@@ -490,6 +491,7 @@ module axi_ddr3_lite (
 
     end
   endgenerate
+*/
 
 
 endmodule  // axi_ddr3_lite
