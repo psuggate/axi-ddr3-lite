@@ -122,7 +122,7 @@ module axi_wr_path (
         $error("%10t: Only 16-byte sized WRITE bursts are supported", $time);
         $fatal;
       end
-      if (axi_awvalid_i && axi_awaddr_i[6:0] != 7'd0) begin
+      if (axi_awvalid_i && axi_awaddr_i[3:0] != 4'd0) begin
         $error("%10t: Only 16-byte-aligned WRITE bursts are supported", $time);
         $fatal;
       end
@@ -341,7 +341,7 @@ module axi_wr_path (
         // transfer to the controller is already happening -- don't issue another
         // WRITE request until we are no longer transferring.
         write <= 1'b0;
-      end else if (wcf_valid && axi_wvalid_i && wready && axi_wlast_i) begin
+      end else if (wcf_valid && (wdf_valid || axi_wvalid_i && wready && axi_wlast_i)) begin
         // If there is a command ready, and all write-data has been transferred,
         // then issue a WRITE request to the memory controller
         write <= 1'b1;
@@ -388,7 +388,7 @@ module axi_wr_path (
       .clock(clock),
       .reset(reset),
 
-      .valid_i(axi_wvalid_i),
+      .valid_i(axi_wvalid_i & wready),
       .ready_o(wdf_ready),
       .last_i (wlast),
       .drop_i (1'b0),

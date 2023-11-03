@@ -130,19 +130,24 @@ module axi_ddr3_lite_tb;
   reg [127:0] data;
   reg [MSB:0] wdata;
 
+  always @(posedge clock) begin
+    if (reset) begin
+      awvalid <= 1'b0;
+      awid <= 0;
+      awaddr <= 0;
+      bready <= 1'b1;
+
+      wvalid <= 1'b0;
+      wlast <= 1'b0;
+      wstrb <= 0;
+    end
+  end
+
   initial begin : Stimulus
     @(posedge clock);
 
     while (reset) begin
       @(posedge clock);
-
-      awvalid <= 1'b0;
-      wvalid <= 1'b0;
-      wlast <= 1'b0;
-      awid <= 0;
-      awaddr <= 0;
-      wstrb <= 0;
-      bready <= 1'b1;
 
       rready <= 1'b0;
       arvalid <= 1'b0;
@@ -156,11 +161,11 @@ module axi_ddr3_lite_tb;
 
     @(posedge clock);
     @(posedge clock);
-    data <= {$urandom, $urandom, $urandom, $urandom};
 
-    @(posedge clock);
+    axi_store(0, 3, 2);
+    $display("TB:%10t: WRITE = %x", $time, data);
 
-    axi_store(0, data);
+    axi_store(256, 3, 6);
     $display("TB:%10t: WRITE = %x", $time, data);
 
     //
@@ -184,18 +189,18 @@ module axi_ddr3_lite_tb;
   end
 
 
-// -- Stimulus for the Bypass-Port -- //
+  // -- Stimulus for the Bypass-Port -- //
 
-always @(posedge clock) begin
-  if (reset) begin
-    abvalid <= 1'b0;
-    byaddr <= 0;
-    byid <= 0;
-    bylen <= 3; // (3 + 1) * 32b
-    byburst <= 2'b01; // INCR
-    dbready <= 1'b0; // todo: 1'b1;
+  always @(posedge clock) begin
+    if (reset) begin
+      abvalid <= 1'b0;
+      byaddr <= 0;
+      byid <= 0;
+      bylen <= 3;  // (3 + 1) * 32b
+      byburst <= 2'b01;  // INCR
+      dbready <= 1'b0;  // todo: 1'b1;
+    end
   end
-end
 
 
   // -- DDR3 Simulation Model from Micron -- //
@@ -422,45 +427,45 @@ end
 
   task axi_store;
     input [ASB:0] addr;
-    input [127:0] data;
+    input [7:0] len;
+    input [ISB:0] tid;
     begin
       integer count;
+      reg done = 0;
 
       awvalid <= 1'b1;
-      awlen <= 128 / WIDTH - 1;
-      awid <= arid + 1;
+      awlen <= len;
+      awid <= tid;
       awburst <= 2'b01;  // INCR
       awaddr <= addr;
       wvalid <= 1'b0;
-      count <= 0;
+      count <= len;
 
-      @(posedge clock);
-
-      while (!awready) begin
-        @(posedge clock);
-      end
-
-      awvalid <= 1'b0;
-      wvalid  <= 1'b1;
-      wlast   <= 1'b0;
+      wvalid <= 1'b1;
+      wlast <= 1'b0;
       wstrb <= 4'hf;
-      wdata   <= data[MSB:0];
-      data    <= {{WIDTH{1'bx}}, data[127:WIDTH]};
-      count   <= 1;
+      wdata <= $urandom;
 
-      while (!wready || count < 4) begin
-        if (wready) begin
-          count <= count + 1;
-          wlast <= count > 2;
-          wdata <= data[MSB:0];
-          data  <= {{WIDTH{1'bx}}, data[127:WIDTH]};
+      while (!done) begin
+        @(posedge clock);
+
+        if (awvalid && awready) begin
+          $display("%10t: de-asserting AWVALID", $time);
+          awvalid <= 1'b0;
         end
 
-        @(posedge clock);
+        if (wvalid && wready) begin
+          count  <= count - 1;
+          wvalid <= ~wlast;
+          wlast  <= count == 1;
+          wdata  <= $urandom;
+          data   <= {wdata, data[127:WIDTH]};
+        end
+
+        done <= wvalid & wready & wlast;
       end
 
-      wvalid <= 1'b0;
-      wlast  <= 1'b0;
+      @(posedge clock);
     end
   endtask  // axi_fetch
 
