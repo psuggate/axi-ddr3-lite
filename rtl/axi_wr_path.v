@@ -122,7 +122,7 @@ module axi_wr_path (
         $error("%10t: Only 16-byte sized WRITE bursts are supported", $time);
         $fatal;
       end
-      if (axi_awvalid_i && axi_awaddr_i[3:0] != 4'd0) begin
+      if (axi_awvalid_i && axi_awaddr_i[2:0] != 3'd0) begin
         $error("%10t: Only 16-byte-aligned WRITE bursts are supported", $time);
         $fatal;
       end

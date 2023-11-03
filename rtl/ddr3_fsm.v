@@ -50,13 +50,6 @@ module ddr3_fsm (
   parameter WRLAST_ENABLE = 1'b1;
   parameter RDLAST_ENABLE = 1'b1;
 
-  // Data-path and address settings
-  parameter WIDTH = 32;
-  localparam MSB = WIDTH - 1;
-
-  parameter MASKS = WIDTH / 8;
-  localparam SSB = MASKS - 1;
-
   // Request ID's are represent the order that commands are accepted at the bus/
   // transaction layer, and if used, the memory controller will respect this
   // ordering, when reads and writes access overlapping areas of memory.

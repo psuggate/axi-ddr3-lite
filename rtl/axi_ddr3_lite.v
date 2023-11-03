@@ -89,8 +89,12 @@ module axi_ddr3_lite (
   parameter DDR_COL_BITS = 10;
   localparam CSB = DDR_COL_BITS - 1;
 
-  localparam ADDRS = DDR_ROW_BITS + DDR_COL_BITS;  // todo ...
+  localparam ADDRS = DDR_ROW_BITS + DDR_COL_BITS + 4;  // todo ...
   localparam ASB = ADDRS - 1;  // todo ...
+
+  localparam FSM_ADDRS = ADDRS - $clog2(AXI_DAT_BITS / DDR_DQ_WIDTH);
+  localparam FSB = FSM_ADDRS - 1;
+  localparam ADDRS_LSB = ADDRS - FSM_ADDRS;
 
   // Data-path widths
   parameter DDR_DQ_WIDTH = 16;
@@ -190,7 +194,7 @@ module axi_ddr3_lite (
   wire fsm_rdreq, fsm_rdlst, fsm_rdack, fsm_rderr;
   wire byp_rdreq, byp_rdlst, byp_rdack, byp_rderr;
   wire [TSB:0] fsm_wrtid, fsm_rdtid, byp_rdtid;
-  wire [ASB:0] fsm_wradr, fsm_rdadr, byp_rdadr;
+  wire [FSB:0] fsm_wradr, fsm_rdadr, byp_rdadr;
 
   // AXI <-> {FSM, DDL} signals
   wire wr_valid, wr_ready, wr_last;
@@ -232,7 +236,7 @@ module axi_ddr3_lite (
   // -- AXI Requests to DDR3 Requests -- //
 
   ddr3_axi_ctrl #(
-      .ADDRS(ADDRS),
+      .ADDRS(FSM_ADDRS),
       .WIDTH(AXI_DAT_BITS),
       .MASKS(AXI_STB_BITS),
       .AXI_ID_WIDTH(AXI_ID_WIDTH),
@@ -249,7 +253,7 @@ module axi_ddr3_lite (
       .axi_awlen_i(axi_awlen_i),
       .axi_awburst_i(axi_awburst_i),
       // .axi_awsize_i(3'b010),
-      .axi_awaddr_i(axi_awaddr_i),
+      .axi_awaddr_i(axi_awaddr_i[ASB:ADDRS_LSB]),
 
       .axi_wvalid_i(axi_wvalid_i),  // AXI4 Write Data Port
       .axi_wready_o(axi_wready_o),
@@ -268,7 +272,7 @@ module axi_ddr3_lite (
       .axi_arlen_i(axi_arlen_i),
       .axi_arburst_i(axi_arburst_i),
       // .axi_arsize_i(3'b010),
-      .axi_araddr_i(axi_araddr_i),
+      .axi_araddr_i(axi_araddr_i[ASB:ADDRS_LSB]),
 
       .axi_rvalid_o(axi_rvalid_o),
       .axi_rready_i(axi_rready_i),
@@ -303,16 +307,13 @@ module axi_ddr3_lite (
 
 
   // -- DDR3 Memory Controller -- //
-
   ddr3_fsm #(
       .DDR_ROW_BITS(DDR_ROW_BITS),
       .DDR_COL_BITS(DDR_COL_BITS),
       .DDR_FREQ_MHZ(DDR_FREQ_MHZ),
-      .WIDTH(AXI_DAT_BITS),
-      .ADDRS(ADDRS)
+      .ADDRS(FSM_ADDRS)
   ) ddr3_fsm_inst (
       .clock(clock),
-      // .reset(~cfg_run),
       .reset(~enable),
 
       .mem_wrreq_i(fsm_wrreq),  // Bus -> Controller requests
@@ -350,17 +351,16 @@ module axi_ddr3_lite (
       .DDR_ROW_BITS(DDR_ROW_BITS),
       .DDR_COL_BITS(DDR_COL_BITS),
       .WIDTH(AXI_DAT_BITS),
-      .ADDRS(ADDRS),
+      .ADDRS(FSM_ADDRS),
       .REQID(AXI_ID_WIDTH),
       .BYPASS_ENABLE(BYPASS_ENABLE)
   ) ddr3_bypass_inst (
       .clock(clock),
-      // .reset(~cfg_run),
       .reset(~enable),
 
       .axi_arvalid_i(byp_arvalid_i),  // AXI4 fast-path, read-only port
       .axi_arready_o(byp_arready_o),
-      .axi_araddr_i(byp_araddr_i),
+      .axi_araddr_i(byp_araddr_i[ASB:ADDRS_LSB]),
       .axi_arid_i(byp_arid_i),
       .axi_arlen_i(byp_arlen_i),
       .axi_arburst_i(byp_arburst_i),
@@ -475,23 +475,6 @@ module axi_ddr3_lite (
       .ctl_ba_o (cfg_ba),
       .ctl_adr_o(cfg_adr)
   );
-
-
-  // -- De-MUX the READ data-path (to either RD or BYP port) -- //
-
-/*
-  generate
-    if (BYPASS_ENABLE) begin : g_bypass
-
-      assign byp_rvalid_o = rd_ready;
-      assign byp_rlast_o  = rd_last;
-      assign byp_rresp_o  = 2'b00; // todo
-      assign byp_rid_o    = 'bx; // todo
-      assign byp_rdata_o  = rd_data;
-
-    end
-  endgenerate
-*/
 
 
 endmodule  // axi_ddr3_lite

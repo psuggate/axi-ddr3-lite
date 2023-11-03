@@ -165,7 +165,7 @@ module axi_ddr3_lite_tb;
     axi_store(0, 3, 2);
     $display("TB:%10t: WRITE = %x", $time, data);
 
-    axi_store(256, 3, 6);
+    axi_store(16, 3, 6);
     $display("TB:%10t: WRITE = %x", $time, data);
 
     //
@@ -352,8 +352,7 @@ module axi_ddr3_lite_tb;
 
       .axi_awvalid_i(awvalid),
       .axi_awready_o(awready),
-      // .axi_awaddr_i(awaddr),
-      .axi_awaddr_i(awaddr[ASB:4]),  // todo
+      .axi_awaddr_i(awaddr),
       .axi_awid_i(awid),
       .axi_awlen_i(awlen),
       .axi_awburst_i(awburst),
@@ -371,8 +370,7 @@ module axi_ddr3_lite_tb;
 
       .axi_arvalid_i(arvalid),
       .axi_arready_o(arready),
-      // .axi_araddr_i(araddr),
-      .axi_araddr_i(araddr[ASB:4]),  // todo
+      .axi_araddr_i(araddr),
       .axi_arid_i(arid),
       .axi_arlen_i(arlen),
       .axi_arburst_i(arburst),
@@ -386,8 +384,7 @@ module axi_ddr3_lite_tb;
 
       .byp_arvalid_i(abvalid),  // [optional] fast-read port
       .byp_arready_o(abready),
-      // .byp_araddr_i(byaddr),
-      .byp_araddr_i(byaddr[ASB:4]),  // todo
+      .byp_araddr_i(byaddr),
       .byp_arid_i(byid),
       .byp_arlen_i(bylen),
       .byp_arburst_i(byburst),
@@ -450,7 +447,6 @@ module axi_ddr3_lite_tb;
         @(posedge clock);
 
         if (awvalid && awready) begin
-          $display("%10t: de-asserting AWVALID", $time);
           awvalid <= 1'b0;
         end
 
