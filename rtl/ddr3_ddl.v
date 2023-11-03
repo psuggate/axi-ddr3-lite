@@ -50,6 +50,7 @@ module ddr3_ddl (
     dfi_data_o,
     dfi_rden_o,
     dfi_rvld_i,
+    dfi_last_i,
     dfi_data_i
 );
 
@@ -141,6 +142,7 @@ module ddr3_ddl (
 
   output dfi_rden_o;
   input dfi_rvld_i;
+  input dfi_last_i;
   input [MSB:0] dfi_data_i;
 
 
@@ -199,6 +201,7 @@ module ddr3_ddl (
 
   assign mem_wready_o = wr_ready;
   assign mem_rvalid_o = dfi_rvld_i;
+  assign mem_rlast_o  = dfi_last_i;
   assign mem_rddata_o = dfi_data_i;
 
 

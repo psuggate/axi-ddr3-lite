@@ -26,23 +26,25 @@ There are essentially four "layers," somewhat structured like the [OSI model](ht
 
 These include:
 
-+ align and "chunk" (to BL8) AXI4 requests
++ synthesise for a GoWin GW2A FPGA, and check area & performance
 
 + top-level module, with AXI4 data-paths, and testbenches
+
++ check the timings for all of the supported FSM transitions
+
+Somewhat optional:
 
 + change the Micro DDR3 simulation model to 1Gb, and check my timings
 
 + figure out the best way to implement the delay-registers on FPGA's -- counters, or shift-registers?
 
-+ remove an additional cycle of latency, between the FSM and the IOB's
-
-+ check the timings for all of the supported FSM transitions
-
-+ synthesise for a GoWin GW2A FPGA, and check area & performance
++ align and "chunk" (to BL8) AXI4 requests
 
 + optimise the various state-machine encodings, for LUT4-based FPGA implementations
 
 + AXI4 error-responses for failed transactions
+
++ ~~remove an additional cycle of latency, between the FSM and the IOB's~~
 
 ## DDR3 FSM
 

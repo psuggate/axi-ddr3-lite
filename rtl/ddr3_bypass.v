@@ -237,13 +237,19 @@ module ddr3_bypass (
 
   wire [CSB:0] col_l;
 
+  // todo: is this combinational-delay acceptable !?
   assign adr_w = req_q ? adr_q
                : axi_arvalid_i & axi_rready_i ? axi_araddr_i[ASB:ADDRS-DDR_ROW_BITS]
                : ctl_adr_i;
 
-  assign auto_w = 1'b1;  // todo: gonna have to detect sequences ourselves ...
+  // AUTO-PRECHARGE bit
+  // todo: gonna have to detect sequences ourselves ...
+  assign auto_w = 1'b1;
 
   assign {row_w, bank_w, col_l} = axi_araddr_i;
+
+  // Bit 10 is the AUTO-PRECHARGE (PRECHARGE-ALL, and ZQCL) indicator bit, so
+  // assemble the column address with this bit.
   assign {col_w[RSB:11], col_w[9:0]} = {{(DDR_ROW_BITS - DDR_COL_BITS - 1) {1'b0}}, col_l};
   assign col_w[10] = auto_w;
 

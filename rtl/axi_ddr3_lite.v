@@ -28,8 +28,8 @@ module axi_ddr3_lite (
     axi_arlen_i,
     axi_arburst_i,
 
-    axi_rready_i,
     axi_rvalid_o,
+    axi_rready_i,
     axi_rlast_o,
     axi_rresp_o,
     axi_rid_o,
@@ -64,6 +64,7 @@ module axi_ddr3_lite (
     dfi_data_o,
     dfi_rden_o,
     dfi_rvld_i,
+    dfi_last_i,
     dfi_data_i
 );
 
@@ -178,6 +179,7 @@ module axi_ddr3_lite (
   output [MSB:0] dfi_data_o;
   output dfi_rden_o;
   input dfi_rvld_i;
+  input dfi_last_i;
   input [MSB:0] dfi_data_i;
 
 
@@ -370,10 +372,10 @@ module axi_ddr3_lite (
       .axi_rid_o(byp_rid_o),
       .axi_rdata_o(byp_rdata_o),
 
-      .ddl_rvalid_i(rd_valid),  // DDL READ data-path
-      .ddl_rready_o(rd_ready),
-      .ddl_rlast_i (rd_last),
-      .ddl_rdata_i (rd_data),
+      .ddl_rvalid_i(by_valid),  // DDL READ data-path
+      .ddl_rready_o(by_ready),
+      .ddl_rlast_i (by_last),
+      .ddl_rdata_i (by_data),
 
       .byp_run_i(ctl_run),  // Connects to the DDL
       .byp_req_o(ctl_req),
@@ -393,10 +395,10 @@ module axi_ddr3_lite (
       .ctl_ba_i(ddl_ba),
       .ctl_adr_i(ddl_adr),
 
-      .ctl_rvalid_o(by_valid),  // READ data from DDL -> memory controller data-path
-      .ctl_rready_i(by_ready),
-      .ctl_rlast_o (by_last),
-      .ctl_rdata_o (by_data)
+      .ctl_rvalid_o(rd_valid),  // READ data from DDL -> memory controller data-path
+      .ctl_rready_i(rd_ready),
+      .ctl_rlast_o (rd_last),
+      .ctl_rdata_o (rd_data)
   );
 
 
@@ -446,6 +448,7 @@ module axi_ddr3_lite (
       .dfi_data_o(dfi_data_o),
       .dfi_rden_o(dfi_rden_o),
       .dfi_rvld_i(dfi_rvld_i),
+      .dfi_last_i(dfi_last_i),
       .dfi_data_i(dfi_data_i)
   );
 

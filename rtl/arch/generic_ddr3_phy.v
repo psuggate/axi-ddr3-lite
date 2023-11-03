@@ -29,6 +29,7 @@ module generic_ddr3_phy (
     dfi_data_i,
     dfi_rden_i,
     dfi_rvld_o,
+    dfi_last_o,
     dfi_data_o,
 
     ddr3_ck_po,
@@ -84,6 +85,7 @@ module generic_ddr3_phy (
 
   input dfi_rden_i;
   output dfi_rvld_o;
+  output dfi_last_o;
   output [DSB:0] dfi_data_o;
 
   output ddr3_ck_po;
@@ -110,7 +112,7 @@ module generic_ddr3_phy (
   reg ras_nq, cas_nq, we_nq, odt_q;
   reg [2:0] ba_q;
 
-  reg valid_q;
+  reg valid_q, last_q;
   reg [ASB:0] addr_q;
   reg [DSB:0] data_q;
 
@@ -118,6 +120,7 @@ module generic_ddr3_phy (
   // -- DFI Read-Data Signal Assignments -- //
 
   assign dfi_rvld_o   = valid_q;
+  assign dfi_last_o   = last_q;
   assign dfi_data_o   = data_q;
 
 
@@ -222,9 +225,24 @@ module generic_ddr3_phy (
   // -- Data Capture on Read -- //
 
   reg [MSB:0] data_l, data_n, data_h;
+  reg delay_p, delay_q;
+  reg  [1:0] count;
+  wire [1:0] cnext;
+
+  assign cnext = count + 1;
 
   always @(posedge clock) begin
-    valid_q <= dfi_rden_i;
+    if (reset || !valid_q) begin
+      count  <= 0;
+      last_q <= 0;
+    end else begin
+      count  <= cnext;
+      last_q <= cnext == 3;
+    end
+  end
+
+  always @(posedge clock) begin
+    {valid_q, delay_q, delay_p} <= {delay_q, delay_p, dfi_rden_i};
   end
 
   always @(posedge clock) begin

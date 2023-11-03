@@ -91,7 +91,7 @@ module axi_ddr3_lite_tb;
 
   // DFI <-> PHY
   wire dfi_rst_n, dfi_cke, dfi_cs_n, dfi_ras_n, dfi_cas_n, dfi_we_n;
-  wire dfi_odt, dfi_wstb, dfi_wren, dfi_rden, dfi_valid;
+  wire dfi_odt, dfi_wstb, dfi_wren, dfi_rden, dfi_valid, dfi_last;
   wire [  2:0] dfi_bank;
   wire [RSB:0] dfi_addr;
   wire [SSB:0] dfi_mask;
@@ -163,6 +163,8 @@ module axi_ddr3_lite_tb;
     axi_store(0, data);
     $display("TB:%10t: WRITE = %x", $time, data);
 
+    //
+    // READ request
     @(posedge clock);
     while (!bvalid || !bready) begin
       @(posedge clock);
@@ -171,6 +173,11 @@ module axi_ddr3_lite_tb;
 
     axi_fetch(0, data);
     $display("TB:%10t: READ = %x", $time, data);
+
+    //
+    // Test the BYPASS port
+    byp_fetch(0, 1, 3, data);
+    $display("TB:%10t: BYPASS = %x", $time, data);
 
     #40 @(posedge clock);
     $finish;
@@ -298,6 +305,7 @@ end
 
       .dfi_rden_i(dfi_rden),
       .dfi_rvld_o(dfi_valid),
+      .dfi_last_o(dfi_last),
       .dfi_data_o(dfi_rdata),
 
       .ddr3_ck_po(ddr_ck_p),
@@ -401,6 +409,7 @@ end
       .dfi_data_o(dfi_wdata),
       .dfi_rden_o(dfi_rden),
       .dfi_rvld_i(dfi_valid),
+      .dfi_last_i(dfi_last),
       .dfi_data_i(dfi_rdata)
   );
 
@@ -469,31 +478,29 @@ end
       araddr <= addr;
       rready <= 1'b0;
 
-      @(posedge clock);
-
       while (!arready) begin
         @(posedge clock);
       end
+
+      @(posedge clock);
       arvalid <= 1'b0;
       rready  <= 1'b1;
 
-      @(posedge clock);
-
       while (!rvalid || !rlast) begin
+        @(posedge clock);
+
         if (rvalid) begin
           data <= {rdata, data[127:WIDTH]};
         end
-
-        @(posedge clock);
       end
 
       rready <= 1'b0;
-      data   <= {rdata, data[127:WIDTH]};
+      // data   <= {rdata, data[127:WIDTH]};
       @(posedge clock);
     end
   endtask  // axi_fetch
 
-/*
+
   // -- Perform fast-path read transaction (128-bit) -- //
 
   task byp_fetch;
@@ -502,24 +509,40 @@ end
     input [ISB:0] tid;
     output [127:0] data;
     begin
-      byp_rdreq <= 1'b1;
-      byp_rdlst <= last;
-      byp_rdtid <= tid;
-      byp_rdadr <= addr;
+      // Request READ
+      abvalid <= 1'b1;
+      bylen   <= 8'h03; // 3+1 transfers
+      byburst <= 2'b01; // INCR
+      byid    <= tid;
+      byaddr  <= addr[ASB:4]; // todo
 
-      @(posedge clock);
+      // todo: MUST be asserted to initiate FAST-PATH READ
+      dbready <= 1'b1;
 
-      while (!byp_rdack) begin
+      while (!abready) begin
         @(posedge clock);
       end
-
-      byp_rdreq <= 1'b0;
       @(posedge clock);
 
-      // todo: rx data stuffs
+      abvalid <= 1'b0;
+      bylen   <= 8'hxx;
+      byburst <= 2'bxx;
+      byid    <= 'bx;
+      byaddr  <= 'bx;
+
+      // Wait for data
+      dbready <= 1'b1;
+      while (!dbvalid || !dblast) begin
+        @(posedge clock);
+        if (dbvalid) begin
+          data <= {bdata, data[127:WIDTH]};
+        end
+      end
+
+      dbready <= 1'b0;
+      @(posedge clock);
     end
-  endtask  // mem_fetch
-*/
+  endtask  // byp_fetch
 
 
 endmodule  // axi_ddr3_lite
