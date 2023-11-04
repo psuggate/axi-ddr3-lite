@@ -46,7 +46,7 @@ module packet_fifo (
   reg [WIDTH:0] sram[0:DEPTH-1];
 
   // Write-port signals
-  reg wready, wlast;
+  reg wready;
   reg [ABITS:0] waddr;
   wire [ABITS:0] waddr_next;
 
@@ -64,7 +64,6 @@ module packet_fifo (
 
 
   assign ready_o = wready;
-  assign last_o  = wlast;
 
 
   // -- FIFO Status Signals -- //

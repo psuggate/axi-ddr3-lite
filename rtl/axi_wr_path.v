@@ -113,16 +113,21 @@ module axi_wr_path (
   localparam COMMAND_WIDTH = ADDRS + AXI_ID_WIDTH;
   localparam WSB = COMMAND_WIDTH - 1;
 
+  // States for capturing write requests
+  localparam ST_IDLE = 4'b0000;
+  localparam ST_FILL = 4'b0001;
+  localparam ST_BUSY = 4'b0010;
 
-  wire cmd_valid;
-  wire [WSB:0] command_w;
 
-  reg wlast, mlast, mvalid, bvalid, write, aready, wready;
+  reg bvalid, aready, wready;
+  // reg mlast, mvalid, write;
+  reg [  3:0] state;
   reg [  1:0] bresp;
   reg [ISB:0] bwrid;
 
-  wire cmd_ready, wdf_ready, wdf_valid, wdf_last, wr_accept;
-  wire wcf_valid;
+  wire wdf_ready, wdf_valid, wdf_last, wr_accept;
+  wire cmd_ready, cmd_valid, wcf_valid;
+  wire [WSB:0] command_w;
 
 
   assign axi_awready_o = aready;
@@ -131,140 +136,36 @@ module axi_wr_path (
   assign axi_bresp_o = bresp;
   assign axi_bid_o = bwrid;
 
+  // -- NEW -- //
+  assign mem_store_o = wcf_valid;
+  assign wr_accept = mem_accept_i;
+
+  assign mem_valid_o = wdf_valid;
+  assign mem_last_o = wdf_last;
+
+  /*
+  // -- OLD -- //
   assign mem_store_o = write;
   assign mem_valid_o = mvalid;
   assign mem_last_o = mlast;
+
+  assign wr_accept = write & mem_accept_i;
+*/
 
   // Command- & data- FIFO signals
   assign cmd_valid = axi_awvalid_i & aready;
   assign command_w = {axi_awaddr_i, axi_awid_i};
 
-  assign wr_accept = write & mem_accept_i;
-
 
   // todo:
-  //  - burst counter, so that responses can be sent on all RX data
+  //  - ~~burst counter, so that responses can be sent on all RX data~~
   //  - padding with empty-words for unaligned and/or small transfers
-  //  - FSM that only accepts write-data from a single source ??
+  //  - ~~FSM that only accepts write-data from a single source ??~~
   //  - any advantage to accepting commands _before_ data ??
-
-`ifdef __icarus
-  always @(posedge clock) begin
-    if (reset);
-    else begin
-      if (axi_awvalid_i && axi_awburst_i != BURST_INCR) begin
-        $error("%10t: Only 'INCR' WRITE bursts are supported", $time);
-        $fatal;
-      end
-
-      // todo: temporary restrictions ...
-      if (axi_awvalid_i && axi_awlen_i[1:0] != 2'd3) begin
-        $error("%10t: Only WRITE bursts that are multiples of 16-bytes are supported", $time);
-        $fatal;
-      end
-      if (axi_awvalid_i && axi_awaddr_i[2:0] != 3'd0) begin
-        $error("%10t: Only 16-byte-aligned WRITE bursts are supported", $time);
-        $fatal;
-      end
-      // odot: temporary restrictions ...
-    end
-  end
-`endif
-
-
-  // -- Chunk-up Large Write-Data Bursts -- //
-
-  // note: chunks are good, because of row/col/bank/page boundaries, of SDRAMs
-  reg [7:0] transfers_remaining;
-
-  always @(posedge clock) begin
-    if (reset) begin
-      transfers_remaining <= 'bx;  // toods
-    end else begin
-      transfers_remaining <= axi_awlen_i;
-    end
-  end
-
-  reg [1:0] fill_count, xfer_count;
-  reg [3:0] state, issue;
-
-  wire [1:0] fill_cnext = fill_count - 1;
-  wire [1:0] xfer_cnext = xfer_count - 1;
 
 
   // -- FSM to Capture WRITE Requests and Data -- //
 
-  // States for capturing write requests
-  localparam ST_IDLE = 4'b0000;
-  localparam ST_FILL = 4'b0001;
-  localparam ST_BUSY = 4'b0010;
-
-`ifdef __salad
-  always @(posedge clock) begin
-    if (reset) begin
-      state  <= ST_IDLE;
-      aready <= 1'b0;
-      wready <= 1'b0;
-      wlast  <= 1'b0;
-    end else begin
-      case (state)
-        ST_IDLE: begin
-          // Wait for incoming write-data requests
-          if (cmd_valid) begin
-            state <= ST_FILL;
-            fill_count <= 2'd3;
-            aready <= 1'b0;
-            wready <= 1'b1;
-          end else begin
-            fill_count <= 2'bxx;
-            aready <= 1'b1;
-            wready <= 1'b0;
-          end
-        end
-
-        ST_FILL: begin
-          aready <= 1'b0;
-
-          // Wait for the write-data to be stored
-          if (axi_wvalid_i && wready && fill_count == 2'd0) begin
-            // if (axi_wvalid_i && wready && wlast) begin // todo: faster ??
-            wready <= 1'b0;
-            if (!cmd_ready || !wdf_ready) begin
-              state <= ST_BUSY;
-            end else begin
-              state <= ST_IDLE;
-            end
-          end else if (axi_wvalid_i && wready) begin
-            fill_count <= fill_cnext;
-            // wready <= 1'b1;
-          end
-
-          // Use the 'wlast' flag to update the packet-counter
-          if (axi_wvalid_i && wready && fill_count == 2'd1) begin
-            wlast <= 1'b1;
-          end else if (axi_wvalid_i && wready) begin
-            wlast <= 1'b0;
-          end
-        end
-
-        ST_BUSY: begin
-          // If either FIFO fills up, then wait for a bit
-          if (cmd_ready && wdf_ready) begin
-            state  <= ST_IDLE;
-            aready <= 1'b1;
-          end else begin
-            aready <= 1'b0;
-          end
-        end
-
-        default: begin
-          $error("%10t: WRITE data state-machine failure!", $time);
-          // $fatal;
-        end
-      endcase  // state
-    end
-  end
-`else
   always @(posedge clock) begin
     if (reset) begin
       state  <= ST_IDLE;
@@ -315,15 +216,39 @@ module axi_wr_path (
       endcase  // state
     end
   end
-`endif
 
 
   // -- FSM to Send WRITE Requests & Data to the Memory Controller -- //
+
+  always @(posedge clock) begin
+    if (reset) begin
+      bvalid <= 1'b0;
+      bresp  <= AXI_RESP_OKAY;
+      bwrid  <= 'bx;
+    end else begin
+      bresp <= AXI_RESP_OKAY;
+
+      if (mem_accept_i && !mem_wseq_o) begin
+        bwrid <= mem_wrid_o;
+      end
+
+      if (mem_ready_i && wdf_valid && wdf_last) begin
+        bvalid <= 1'b1;
+      end else if (bvalid && axi_bready_i) begin
+        bvalid <= 1'b0;
+      end
+    end
+  end
+
 
   // States for issuing write commands
   localparam IS_IDLE = 4'b0000;
   localparam IS_XFER = 4'b0001;
   localparam IS_RESP = 4'b0010;
+  /*
+  reg [1:0] xfer_count;
+  reg [3:0] issue;
+  wire [1:0] xfer_cnext = xfer_count - 1;
 
   always @(posedge clock) begin
     if (reset) begin
@@ -413,6 +338,7 @@ module axi_wr_path (
       end
     end
   end
+*/
 
 
   // -- Chunker for Large Bursts -- //
@@ -429,9 +355,7 @@ module axi_wr_path (
       .reset(reset),
 
       .avalid_i(axi_awvalid_i & aready),
-      // .avalid_i(axi_awvalid_i),
-      .aready_o(cmd_ready),  // axi_awready_o),
-      // .aready_o(), // axi_awready_o),
+      .aready_o(cmd_ready),
       .alen_i(axi_awlen_i),
       .aburst_i(axi_awburst_i),
       .aid_i(axi_awid_i),
@@ -447,24 +371,6 @@ module axi_wr_path (
 
   // -- Write-Data Command FIFO -- //
 
-`ifdef __salad
-  sync_fifo #(
-      .WIDTH (COMMAND_WIDTH),
-      .ABITS (CBITS),
-      .OUTREG(CTRL_FIFO_BLOCK)
-  ) command_fifo_inst (
-      .clock(clock),
-      .reset(reset),
-
-      .valid_i(cmd_valid),
-      .ready_o(cmd_ready),
-      .data_i (command_w),
-
-      .valid_o(wcf_valid),
-      .ready_i(wr_accept),
-      .data_o ({mem_addr_o, mem_wrid_o})
-  );
-`else
   sync_fifo #(
       .WIDTH (COMMAND_WIDTH + 1),
       .ABITS (CBITS),
@@ -481,7 +387,6 @@ module axi_wr_path (
       .ready_i(wr_accept),
       .data_o ({mem_addr_o, mem_wrid_o, mem_wseq_o})
   );
-`endif
 
 
   // -- Synchronous, 2 kB, Write-Data FIFO -- //
@@ -497,13 +402,12 @@ module axi_wr_path (
       .valid_i(axi_wvalid_i & wready),
       .ready_o(wdf_ready),
       .last_i (axi_wlast_i),
-      // .last_i (wlast),
       .drop_i (1'b0),
       .data_i ({axi_wstrb_i, axi_wdata_i}), // todo: pad end of bursts
 
       .valid_o(wdf_valid),
       .ready_i(mem_ready_i),
-      .last_o (),
+      .last_o (wdf_last),
       .data_o ({mem_strb_o, mem_data_o})
   );
 
@@ -514,10 +418,21 @@ module axi_wr_path (
   always @(posedge clock) begin
     if (reset);
     else begin
-      if (axi_wvalid_i && axi_wready_o && axi_wlast_i != wlast) begin
-        $error("%10t: 'wlast' signals disagree, for WRITE burst", $time);
-        // $fatal;
+      if (axi_awvalid_i && axi_awburst_i != BURST_INCR) begin
+        $error("%10t: Only 'INCR' WRITE bursts are supported", $time);
+        $fatal;
       end
+
+      // todo: temporary restrictions ...
+      if (axi_awvalid_i && axi_awlen_i[1:0] != 2'd3) begin
+        $error("%10t: Only WRITE bursts that are multiples of 16-bytes are supported", $time);
+        $fatal;
+      end
+      if (axi_awvalid_i && axi_awaddr_i[2:0] != 3'd0) begin
+        $error("%10t: Only 16-byte-aligned WRITE bursts are supported", $time);
+        $fatal;
+      end
+      // odot: temporary restrictions ...
     end
   end
 `endif
