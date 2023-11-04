@@ -2,8 +2,11 @@
 /**
  * Write datapath, for an AXI4 to SDRAM interface.
  * 
- * For every write-request, store one write command, and one write-data packet.
- * Write-data buffering is used, so the AXI4 interface may accept multiple
+ * For every WRITE-request, store one write command for each BL8 transaction
+ * that is required to complete an AXI4 (burst-) WRITE request. The WRITE-data
+ * FIFO stores all (burst-)data as one write-data packet.
+ *
+ * Note: WRITE-data buffering is used, so the AXI4 interface may accept multiple
  * packets before any are actually written to the SDRAM.
  * 
  * Copyright 2023, Patrick Suggate.
@@ -43,13 +46,6 @@ module axi_wr_path (
     mem_strb_o,
     mem_data_o
 );
-
-
-  // todo: Issue an AXI4 write-response once the write-data has been buffered,
-  //   but before the memory-controller has performed the write? This could
-  //   cause read-after-write problems, depending on the order that the
-  //   transactions are actually performed.
-  parameter EAGER_RESPONSE = 0;
 
   parameter ADDRS = 32;
   localparam ASB = ADDRS - 1;
@@ -91,8 +87,8 @@ module axi_wr_path (
   output [1:0] axi_bresp_o;
   output [ISB:0] axi_bid_o;
 
-  output mem_store_o;  // todo: good ??
-  input mem_accept_i;  // todo: good ??
+  output mem_store_o;
+  input mem_accept_i;
   output mem_wseq_o;
   output [ISB:0] mem_wrid_o;
   output [ASB:0] mem_addr_o;
@@ -102,6 +98,11 @@ module axi_wr_path (
   output mem_last_o;
   output [SSB:0] mem_strb_o;
   output [MSB:0] mem_data_o;
+
+
+  // todo:
+  //  - padding with empty-words for unaligned and/or small transfers
+  //  - any advantage to accepting commands _before_ data ??
 
 
   // -- Constants -- //
@@ -120,14 +121,17 @@ module axi_wr_path (
 
 
   reg bvalid, aready, wready;
-  // reg mlast, mvalid, write;
   reg [  3:0] state;
   reg [  1:0] bresp;
   reg [ISB:0] bwrid;
 
-  wire wdf_ready, wdf_valid, wdf_last, wr_accept;
+  wire wdf_ready, wdf_valid, wdf_last;
   wire cmd_ready, cmd_valid, wcf_valid;
   wire [WSB:0] command_w;
+
+  wire xvalid, xready, xseq;
+  wire [ISB:0] xid;
+  wire [ASB:0] xaddr;
 
 
   assign axi_awready_o = aready;
@@ -136,32 +140,13 @@ module axi_wr_path (
   assign axi_bresp_o = bresp;
   assign axi_bid_o = bwrid;
 
-  // -- NEW -- //
   assign mem_store_o = wcf_valid;
-  assign wr_accept = mem_accept_i;
-
   assign mem_valid_o = wdf_valid;
   assign mem_last_o = wdf_last;
-
-  /*
-  // -- OLD -- //
-  assign mem_store_o = write;
-  assign mem_valid_o = mvalid;
-  assign mem_last_o = mlast;
-
-  assign wr_accept = write & mem_accept_i;
-*/
 
   // Command- & data- FIFO signals
   assign cmd_valid = axi_awvalid_i & aready;
   assign command_w = {axi_awaddr_i, axi_awid_i};
-
-
-  // todo:
-  //  - ~~burst counter, so that responses can be sent on all RX data~~
-  //  - padding with empty-words for unaligned and/or small transfers
-  //  - ~~FSM that only accepts write-data from a single source ??~~
-  //  - any advantage to accepting commands _before_ data ??
 
 
   // -- FSM to Capture WRITE Requests and Data -- //
@@ -218,7 +203,7 @@ module axi_wr_path (
   end
 
 
-  // -- FSM to Send WRITE Requests & Data to the Memory Controller -- //
+  // -- AXI WRITE-Response Logic -- //
 
   always @(posedge clock) begin
     if (reset) begin
@@ -241,111 +226,7 @@ module axi_wr_path (
   end
 
 
-  // States for issuing write commands
-  localparam IS_IDLE = 4'b0000;
-  localparam IS_XFER = 4'b0001;
-  localparam IS_RESP = 4'b0010;
-  /*
-  reg [1:0] xfer_count;
-  reg [3:0] issue;
-  wire [1:0] xfer_cnext = xfer_count - 1;
-
-  always @(posedge clock) begin
-    if (reset) begin
-      issue  <= IS_IDLE;
-      bvalid <= 1'b0;
-      bresp  <= 2'bxx;
-      mvalid <= 1'b0;
-      mlast  <= 1'b0;
-    end else begin
-
-      case (issue)
-        IS_IDLE: begin
-          // Wait for the memory-controller to accept the command
-          if (write && mem_accept_i && !mem_wseq_o) begin
-            xfer_count <= 2'd3;
-            issue <= IS_XFER;
-            bwrid <= mem_wrid_o;  // toods ...
-            mvalid <= 1'b1;
-          end else begin
-            xfer_count <= 2'bxx;
-            bwrid <= {AXI_ID_WIDTH{1'bx}};
-            mvalid <= 1'b0;
-          end
-          bvalid <= 1'b0;
-          mlast  <= 1'b0;
-        end
-
-        IS_XFER: begin
-          // Transfer all write-data to the memory controller
-          if (wdf_valid && mem_ready_i && xfer_count == 2'd0) begin
-            issue  <= IS_RESP;
-            mvalid <= 1'b0;
-            bvalid <= 1'b1;
-            bresp  <= AXI_RESP_OKAY;
-          end else begin
-            mvalid <= 1'b1;
-            bvalid <= 1'b0;
-
-            if (wdf_valid && mem_ready_i) begin
-              xfer_count <= xfer_cnext;
-            end
-          end
-
-          if (wdf_valid && mem_ready_i && xfer_count == 2'd1) begin
-            mlast <= 1'b1;
-          end else if (wdf_valid && mem_ready_i) begin
-            mlast <= 1'b0;
-          end
-        end
-
-        IS_RESP: begin
-          // Issue the AXI4 write response
-          if (bvalid && axi_bready_i) begin
-            issue  <= IS_IDLE;
-            bvalid <= 1'b0;
-            bresp  <= 2'bxx;
-          end else begin
-            bvalid <= 1'b1;
-            bresp  <= AXI_RESP_OKAY;
-          end
-        end
-
-        default: begin
-          $error("%10t: WRITE issue state-machine failure!", $time);
-          // $fatal;
-        end
-      endcase  // issue
-    end
-  end
-
-
-  // -- Issue Write-Data Requests -- //
-
-  always @(posedge clock) begin
-    if (reset) begin
-      write <= 1'b0;
-    end else begin
-      if (issue == IS_XFER || write && mem_accept_i && !mem_wseq_o) begin
-        // Memory controller has accepted the WRITE request, and (possibly) data-
-        // transfer to the controller is already happening -- don't issue another
-        // WRITE request until we are no longer transferring.
-        write <= 1'b0;
-      end else if (wcf_valid && (wdf_valid || axi_wvalid_i && wready && axi_wlast_i)) begin
-        // If there is a command ready, and all write-data has been transferred,
-        // then issue a WRITE request to the memory controller
-        write <= 1'b1;
-      end
-    end
-  end
-*/
-
-
   // -- Chunker for Large Bursts -- //
-
-  wire xvalid, xready, xseq;
-  wire [ISB:0] xid;
-  wire [ASB:0] xaddr;
 
   axi_chunks #(
       .ADDRS(ADDRS),
@@ -384,7 +265,7 @@ module axi_wr_path (
       .data_i ({xaddr, xid, xseq}),
 
       .valid_o(wcf_valid),
-      .ready_i(wr_accept),
+      .ready_i(mem_accept_i),
       .data_o ({mem_addr_o, mem_wrid_o, mem_wseq_o})
   );
 
@@ -403,7 +284,7 @@ module axi_wr_path (
       .ready_o(wdf_ready),
       .last_i (axi_wlast_i),
       .drop_i (1'b0),
-      .data_i ({axi_wstrb_i, axi_wdata_i}), // todo: pad end of bursts
+      .data_i ({axi_wstrb_i, axi_wdata_i}), // todo: pad end of bursts ??
 
       .valid_o(wdf_valid),
       .ready_i(mem_ready_i),
