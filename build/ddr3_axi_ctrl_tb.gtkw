@@ -1,27 +1,28 @@
 [*]
 [*] GTKWave Analyzer v3.3.104 (w)1999-2020 BSI
-[*] Wed Oct 11 22:46:04 2023
+[*] Sat Nov  4 02:16:25 2023
 [*]
 [dumpfile] "./ddr3_axi_ctrl_tb.vcd"
-[dumpfile_mtime] "Wed Oct 11 22:45:44 2023"
-[dumpfile_size] 22174
+[dumpfile_mtime] "Sat Nov  4 01:28:26 2023"
+[dumpfile_size] 31991
 [savefile] "./ddr3_axi_ctrl_tb.gtkw"
 [timestart] 0
-[size] 2560 1376
+[size] 1920 1043
 [pos] -1 -1
-*-14.966468 280000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+*-15.855728 280000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] ddr3_axi_ctrl_tb.
 [treeopen] ddr3_axi_ctrl_tb.ddr3_axi_ctrl_inst.
 [treeopen] ddr3_axi_ctrl_tb.ddr3_axi_ctrl_inst.axi_wr_path_inst.
 [sst_width] 233
 [signals_width] 150
 [sst_expanded] 1
-[sst_vpaned_height] 414
+[sst_vpaned_height] 298
 @28
 ddr3_axi_ctrl_tb.clock
 ddr3_axi_ctrl_tb.reset
-@800200
+@c00201
 -Read
+@800200
 -Addr
 @28
 ddr3_axi_ctrl_tb.arvalid
@@ -45,7 +46,7 @@ ddr3_axi_ctrl_tb.rid[3:0]
 ddr3_axi_ctrl_tb.rresp[1:0]
 @22
 ddr3_axi_ctrl_tb.rdata[31:0]
-@1000200
+@1401201
 -Read
 @c00200
 -RAM
@@ -55,14 +56,12 @@ ddr3_axi_ctrl_tb.store
 ddr3_axi_ctrl_tb.accept
 ddr3_axi_ctrl_tb.error
 @22
-ddr3_axi_ctrl_tb.maddr[31:0]
 ddr3_axi_ctrl_tb.wstrb[3:0]
 @28
 ddr3_axi_ctrl_tb.rd_valid
 ddr3_axi_ctrl_tb.rd_ready
 ddr3_axi_ctrl_tb.rd_last
 @22
-ddr3_axi_ctrl_tb.respi[3:0]
 ddr3_axi_ctrl_tb.rd_addr[9:0]
 ddr3_axi_ctrl_tb.rd_data[31:0]
 @28

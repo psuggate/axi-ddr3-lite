@@ -201,7 +201,7 @@ module ddr3_ddl (
 
   assign mem_wready_o = wr_ready;
   assign mem_rvalid_o = dfi_rvld_i;
-  assign mem_rlast_o  = dfi_last_i;
+  assign mem_rlast_o = dfi_last_i;
   assign mem_rddata_o = dfi_data_i;
 
 

@@ -219,7 +219,7 @@ module axi_ddr3_lite (
   wire [MSB:0] by_data;
 
 
-  assign fsm_wrlst = 1'b1;
+  // assign fsm_wrlst = 1'b1;
   assign fsm_rdlst = 1'b1;
   assign byp_rdlst = 1'b1;
 
@@ -284,6 +284,7 @@ module axi_ddr3_lite (
       .mem_wrreq_o(fsm_wrreq),  // WRITE requests to FSM
       .mem_wrack_i(fsm_wrack),
       .mem_wrerr_i(fsm_wrerr),
+      .mem_wrlst_o(fsm_wrlst),
       .mem_wrtid_o(fsm_wrtid),
       .mem_wradr_o(fsm_wradr),
 

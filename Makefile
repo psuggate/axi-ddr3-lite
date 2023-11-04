@@ -1,4 +1,4 @@
-.PHONY:	all sim doc clean
+.PHONY:	all sim simall doc clean
 all:
 	@make -C bench all
 	@make -C rtl all
@@ -7,9 +7,12 @@ all:
 
 sim:
 	@make -C bench sim
+	@make -C synth sim
+	@make -C build sim
+
+simall:	sim
 	@make -C rtl sim
 	@make -C rtl/fifo sim
-	@make -C synth sim
 	@make -C build sim
 
 

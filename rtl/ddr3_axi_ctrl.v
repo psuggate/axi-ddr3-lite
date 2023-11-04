@@ -53,6 +53,7 @@ module ddr3_axi_ctrl (
     mem_wrreq_o,  // WRITE requests to CTRL
     mem_wrack_i,
     mem_wrerr_i,
+    mem_wrlst_o,
     mem_wrtid_o,
     mem_wradr_o,
 
@@ -153,6 +154,7 @@ module ddr3_axi_ctrl (
   output mem_wrreq_o;
   input mem_wrack_i;
   input mem_wrerr_i;
+  output mem_wrlst_o;
   output [TSB:0] mem_wrtid_o;
   output [ASB:0] mem_wradr_o;
 
@@ -192,8 +194,10 @@ module ddr3_axi_ctrl (
 
 
   reg [TSB:0] req_id;
-  wire wr_accept, rd_accept, issued, rd_finish;
+  wire wr_accept, wr_seq, rd_accept, issued, rd_finish;
 
+
+  assign mem_wrlst_o = ~wr_seq;
 
   assign wr_accept = mem_wrreq_o & mem_wrack_i;
   assign rd_accept = mem_rdreq_o & mem_rdack_i;
@@ -257,6 +261,7 @@ module ddr3_axi_ctrl (
 
       .mem_store_o (mem_wrreq_o),
       .mem_accept_i(mem_wrack_i),
+      .mem_wseq_o  (wr_seq),
       .mem_wrid_o  (wr_req_id),
       .mem_addr_o  (mem_wradr_o),
 

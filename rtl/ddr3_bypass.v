@@ -191,7 +191,7 @@ module ddr3_bypass (
 
   reg autop, active_q;
   reg [RSB:0] actv_row;
-  reg [2:0] actv_ba;
+  reg [  2:0] actv_ba;
 
   reg [3:0] state, snext;
 
@@ -207,8 +207,8 @@ module ddr3_bypass (
       assign ddl_rready_o = req_q & axi_rready_i | ctl_rready_i;
 
       assign ctl_rvalid_o = ~rdack & ddl_rvalid_i;
-      assign ctl_rlast_o  = req_q ? 1'bx : ddl_rlast_i;
-      assign ctl_rdata_o  = req_q ?  'bx : ddl_rdata_i;
+      assign ctl_rlast_o = req_q ? 1'bx : ddl_rlast_i;
+      assign ctl_rdata_o = req_q ? 'bx : ddl_rdata_i;
 
       assign byp_req_o = bypass | ctl_req_i;
       assign byp_seq_o = bypass ? seq_q : ctl_seq_i;  // todo
@@ -430,7 +430,7 @@ module ddr3_bypass (
             req_q <= 1'b1;
             state <= ST_READ;
             req_q <= ~byp_rdy_i;  // no 2nd command required
-            cmd_q <= CMD_NOOP; // todo
+            cmd_q <= CMD_NOOP;  // todo
           end else if (axi_arvalid_i && arack) begin
             req_q <= 1'b1;
             state <= ST_READ;
@@ -481,7 +481,7 @@ module ddr3_bypass (
         arack <= arack;
       end
 
-      rdack <= 1'b0; // todo ...
+      rdack <= 1'b0;  // todo ...
     end
   end
 

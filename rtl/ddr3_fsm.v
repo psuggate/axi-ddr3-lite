@@ -164,9 +164,9 @@ module ddr3_fsm (
   reg wrack, rdack;
   wire mem_req, refresh;
 
-  reg req_q, req_x, req_s, seq_q, seq_x, seq_s;
-  reg [2:0] cmd_q, cmd_x, cmd_s, ba_q, ba_x, ba_s;
-  reg [RSB:0] adr_q, adr_x, col_s;
+  reg req_q, req_x, req_s;
+  reg [2:0] cmd_q, cmd_x, ba_q, ba_x;
+  reg [RSB:0] adr_q, adr_x;
 
   wire auto_w;
   wire [RSB:0] row_w, col_w;
@@ -182,7 +182,7 @@ module ddr3_fsm (
   assign mem_rdack_o = rdack;
 
   assign ddl_req_o = req_q;
-  assign ddl_seq_o = seq_q;
+  assign ddl_seq_o = req_x;
   assign ddl_cmd_o = cmd_q;
   assign ddl_ba_o = ba_q;
   assign ddl_adr_o = adr_q;
@@ -213,7 +213,18 @@ module ddr3_fsm (
   assign {col_w[RSB:11], col_w[9:0]} = {{(DDR_ROW_BITS - DDR_COL_BITS - 1) {1'b0}}, col_l};
   assign col_w[10] = auto_w;
 
-  assign auto_w = mem_rdreq_i ? mem_rdlst_i : mem_wrreq_i & mem_wrlst_i;
+  // assign auto_w = mem_rdreq_i ? mem_rdlst_i : mem_wrreq_i & mem_wrlst_i;
+  assign auto_w = mem_rdreq_i ? mem_rdlst_i : mem_wrreq_i && mem_wrlst_i;
+
+  localparam ADR_PAD_BITS = DDR_ROW_BITS - DDR_COL_BITS - 1;
+
+  wire req_w;
+  wire [RSB:0] wrcol, rdcol, adr_w;
+
+  assign wrcol = {{ADR_PAD_BITS{1'b0}}, mem_wrreq_i & mem_wrlst_i, mem_wradr_i[CSB:0]};
+  assign rdcol = {{ADR_PAD_BITS{1'b0}}, mem_rdreq_i & mem_rdlst_i, mem_rdadr_i[CSB:0]};
+  assign adr_w = state == ST_WRIT ? wrcol : rdcol;
+  assign req_w = snext == ST_WRIT || snext == ST_READ;
 
 
   // -- Main State Machine -- //
@@ -226,7 +237,6 @@ module ddr3_fsm (
       store <= 1'b0;
       fetch <= 1'b0;
       req_q <= cfg_req_i;
-      seq_q <= 1'b0;
       cmd_q <= cfg_cmd_i;
       ba_q  <= bank_w;
       adr_q <= row_w;
@@ -254,20 +264,29 @@ module ddr3_fsm (
             req_q <= 1'b0;
             cmd_q <= CMD_NOOP;
           end
-          seq_q <= 1'b0;
           ba_q  <= bank_w;
           adr_q <= row_w;
         end
 
-        ST_ACTV, ST_WRIT, ST_READ: begin
+        ST_ACTV: begin
           // Row-activation command issued
           if (ddl_rdy_i) begin
             state <= snext;
             req_q <= req_x;
-            seq_q <= seq_x;
             cmd_q <= cmd_x;
             ba_q  <= ba_x;
             adr_q <= adr_x;
+          end
+        end
+
+        ST_WRIT, ST_READ: begin
+          // Row-activation command issued
+          if (ddl_rdy_i) begin
+            state <= snext;
+            req_q <= req_x;
+            cmd_q <= cmd_x;
+            ba_q  <= ba_x;
+            adr_q <= adr_w;
           end
         end
 
@@ -280,7 +299,6 @@ module ddr3_fsm (
             ba_q  <= ba_x;
             adr_q <= adr_x;
           end
-          seq_q <= 1'bx;
         end
 
         ST_REFR: begin
@@ -295,13 +313,11 @@ module ddr3_fsm (
           end else begin
             state <= state;
           end
-          seq_q <= 1'bx;
         end
 
         default: begin
           $error("Oh noes");
           state <= ST_IDLE;
-          seq_q <= 1'bx;
           // #100 $fatal;
         end
       endcase
@@ -311,26 +327,50 @@ module ddr3_fsm (
 
   // -- Acknowledge Signals -- //
 
+  // Also determines if any requests (RD, WR) allow for additional sequences of
+  // commands to be issued, for any of the open banks/rows.
   always @(posedge clock) begin
     if (reset) begin
       wrack <= 1'b0;
       rdack <= 1'b0;
+      req_s <= 1'b0;
     end else begin
       case (state)
         ST_IDLE: begin
-          if (refresh) begin
+          wrack <= 1'b0;
+          rdack <= 1'b0;
+
+          // On read-/write- request, if the 'last' signal is not asserted,
+          // then operation is part of a sequence (to the same SDRAM page)
+          if (!refresh) begin
+            req_s <= (mem_wrreq_i & ~mem_rdreq_i & ~mem_wrlst_i) |
+                     (mem_rdreq_i & ~mem_rdlst_i) ;
+          end else begin
+            req_s <= 1'b0;
+          end
+        end
+
+        ST_ACTV: begin
+          if (ddl_rdy_i) begin
+            wrack <= store & mem_wrreq_i;
+            rdack <= fetch & mem_rdreq_i;
+          end else begin
             wrack <= 1'b0;
             rdack <= 1'b0;
-          end else begin
-            wrack <= mem_wrreq_i & ~mem_rdreq_i;
-            rdack <= mem_rdreq_i;
           end
         end
 
         ST_WRIT, ST_READ: begin
-          if (ddl_rdy_i && req_x) begin
-            wrack <= store;
-            rdack <= fetch;
+          // Attempt to queue up another command, if part of a sequence, and
+          // the next command is already waiting to be dispatched.
+          // Once ACT has been issued, used 'req_x' to handle sequences ...
+          if (ddl_rdy_i && req_s) begin
+            wrack <= store & mem_wrreq_i;
+            rdack <= fetch & mem_rdreq_i;
+            req_s <= (store & mem_wrreq_i & ~mem_wrlst_i) |
+                     (fetch & mem_rdreq_i & ~mem_rdlst_i) ;
+          // end else if (store && mem_wrreq_i && !req_s && !wrack) begin
+          //   wrack <= 1'b1;
           end else begin
             wrack <= 1'b0;
             rdack <= 1'b0;
@@ -340,6 +380,7 @@ module ddr3_fsm (
         default: begin
           wrack <= 1'b0;
           rdack <= 1'b0;
+          req_s <= 1'b0;
         end
 
       endcase
@@ -355,7 +396,6 @@ module ddr3_fsm (
   always @(posedge clock) begin
     if (reset) begin
       snext <= ST_IDLE;
-      seq_x <= 1'b0;
       req_x <= 1'b0;
       cmd_x <= CMD_NOOP;
       ba_x  <= 'bx;
@@ -363,107 +403,49 @@ module ddr3_fsm (
     end else begin
       case (state)
         ST_IDLE: begin
-          if (refresh) begin
-            snext <= ST_IDLE;
-            seq_x <= 1'b0;
-            req_x <= 1'b0;
-            cmd_x <= 'bx;
-            ba_x  <= 'bx;
-            adr_x <= 'bx;
-          end else begin
+          if (!refresh && (mem_rdreq_i || mem_wrreq_i)) begin
+            // Because 'req_q' is for the 'ACT' command, then these are for the
+            // subsequent SDRAM operation
             req_x <= 1'b1;
             ba_x  <= bank_w;
             adr_x <= col_w;
 
             if (mem_rdreq_i) begin
               snext <= ST_READ;
-              seq_x <= ~mem_rdlst_i;
               cmd_x <= CMD_READ;
             end else begin
               snext <= ST_WRIT;
-              seq_x <= ~mem_wrlst_i;
               cmd_x <= CMD_WRIT;
             end
-          end
-        end
-
-        ST_ACTV, ST_READ, ST_WRIT: begin
-          if (ddl_rdy_i) begin
-            snext <= req_s ? (fetch ? ST_READ : store ? ST_WRIT : 'bx) : ST_IDLE;
-            seq_x <= seq_s;
-            req_x <= req_s;
-            cmd_x <= cmd_s;
-            ba_x  <= ba_s;
-            adr_x <= col_s;
-          end
-        end
-
-        default: begin
-          if (ddl_rdy_i) begin
+          end else begin
             snext <= ST_IDLE;
-            seq_x <= 1'b0;
             req_x <= 1'b0;
             cmd_x <= 'bx;
             ba_x  <= 'bx;
             adr_x <= 'bx;
           end
         end
-      endcase
-    end
-  end
 
-  // Determines if any requests (RD, WR) allow for additional sequences of
-  // commands to be issued, for any of the open banks/rows.
-  // todo:
-  always @(posedge clock) begin
-    if (reset) begin
-      seq_s <= 1'b0;
-      req_s <= 1'b0;
-      cmd_s <= 'bx;
-      ba_s  <= 'bx;
-      col_s <= 'bx;
-    end else begin
-      case (state)
-        ST_IDLE: begin
-          // On read-/write- request, if the 'last' signal is not asserted, then
-          // operation is part of a sequence (to the same SDRAM page)
-          if (refresh) begin
-            seq_s <= 1'b0;
-          end else begin
-            seq_s <= (mem_wrreq_i & ~mem_wrlst_i) | (mem_rdreq_i & ~mem_rdlst_i);
+        ST_ACTV, ST_READ, ST_WRIT: begin
+          if (store && mem_wrreq_i && mem_wrlst_i && ddl_rdy_i) begin
+            snext <= ST_IDLE;
+          end else if (fetch && mem_rdreq_i && mem_rdlst_i && ddl_rdy_i) begin
+            snext <= ST_IDLE;
           end
-          req_s <= 1'b0;
-          cmd_s <= 'bx;
-          ba_s  <= 'bx;
-          col_s <= 'bx;
-        end
-
-        ST_ACTV, ST_WRIT, ST_READ: begin
-          // Attempt to queue up another command, if part of a sequence, and
-          // the next command is already waiting to be dispatched
-          // todo: can this fail, if the 'last' command does not show up, in-
-          //   time ??
-          if (seq_x) begin
-            seq_s <= (store & mem_wrreq_i & ~mem_wrlst_i) | (fetch & mem_rdreq_i & ~mem_rdlst_i);
-            req_s <= 1'b1;
-            cmd_s <= cmd_x;
-            ba_s  <= ba_x;
-            col_s <= col_w;
-          end else begin
-            seq_s <= 1'b0;
-            req_s <= 1'b0;
-            cmd_s <= 'bx;
-            ba_s  <= 'bx;
-            col_s <= 'bx;
+          if (store && mem_wrreq_i && wrack || fetch && mem_rdreq_i && rdack) begin
+            adr_x <= adr_w;
+            req_x <= req_w;
           end
         end
 
         default: begin
-          seq_s <= 1'b0;
-          req_s <= 1'b0;
-          cmd_s <= 'bx;
-          ba_s  <= 'bx;
-          col_s <= 'bx;
+          if (ddl_rdy_i) begin
+            snext <= ST_IDLE;
+            req_x <= req_w;
+            cmd_x <= cmd_x;
+            ba_x  <= ba_x;
+            adr_x <= adr_w;
+          end
         end
       endcase
     end

@@ -96,16 +96,17 @@ module ddr3_axi_ctrl_tb;
       araddr <= 0;
     end
 
+    while (!awready || !arready) begin
+      @(posedge clock);
+    end
     @(posedge clock);
-    @(posedge clock);
-    data <= {$urandom, $urandom, $urandom, $urandom};
 
-    @(posedge clock);
-
-    axi_store(0, data);
+    axi_store(0, 3);
     $display("TB:%10t: WRITE = %x", $time, data);
 
-    @(posedge clock);
+    axi_store(0, 7);
+    $display("TB:%10t: WRITE = %x", $time, data);
+
     while (!bvalid || !bready) begin
       @(posedge clock);
     end
@@ -301,18 +302,43 @@ module ddr3_axi_ctrl_tb;
 
   task axi_store;
     input [ASB:0] addr;
-    input [127:0] data;
+  input [7:0] len;
     begin
       integer count;
+      reg done = 0;
 
       awvalid <= 1'b1;
-      awlen <= 128 / WIDTH - 1;
+      awlen <= len;
       awid <= arid + 1;
       awburst <= 2'b01;  // INCR
       awaddr <= addr;
-      wvalid <= 1'b0;
-      count <= 0;
+      count <= len;
 
+      wvalid <= 1'b1;
+      wlast <= 1'b0;
+      wstrb <= 4'hf;
+      wdata <= $urandom;
+
+      while (!done) begin
+        @(posedge clock);
+
+        if (awvalid && awready) begin
+          awvalid <= 1'b0;
+        end
+
+        if (wvalid && wready) begin
+          count  <= count - 1;
+          wvalid <= ~wlast;
+          wlast  <= count == 1;
+          wdata  <= $urandom;
+          data   <= {wdata, data[127:WIDTH]};
+        end
+
+        done <= wvalid & wready & wlast;
+      end
+
+      @(posedge clock);
+/*
       @(posedge clock);
 
       while (!awready) begin
@@ -340,6 +366,7 @@ module ddr3_axi_ctrl_tb;
 
       wvalid <= 1'b0;
       wlast  <= 1'b0;
+*/
     end
   endtask  // axi_fetch
 

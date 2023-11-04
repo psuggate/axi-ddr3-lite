@@ -165,7 +165,7 @@ module axi_ddr3_lite_tb;
     axi_store(0, 3, 2);
     $display("TB:%10t: WRITE = %x", $time, data);
 
-    axi_store(16, 3, 6);
+    axi_store(16, 7, 6);
     $display("TB:%10t: WRITE = %x", $time, data);
 
     //
@@ -176,7 +176,7 @@ module axi_ddr3_lite_tb;
     end
     @(posedge clock);
 
-    axi_fetch(0, data);
+    axi_fetch(16, data);
     $display("TB:%10t: READ = %x", $time, data);
 
     //
@@ -435,7 +435,6 @@ module axi_ddr3_lite_tb;
       awid <= tid;
       awburst <= 2'b01;  // INCR
       awaddr <= addr;
-      wvalid <= 1'b0;
       count <= len;
 
       wvalid <= 1'b1;

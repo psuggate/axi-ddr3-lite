@@ -25,6 +25,9 @@ VCD	:= $(OUT:%.out=%.vcd)
 
 sim:	$(VCD)
 
+clean:
+	rm *.vcd *.out
+
 %.vcd:	%.out
 	./$<
 
