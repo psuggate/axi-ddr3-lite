@@ -1,28 +1,27 @@
 [*]
 [*] GTKWave Analyzer v3.3.104 (w)1999-2020 BSI
-[*] Sat Nov  4 07:34:07 2023
+[*] Sat Nov  4 21:36:48 2023
 [*]
 [dumpfile] "./axi_ddr3_lite_tb.vcd"
-[dumpfile_mtime] "Sat Nov  4 06:56:49 2023"
-[dumpfile_size] 2463086
+[dumpfile_mtime] "Sat Nov  4 21:34:18 2023"
+[dumpfile_size] 2461687
 [savefile] "./axi_lite_fsm_debug.gtkw"
-[timestart] 66233900
-[size] 2560 1376
+[timestart] 66226100
+[size] 1920 1043
 [pos] -1 -1
 *-17.061663 66735000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] axi_ddr3_lite_tb.
 [treeopen] axi_ddr3_lite_tb.ddr_core_inst.
 [treeopen] axi_ddr3_lite_tb.ddr_core_inst.ddr3_axi_ctrl_inst.axi_wr_path_inst.
 [sst_width] 233
-[signals_width] 174
+[signals_width] 150
 [sst_expanded] 1
-[sst_vpaned_height] 414
+[sst_vpaned_height] 298
 @28
 axi_ddr3_lite_tb.ddr_core_inst.ddr3_fsm_inst.clock
 axi_ddr3_lite_tb.ddr_core_inst.ddr3_fsm_inst.reset
-@800200
--AXI
 @c00200
+-AXI
 -WR Addr
 @28
 axi_ddr3_lite_tb.ddr_core_inst.axi_awvalid_i
@@ -58,9 +57,8 @@ axi_ddr3_lite_tb.ddr_core_inst.axi_bid_o[3:0]
 axi_ddr3_lite_tb.ddr_core_inst.axi_bresp_o[1:0]
 @1401200
 -WR Resp
-@1000200
 -AXI
-@c00201
+@c00200
 -AXI WR
 @28
 axi_ddr3_lite_tb.ddr_core_inst.ddr3_axi_ctrl_inst.axi_wr_path_inst.chunker_inst.xvalid_o
@@ -92,7 +90,7 @@ axi_ddr3_lite_tb.ddr_core_inst.ddr3_fsm_inst.mem_wrlst_i
 @22
 [color] 2
 axi_ddr3_lite_tb.ddr_core_inst.ddr3_fsm_inst.mem_wradr_i[25:0]
-@1401201
+@1401200
 -AXI WR
 @800200
 -FSM
@@ -103,6 +101,10 @@ axi_ddr3_lite_tb.ddr_core_inst.ddr3_fsm_inst.state[3:0]
 axi_ddr3_lite_tb.ddr_core_inst.ddr3_fsm_inst.dbg_state[39:0]
 [color] 6
 axi_ddr3_lite_tb.ddr_core_inst.ddr3_fsm_inst.dbg_snext[39:0]
+@28
+axi_ddr3_lite_tb.ddr_core_inst.ddr3_fsm_inst.mem_wrreq_i
+axi_ddr3_lite_tb.ddr_core_inst.ddr3_fsm_inst.wrack
+axi_ddr3_lite_tb.ddr_core_inst.ddr3_fsm_inst.mem_wrlst_i
 @22
 [color] 2
 axi_ddr3_lite_tb.ddr_core_inst.ddr3_fsm_inst.col_w[12:0]

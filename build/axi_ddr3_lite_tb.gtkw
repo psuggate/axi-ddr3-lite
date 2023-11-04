@@ -1,10 +1,10 @@
 [*]
 [*] GTKWave Analyzer v3.3.104 (w)1999-2020 BSI
-[*] Sat Nov  4 06:25:10 2023
+[*] Sat Nov  4 21:36:36 2023
 [*]
 [dumpfile] "./axi_ddr3_lite_tb.vcd"
-[dumpfile_mtime] "Sat Nov  4 06:22:36 2023"
-[dumpfile_size] 2463086
+[dumpfile_mtime] "Sat Nov  4 21:34:18 2023"
+[dumpfile_size] 2461687
 [savefile] "./axi_ddr3_lite_tb.gtkw"
 [timestart] 66189700
 [size] 2560 1376
@@ -14,9 +14,9 @@
 [treeopen] axi_ddr3_lite_tb.ddr_core_inst.
 [treeopen] axi_ddr3_lite_tb.ddr_core_inst.ddr3_axi_ctrl_inst.
 [sst_width] 233
-[signals_width] 142
+[signals_width] 166
 [sst_expanded] 1
-[sst_vpaned_height] 414
+[sst_vpaned_height] 575
 @28
 axi_ddr3_lite_tb.clock
 axi_ddr3_lite_tb.reset
@@ -99,26 +99,26 @@ axi_ddr3_lite_tb.ddr_core_inst.ddr3_fsm_inst.adr_q[12:0]
 axi_ddr3_lite_tb.ddr_core_inst.ddr3_fsm_inst.dbg_state[39:0]
 @1401200
 -FSM
-@800201
+@c00200
 -Bypass
-@29
+@28
 axi_ddr3_lite_tb.abvalid
 axi_ddr3_lite_tb.abready
-@23
+@22
 axi_ddr3_lite_tb.bylen[7:0]
-@29
+@28
 axi_ddr3_lite_tb.byburst[1:0]
-@23
+@22
 axi_ddr3_lite_tb.byid[3:0]
 axi_ddr3_lite_tb.byaddr[26:0]
-@29
+@28
 axi_ddr3_lite_tb.dbvalid
 axi_ddr3_lite_tb.dbready
 axi_ddr3_lite_tb.dbresp[1:0]
-@23
+@22
 axi_ddr3_lite_tb.dbid[3:0]
 axi_ddr3_lite_tb.bdata[31:0]
-@1000201
+@1401200
 -Bypass
 @c00200
 -Internal
@@ -151,9 +151,8 @@ axi_ddr3_lite_tb.ddr_core_inst.ddr3_bypass_inst.cmd_q[2:0]
 @1401200
 -DDL
 -Internal
-@800200
--DFI
 @c00200
+-DFI
 -WR Dat
 @28
 axi_ddr3_lite_tb.ddr_core_inst.dfi_wstb_o
@@ -173,9 +172,8 @@ axi_ddr3_lite_tb.ddr_core_inst.dfi_last_i
 axi_ddr3_lite_tb.ddr_core_inst.dfi_data_i[31:0]
 @1401200
 -RD Dat
-@1000200
 -DFI
-@c00200
+@800200
 -WR Path
 @28
 axi_ddr3_lite_tb.ddr_core_inst.ddr3_axi_ctrl_inst.axi_awvalid_i
@@ -204,7 +202,7 @@ axi_ddr3_lite_tb.ddr_core_inst.ddr3_axi_ctrl_inst.axi_wr_path_inst.cmd_ready
 axi_ddr3_lite_tb.ddr_core_inst.ddr3_axi_ctrl_inst.axi_wr_path_inst.wcf_valid
 axi_ddr3_lite_tb.ddr_core_inst.ddr3_axi_ctrl_inst.axi_wr_path_inst.wdf_ready
 axi_ddr3_lite_tb.ddr_core_inst.ddr3_axi_ctrl_inst.axi_wr_path_inst.wdf_valid
-@1401200
+@1000200
 -WR Path
 [pattern_trace] 1
 [pattern_trace] 0
