@@ -141,7 +141,7 @@ module ddr3_fsm (
 
   // -- Constants -- //
 
-  // Relative transaction costs, for scoring and scheduling
+  // Todo: Relative transaction costs, for scoring and scheduling ??
   parameter COST_RD_TO_RD = 2;
   parameter COST_WR_TO_WR = 2;
   parameter COST_RD_TO_WR = 3;
@@ -230,6 +230,7 @@ module ddr3_fsm (
       req_x <= 1'b0;
       cmd_x <= CMD_NOOP;
       adr_x <= 'bx;
+      // req_s <= 1'b0;
       wrack <= 1'b0;
       rdack <= 1'b0;
     end else begin

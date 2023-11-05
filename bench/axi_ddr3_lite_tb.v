@@ -192,12 +192,10 @@ module axi_ddr3_lite_tb;
     axi_fetch(16, 3, 3, data);
     $display("TB:%10t: READ = %x", $time, data);
 
-/*
     //
     // Test the BYPASS port
-    byp_fetch(0, 1, 3, data);
+    byp_fetch(32, 3, 10, data);
     $display("TB:%10t: BYPASS = %x", $time, data);
-*/
 
     #400 @(posedge clock);
     $finish;
@@ -526,41 +524,40 @@ module axi_ddr3_lite_tb;
 
   task byp_fetch;
     input [ASB:0] addr;
-    input last;
+    input [7:0] len;
     input [ISB:0] tid;
     output [127:0] data;
     begin
-      // Request READ
-      abvalid <= 1'b1;
-      bylen   <= 8'h03; // 3+1 transfers
-      byburst <= 2'b01; // INCR
-      byid    <= tid;
-      byaddr  <= addr[ASB:4]; // todo
+      integer count;
+      reg done = 0;
 
       // todo: MUST be asserted to initiate FAST-PATH READ
       dbready <= 1'b1;
-
-      while (!abready) begin
-        @(posedge clock);
-      end
       @(posedge clock);
 
-      abvalid <= 1'b0;
-      bylen   <= 8'hxx;
-      byburst <= 2'bxx;
-      byid    <= 'bx;
-      byaddr  <= 'bx;
+      abvalid <= 1'b1;
+      bylen   <= len; // 3+1 transfers
+      byburst <= 2'b01; // INCR
+      byid    <= tid;
+      byaddr  <= addr; // todo
+      count <= len;
 
-      // Wait for data
-      dbready <= 1'b1;
-      while (!dbvalid || !dblast) begin
+      while (!done) begin
         @(posedge clock);
-        if (dbvalid) begin
+
+        if (abvalid && abready) begin
+          abvalid <= 1'b0;
+        end
+
+        if (dbvalid && dbready) begin
+          count <= count - 1;
+          dbready <= ~dblast;
           data <= {bdata, data[127:WIDTH]};
         end
+
+        done <= dbvalid & dbready & dblast;
       end
 
-      dbready <= 1'b0;
       @(posedge clock);
     end
   endtask  // byp_fetch

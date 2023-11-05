@@ -172,6 +172,8 @@ module ddr3_bypass (
 
   // -- Constants -- //
 
+  localparam ADR_PAD_BITS = DDR_ROW_BITS - DDR_COL_BITS - 1;
+
   // Subset of DDR3 controller commands/states
   localparam [2:0] ST_IDLE = 3'b111;
   localparam [2:0] ST_READ = 3'b101;
@@ -179,12 +181,11 @@ module ddr3_bypass (
   localparam [2:0] ST_PREC = 3'b010;
 
 
-  reg arack, rdack;
-  reg req_q, req_x, req_s, seq_q, seq_x, seq_s;
-  reg [2:0] cmd_q, cmd_x, cmd_s, ba_q, ba_x, ba_s;
-  reg [RSB:0] adr_q, adr_x, col_s;
+  reg arack, req_q, rdy_q;
+  reg [2:0] cmd_q, ba_q;
+  reg [RSB:0] adr_q, adr_x;
 
-  wire auto_w, bypass, precharge_w, fast_read_w;
+  wire asel_w, auto_w, bypass, precharge_w, fast_read_w;
   wire [2:0] ba_w, bank_w, cmd_w;
   wire [RSB:0] row_w, col_w, adr_w;
   wire [CSB:0] col_l;
@@ -202,16 +203,20 @@ module ddr3_bypass (
       // -- Use the Bypass Port -- //
 
       assign axi_arready_o = arack;
-      assign axi_rvalid_o = rdack;
+      assign axi_rvalid_o = rdy_q & ddl_rvalid_i;
+      assign axi_rlast_o  = ddl_rlast_i;
+      assign axi_rresp_o  = 2'b00;
+      assign axi_rid_o    = axi_arid_i;
+      assign axi_rdata_o  = ddl_rdata_i;
 
-      assign ddl_rready_o = req_q & axi_rready_i | ctl_rready_i;
+      assign ddl_rready_o = rdy_q & axi_rready_i | ctl_rready_i;
 
-      assign ctl_rvalid_o = ~rdack & ddl_rvalid_i;
+      assign ctl_rvalid_o = ~rdy_q & ddl_rvalid_i;
       assign ctl_rlast_o = req_q ? 1'bx : ddl_rlast_i;
       assign ctl_rdata_o = req_q ? 'bx : ddl_rdata_i;
 
       assign byp_req_o = bypass | ctl_req_i;
-      assign byp_seq_o = bypass ? seq_q : ctl_seq_i;  // todo
+      assign byp_seq_o = bypass ? 1'b0 : ctl_seq_i;  // todo
       assign byp_cmd_o = cmd_w;
       assign byp_ba_o = ba_w;
       assign byp_adr_o = adr_w;
@@ -268,10 +273,21 @@ module ddr3_bypass (
 
   // -- Address Logic -- //
 
+// Output address & select
+assign asel_w = axi_arvalid_i & axi_arready_o;
+assign ba_w   = asel_w ? bank_w : req_q ? ba_q  : ctl_ba_i;
+assign adr_w  = asel_w ? row_w  : req_q ? adr_q : ctl_adr_i;
+
   // AUTO-PRECHARGE bit
   // todo: gonna have to detect sequences ourselves ...
-  assign auto_w = 1'b1;
+  assign auto_w = axi_arvalid_i && axi_arburst_i == 2'b01 && axi_arlen_i == 8'd3;
 
+// Bypass-address capture
+assign bank_w = axi_araddr_i[DDR_COL_BITS+2:DDR_COL_BITS];
+assign row_w  = axi_araddr_i[ASB:DDR_COL_BITS+3];
+assign col_w  = {{ADR_PAD_BITS{1'b0}}, auto_w, axi_araddr_i[CSB:0]};
+
+/*
   assign {row_w, bank_w, col_l} = axi_araddr_i;
 
   // Bit 10 is the AUTO-PRECHARGE (PRECHARGE-ALL, and ZQCL) indicator bit, so
@@ -306,6 +322,7 @@ module ddr3_bypass (
       end
     endcase
   end
+*/
 
 
   // -- PRECHARGE Detection -- //
@@ -413,60 +430,88 @@ module ddr3_bypass (
   //  - implement address-bits -> bank selection
 
   always @(posedge clock) begin
-    if (reset) begin
+    if (!byp_run_i) begin
+      // Forward the initialisation and configuration commands on to the DFI,
+      // until the configuration module asserts 'reset'.
       state <= ST_IDLE;
-      cmd_q <= CMD_NOOP;
       req_q <= 1'b0;
-      seq_q <= 1'b0;
+      cmd_q <= 'bx;
+      ba_q  <= 'bx;
+      adr_q <= 'bx;
+      adr_x <= 'bx;
+      arack <= 1'b0;
     end else begin
       case (state)
         ST_IDLE: begin
-          if (precharge_w) begin
-            req_q <= 1'b1;
-            state <= ST_ACTV;
-            req_q <= 1'b1;  // 2nd command, RAS#
-            cmd_q <= CMD_ACTV;
-          end else if (fast_read_w) begin
-            req_q <= 1'b1;
-            state <= ST_READ;
-            req_q <= ~byp_rdy_i;  // no 2nd command required
-            cmd_q <= CMD_NOOP;  // todo
-          end else if (axi_arvalid_i && arack) begin
-            req_q <= 1'b1;
-            state <= ST_READ;
-            req_q <= 1'b1;  // 2nd command, CAS#
-            cmd_q <= CMD_READ;
+          // Wait for read-/write- requests -- refreshing, as required
+          req_q <= axi_arvalid_i & arack;
+          ba_q  <= bank_w;
+          adr_q <= byp_rdy_i ? col_w : row_w;
+          adr_x <= col_w;
+
+          if (axi_arvalid_i && arack) begin
+            if (byp_rdy_i) begin
+              state <= ST_READ;
+              cmd_q <= CMD_READ;
+            end else begin
+              state <= ST_ACTV;
+              cmd_q <= CMD_ACTV;
+            end
+            arack <= 1'b0;
           end else begin
             state <= ST_IDLE;
-            req_q <= ctl_req_i;  // todo: will need extra "skid" logic ??
-            cmd_q <= ctl_cmd_i;
-            req_q <= 1'b0;
             cmd_q <= CMD_NOOP;
+            arack <= axi_rready_i;
           end
-          seq_q <= 1'b0;
         end
 
-        ST_ACTV, ST_READ, ST_PREC: begin
+        ST_ACTV: begin
+          ba_q  <= ba_q; // note: return to 'IDLE' to bank-switch
+          arack <= 1'b0;
+
           if (byp_rdy_i) begin
-            state <= snext;
-            req_q <= req_x;
-            seq_q <= seq_x;
-            cmd_q <= cmd_x;
+            state <= ST_READ;
+            req_q <= 1'b1;
+            cmd_q <= CMD_READ;
+            adr_q <= adr_x;
+          end
+        end
+
+        ST_READ: begin
+          arack <= 1'b0;
+
+          if (byp_rdy_i) begin
+            req_q <= 1'b0;
+            cmd_q <= CMD_NOOP;
+            adr_q <= 'bx; // row_w;
+          end
+
+          if (axi_rvalid_o && axi_rready_i && axi_rlast_o) begin
+            state <= ST_IDLE;
           end
         end
 
         default: begin
+          arack <= 1'b0;
           $error("Oh noes");
           state <= ST_IDLE;
-          seq_q <= 1'bx;
+          // #100 $fatal;
         end
       endcase
     end
   end
 
+  always @(posedge clock) begin
+    if (reset || ddl_rvalid_i && rdy_q && ddl_rlast_i) begin
+      rdy_q <= 1'b0;
+    end else if (req_q && byp_rdy_i) begin
+      rdy_q <= 1'b1;
+    end
+  end
+
 
   // -- Acknowledge Signals -- //
-
+/*
   // todo: generate the AXI4 flow-control signals for the read-data path
   always @(posedge clock) begin
     if (!byp_run_i) begin
@@ -591,6 +636,7 @@ module ddr3_bypass (
       endcase
     end
   end
+*/
 
 
   // -- Simulation Only -- //
