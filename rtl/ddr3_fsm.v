@@ -184,27 +184,14 @@ module ddr3_fsm (
 
   // -- Address Logic -- //
 
-  wire row_sel_w, wrsel;
-  wire [CSB:0] col_l, cfg_col_w;
+  wire wrsel;
   wire [1:0] asel;
 
-  assign cfg_col_w = {DDR_COL_BITS{1'bx}};
-
-  // todo: make sure that a single 4:1 MUX can be used for setting the value of
-  //   'adr_q' (from 'rdadr, wradr, cfg_adr, adr_x') ??
-  // assign row_sel_w = ddl_rdy_i && (state == ST_ACTV || state == ST_READ || state == ST_WRIT);
-  assign row_sel_w = req_x; // NEW //
-
   assign asel = reset ? 2'b11
-              : row_sel_w ? 2'b00
+              : req_x ? 2'b00
               : mem_rdreq_i ? 2'b01
               : mem_wrreq_i ? 2'b10
               : 2'b00 ;
-
-  // assign {row_w, bank_w, col_l} = asel == 2'b11 ? {cfg_adr_i, cfg_ba_i, cfg_col_w}
-  //                               : asel == 2'b10 ? mem_wradr_i
-  //                               : asel == 2'b01 ? mem_rdadr_i
-  //                               : {{DDR_ROW_BITS{1'bx}}, ba_q, adr_x[CSB:0]} ;
 
   assign row_w  = asel == 2'b11 ? cfg_adr_i
                 : asel == 2'b10 ? mem_wradr_i[ASB:DDR_COL_BITS + 3]
@@ -216,16 +203,10 @@ module ddr3_fsm (
                 : asel == 2'b01 ? mem_rdadr_i[DDR_COL_BITS + 2:DDR_COL_BITS]
                 : ba_q ;
 
-  // assign {col_w[RSB:11], col_w[9:0]} = {{(DDR_ROW_BITS - DDR_COL_BITS - 1) {1'b0}}, col_l};
-  // assign col_w[10] = auto_w;
-
-  // assign auto_w = mem_rdreq_i ? mem_rdlst_i : mem_wrreq_i && mem_wrlst_i;
-
   // Determines the next value of 'adr_x'
   assign wrcol = {{ADR_PAD_BITS{1'b0}}, mem_wrreq_i & mem_wrlst_i, mem_wradr_i[CSB:0]};
   assign rdcol = {{ADR_PAD_BITS{1'b0}}, mem_rdreq_i & mem_rdlst_i, mem_rdadr_i[CSB:0]};
   assign wrsel = (state != ST_IDLE && store_w) || mem_wrreq_i && !mem_rdreq_i;
-  // assign adr_w = store_w ? wrcol : rdcol;
   assign adr_w = wrsel ? wrcol : rdcol;
 
 
@@ -258,8 +239,7 @@ module ddr3_fsm (
           req_q <= refresh | mem_rdreq_i | mem_wrreq_i;
           ba_q  <= bank_w;
           adr_q <= row_w;
-          // adr_x <= col_w;
-          adr_x <= adr_w; // NEW //
+          adr_x <= adr_w;
 
           if (!refresh && (mem_rdreq_i || mem_wrreq_i)) begin
             state <= ST_ACTV;
@@ -290,21 +270,11 @@ module ddr3_fsm (
           wrack <= ~wrack & ddl_rdy_i & req_s & store_w & mem_wrreq_i;
           rdack <= ~rdack & ddl_rdy_i & req_s & fetch_w & mem_rdreq_i;
 
-/*
- // todo: simplify the ADR paths to reduce combinational (MUX and SEL) delays
-          if (mem_wrreq_i && wrack || mem_rdreq_i && rdack) begin
-            adr_x <= adr_w;
-            req_x <= 1'b1;
-          end else if (ddl_rdy_i && !req_s) begin
-            req_x <= 1'b0;
-          end
-*/
-
           if (ddl_rdy_i) begin
             state <= snext;
             req_q <= req_x;
             cmd_q <= cmd_x;
-            adr_q <= row_w; // adr_x;
+            adr_q <= row_w;
 
             // Command issued, issue another as part of a sequence?
             if (!req_s) begin
@@ -338,7 +308,7 @@ module ddr3_fsm (
             state <= snext;
             req_q <= req_x;
             cmd_q <= cmd_x;
-            adr_q <= row_w; // adr_x;
+            adr_q <= row_w;
           end else begin
             state <= state;
           end
