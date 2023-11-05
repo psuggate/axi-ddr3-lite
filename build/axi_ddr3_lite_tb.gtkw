@@ -1,20 +1,19 @@
 [*]
 [*] GTKWave Analyzer v3.3.104 (w)1999-2020 BSI
-[*] Sun Nov  5 00:48:19 2023
+[*] Sun Nov  5 03:57:37 2023
 [*]
 [dumpfile] "./axi_ddr3_lite_tb.vcd"
-[dumpfile_mtime] "Sun Nov  5 00:44:40 2023"
-[dumpfile_size] 3110457
+[dumpfile_mtime] "Sun Nov  5 03:57:17 2023"
+[dumpfile_size] 2557676
 [savefile] "./axi_ddr3_lite_tb.gtkw"
-[timestart] 66745700
+[timestart] 66286600
 [size] 1920 1043
 [pos] -1 -1
-*-14.395294 66825000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+*-17.354321 66910000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] axi_ddr3_lite_tb.
 [treeopen] axi_ddr3_lite_tb.ddr_core_inst.
-[treeopen] axi_ddr3_lite_tb.ddr_core_inst.ddr3_axi_ctrl_inst.
 [sst_width] 233
-[signals_width] 166
+[signals_width] 150
 [sst_expanded] 1
 [sst_vpaned_height] 414
 @28
@@ -25,9 +24,6 @@ axi_ddr3_lite_tb.reset
 @28
 axi_ddr3_lite_tb.awvalid
 axi_ddr3_lite_tb.awready
-@420
-axi_ddr3_lite_tb.axi_store.count
-@28
 axi_ddr3_lite_tb.wvalid
 axi_ddr3_lite_tb.wready
 axi_ddr3_lite_tb.wlast
@@ -80,7 +76,7 @@ axi_ddr3_lite_tb.ddr_dqs_n[1:0]
 axi_ddr3_lite_tb.ddr_dq[15:0]
 @1000200
 -DDR
-@c00200
+@800200
 -FSM
 @28
 [color] 3
@@ -97,8 +93,42 @@ axi_ddr3_lite_tb.ddr_core_inst.ddr3_fsm_inst.adr_q[12:0]
 @820
 [color] 7
 axi_ddr3_lite_tb.ddr_core_inst.ddr3_fsm_inst.dbg_state[39:0]
-@1401200
+[color] 6
+axi_ddr3_lite_tb.ddr_core_inst.ddr3_fsm_inst.dbg_snext[39:0]
+@28
+axi_ddr3_lite_tb.ddr_core_inst.ddr3_fsm_inst.req_x
+axi_ddr3_lite_tb.ddr_core_inst.ddr3_fsm_inst.cmd_x[2:0]
+@22
+[color] 2
+axi_ddr3_lite_tb.ddr_core_inst.ddr3_fsm_inst.adr_x[12:0]
+@28
+axi_ddr3_lite_tb.ddr_core_inst.ddr3_fsm_inst.req_s
+@22
+[color] 2
+axi_ddr3_lite_tb.ddr_core_inst.ddr3_fsm_inst.adr_w[12:0]
+@28
+axi_ddr3_lite_tb.ddr_core_inst.ddr3_fsm_inst.bank_w[2:0]
+@1000200
 -FSM
+@c00201
+-RD Path
+@28
+axi_ddr3_lite_tb.ddr_core_inst.ddr3_axi_ctrl_inst.mem_rdreq_o
+axi_ddr3_lite_tb.ddr_core_inst.ddr3_axi_ctrl_inst.mem_rdack_i
+axi_ddr3_lite_tb.ddr_core_inst.ddr3_axi_ctrl_inst.mem_rdlst_o
+axi_ddr3_lite_tb.ddr_core_inst.ddr3_axi_ctrl_inst.mem_valid_i
+axi_ddr3_lite_tb.ddr_core_inst.ddr3_axi_ctrl_inst.mem_ready_o
+axi_ddr3_lite_tb.ddr_core_inst.ddr3_axi_ctrl_inst.axi_rd_path_inst.cmd_ready
+axi_ddr3_lite_tb.ddr_core_inst.ddr3_axi_ctrl_inst.axi_rd_path_inst.fetch
+axi_ddr3_lite_tb.ddr_core_inst.ddr3_axi_ctrl_inst.axi_rd_path_inst.rcf_valid
+axi_ddr3_lite_tb.ddr_core_inst.ddr3_axi_ctrl_inst.axi_rd_path_inst.xvalid
+axi_ddr3_lite_tb.ddr_core_inst.ddr3_axi_ctrl_inst.axi_rd_path_inst.xready
+axi_ddr3_lite_tb.ddr_core_inst.ddr3_axi_ctrl_inst.axi_rd_path_inst.xseq
+@22
+axi_ddr3_lite_tb.ddr_core_inst.ddr3_axi_ctrl_inst.axi_rd_path_inst.xid[3:0]
+axi_ddr3_lite_tb.ddr_core_inst.ddr3_axi_ctrl_inst.axi_rd_path_inst.xaddr[25:0]
+@1401201
+-RD Path
 @c00200
 -Bypass
 @28
@@ -153,6 +183,7 @@ axi_ddr3_lite_tb.ddr_core_inst.ddr3_bypass_inst.cmd_q[2:0]
 -Internal
 @800200
 -DFI
+@c00200
 -WR Dat
 @28
 axi_ddr3_lite_tb.ddr_core_inst.dfi_wstb_o
@@ -160,7 +191,7 @@ axi_ddr3_lite_tb.ddr_core_inst.dfi_wren_o
 @22
 axi_ddr3_lite_tb.ddr_core_inst.dfi_mask_o[3:0]
 axi_ddr3_lite_tb.ddr_core_inst.dfi_data_o[31:0]
-@1000200
+@1401200
 -WR Dat
 @c00200
 -RD Dat

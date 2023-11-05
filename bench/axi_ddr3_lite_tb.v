@@ -186,15 +186,20 @@ module axi_ddr3_lite_tb;
     end
     @(posedge clock);
 
-    axi_fetch(16, data);
+    axi_fetch(0, 7, 4, data);
     $display("TB:%10t: READ = %x", $time, data);
 
+    axi_fetch(16, 3, 3, data);
+    $display("TB:%10t: READ = %x", $time, data);
+
+/*
     //
     // Test the BYPASS port
     byp_fetch(0, 1, 3, data);
     $display("TB:%10t: BYPASS = %x", $time, data);
+*/
 
-    #40 @(posedge clock);
+    #400 @(posedge clock);
     $finish;
   end
 
@@ -242,12 +247,11 @@ module axi_ddr3_lite_tb;
   // GoWin Global System Reset signal tree.
   GSR GSR ();
 
-  // generic_ddr3_dfi_phy
   gw2a_ddr3_phy #(
       .DDR3_WIDTH(16),  // (default)
       .ADDR_BITS(DDR_ROW_BITS),  // default: 14
       .SOURCE_CLOCK(2'b01),  // (default)
-      .CAPTURE_DELAY(3'h2)
+      .CAPTURE_DELAY(3'h2)  // (default)
   ) u_phy (
       .clock  (clock),
       .reset  (reset),
@@ -474,40 +478,45 @@ module axi_ddr3_lite_tb;
 
       @(posedge clock);
     end
-  endtask  // axi_fetch
+  endtask  // axi_store
 
 
   // -- Perform read transfer (128-bit) -- //
 
   task axi_fetch;
     input [ASB:0] addr;
+    input [7:0] len;
+    input [ISB:0] tid;
     output [127:0] data;
     begin
+      integer count;
+      reg done = 0;
+
       arvalid <= 1'b1;
-      arlen <= 128 / WIDTH - 1;
-      arid <= arid + 1;
+      arlen <= len;
+      arid <= tid;
       arburst <= 2'b01;  // INCR
       araddr <= addr;
-      rready <= 1'b0;
+      count <= len;
 
-      while (!arready) begin
-        @(posedge clock);
-      end
+      rready <= 1'b1;
 
-      @(posedge clock);
-      arvalid <= 1'b0;
-      rready  <= 1'b1;
-
-      while (!rvalid || !rlast) begin
+      while (!done) begin
         @(posedge clock);
 
-        if (rvalid) begin
+        if (arvalid && arready) begin
+          arvalid <= 1'b0;
+        end
+
+        if (rvalid && rready) begin
+          count <= count - 1;
+          rready <= ~rlast;
           data <= {rdata, data[127:WIDTH]};
         end
+
+        done <= rvalid & rready & rlast;
       end
 
-      rready <= 1'b0;
-      // data   <= {rdata, data[127:WIDTH]};
       @(posedge clock);
     end
   endtask  // axi_fetch

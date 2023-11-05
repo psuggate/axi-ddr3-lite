@@ -232,7 +232,7 @@ module axi_ddr3_lite (
 
 
   // assign fsm_wrlst = 1'b1;
-  assign fsm_rdlst = 1'b1;
+  // assign fsm_rdlst = 1'b1;
   assign byp_rdlst = 1'b1;
 
 
@@ -309,6 +309,7 @@ module axi_ddr3_lite (
       .mem_rdreq_o(fsm_rdreq),  // READ requests to FSM
       .mem_rdack_i(fsm_rdack),
       .mem_rderr_i(fsm_rderr),
+      .mem_rdlst_o(fsm_rdlst),
       .mem_rdtid_o(fsm_rdtid),
       .mem_rdadr_o(fsm_rdadr),
 

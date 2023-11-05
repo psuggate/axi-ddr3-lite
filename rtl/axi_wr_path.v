@@ -111,7 +111,7 @@ module axi_wr_path (
   localparam [1:0] AXI_RESP_OKAY = 2'b00;
 
   // Bit-width of the command-info that is stored in the WR-command FIFO
-  localparam COMMAND_WIDTH = ADDRS + AXI_ID_WIDTH;
+  localparam COMMAND_WIDTH = ADDRS + AXI_ID_WIDTH + 1;
   localparam WSB = COMMAND_WIDTH - 1;
 
   // States for capturing write requests
@@ -253,7 +253,7 @@ module axi_wr_path (
   // -- Write-Data Command FIFO -- //
 
   sync_fifo #(
-      .WIDTH (COMMAND_WIDTH + 1),
+      .WIDTH (COMMAND_WIDTH),
       .ABITS (CBITS),
       .OUTREG(CTRL_FIFO_BLOCK)
   ) command_fifo_inst (

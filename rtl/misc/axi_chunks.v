@@ -20,9 +20,15 @@ module axi_chunks (
   parameter ADDRS = 32;
   parameter ASB = ADDRS - 1;
 
+  // The ratio of AXI bus-width to the bus-width of the chunks determines the
+  // amount to increment the address, for each chunk.
+  parameter AXI_WIDTH = 32;
+  parameter OUT_WIDTH = 16;
+
   parameter CHUNK = 2;
   localparam CSB = 7 - CHUNK;
-  localparam CHUNK_SIZE = 1 << 2;
+  // localparam CHUNK_SIZE = (AXI_WIDTH / OUT_WIDTH) << 2;
+  localparam CHUNK_SIZE = 1 << (2 + $clog2(AXI_WIDTH) - $clog2(OUT_WIDTH));
 
   parameter REQID = 4;
   localparam ISB = REQID - 1;
@@ -67,8 +73,6 @@ module axi_chunks (
   assign trid_w = busy_q ? trid_q : aid_i;
   assign addr_w = busy_q ? addr_q : aaddr_i;
 
-  // assign next_w = ~busy_q & avalid_i & xready_i & alen_i[7:CHUNK] != 0 | count > 0;
-  // assign wseq_w = (~busy_q & avalid_i & xready_i & alen_i[7:CHUNK] != 0) | busy_q | count > 0;
   assign wseq_w = (~busy_q & avalid_i & xready_i & alen_i[7:CHUNK] != 0) | cnext > 0;
   assign cnext = count > 0 ? count - 1 : count;
 
