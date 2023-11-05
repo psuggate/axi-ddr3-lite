@@ -177,30 +177,28 @@ module ddr3_ddl_tb;
       .DDR3_WIDTH(WIDTH / 2),  // (default)
       .ADDR_BITS(DDR3_ROW_BITS),  // default: 14
       .SOURCE_CLOCK(2'b01),  // (default)
-      .CAPTURE_DELAY(3'h0)  // (default)
+      .CAPTURE_DELAY(3'h2)  // (default)
   ) gw2a_ddr3_phy_inst (
       .clock  (clock),
       .reset  (reset),
       .clk_ddr(clk_ddr),
 
-      .cfg_valid_i(1'b0),
-      .cfg_data_i ({16'h0000, 4'h4, 4'h4, 8'h00}),
-
-      .dfi_cke_i  (dfi_cke),
-      .dfi_rst_ni (dfi_rst_n),
-      .dfi_cs_ni  (dfi_cs_n),
-      .dfi_ras_ni (dfi_ras_n),
-      .dfi_cas_ni (dfi_cas_n),
-      .dfi_we_ni  (dfi_we_n),
-      .dfi_odt_i  (dfi_odt),
-      .dfi_bank_i (dfi_bank),
-      .dfi_addr_i (dfi_addr),
-      .dfi_wren_i (dfi_wren),
-      .dfi_mask_i (dfi_mask),
-      .dfi_data_i (dfi_wdata),
-      .dfi_rden_i (dfi_rden),
-      .dfi_valid_o(dfi_valid),
-      .dfi_data_o (dfi_rdata),
+      .dfi_cke_i (dfi_cke),
+      .dfi_rst_ni(dfi_rst_n),
+      .dfi_cs_ni (dfi_cs_n),
+      .dfi_ras_ni(dfi_ras_n),
+      .dfi_cas_ni(dfi_cas_n),
+      .dfi_we_ni (dfi_we_n),
+      .dfi_odt_i (dfi_odt),
+      .dfi_bank_i(dfi_bank),
+      .dfi_addr_i(dfi_addr),
+      .dfi_wstb_i(dfi_wstb),
+      .dfi_wren_i(dfi_wren),
+      .dfi_mask_i(dfi_mask),
+      .dfi_data_i(dfi_wdata),
+      .dfi_rden_i(dfi_rden),
+      .dfi_rvld_o(dfi_valid),
+      .dfi_data_o(dfi_rdata),
 
       .ddr_ck_po(ddr_ck_p),
       .ddr_ck_no(ddr_ck_n),

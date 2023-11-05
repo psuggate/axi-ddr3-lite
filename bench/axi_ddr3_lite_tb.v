@@ -15,7 +15,7 @@ module axi_ddr3_lite_tb;
 
 `ifdef __gowin_for_the_win
   localparam PHY_WR_DELAY = 3;
-  localparam PHY_RD_DELAY = 3;
+  localparam PHY_RD_DELAY = 1;
   localparam WR_PREFETCH  = 1'b1;
 `else
   localparam PHY_WR_DELAY = 1;

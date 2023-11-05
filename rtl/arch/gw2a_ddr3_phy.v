@@ -69,8 +69,11 @@ module gw2a_ddr3_phy (
   parameter ADDR_BITS = 14;
   localparam ASB = ADDR_BITS - 1;
 
+  // Selects 1-of-4 source-clock phases, for data-capture
   parameter [1:0] SOURCE_CLOCK = 2'b01;
-  parameter [2:0] CAPTURE_DELAY = 3'h0;
+
+  // Number of clock-cycles from 'dfi_rden_i' to 'dfi_rvld_o'
+  parameter [2:0] CAPTURE_DELAY = 3'h2;
 
 
   input clock;
@@ -121,9 +124,7 @@ module gw2a_ddr3_phy (
   wire [QSB:0] dm_w;
   wire [MSB:0] dq_w;
 
-
-  reg [QSB:0] dqs_p, dqs_n, dm_q;
-  reg [MSB:0] dq_q;
+  reg [QSB:0] dqs_p, dqs_n;
   reg cke_q, rst_nq, cs_nq;
   reg ras_nq, cas_nq, we_nq, odt_q;
   reg [2:0] ba_q;
@@ -135,9 +136,9 @@ module gw2a_ddr3_phy (
 
   // -- DFI Read-Data Signal Assignments -- //
 
-  assign dfi_rvld_o = valid_q;
-  assign dfi_last_o = last_q;
-  assign dfi_data_o = data_q;
+  assign dfi_rvld_o  = valid_q;
+  assign dfi_last_o  = last_q;
+  assign dfi_data_o  = data_q;
 
 
   // -- DDR3 Signal Assignments -- //
@@ -170,15 +171,14 @@ module gw2a_ddr3_phy (
 
   // -- DDR3 Command Signals -- //
 
-  // todo: polarities of the 'n' signals?
   always @(posedge clock) begin
     if (reset) begin
       cke_q  <= 1'b0;
       rst_nq <= 1'b0;
-      cs_nq  <= 1'b1;  // todo: 1'b1 ??
-      ras_nq <= 1'b1;  // todo: 1'b1 ??
-      cas_nq <= 1'b1;  // todo: 1'b1 ??
-      we_nq  <= 1'b1;  // todo: 1'b1 ??
+      cs_nq  <= 1'b1;
+      ras_nq <= 1'b1;
+      cas_nq <= 1'b1;
+      we_nq  <= 1'b1;
       ba_q   <= 3'b0;
       addr_q <= {ADDR_BITS{1'b0}};
       odt_q  <= 1'b0;
@@ -239,30 +239,27 @@ module gw2a_ddr3_phy (
   // -- Write-Data Outputs -- //
 
   reg clock_270, dq_oe_n;
-  reg [DSB:0] data_reg;
-  reg [SSB:0] mask_reg;
+  reg [DSB:0] wdat_q;
+  reg [SSB:0] mask_q;
 
   // todo: good enough ??
   always @(negedge clk_ddr) begin
     clock_270 <= clock;
   end
 
-  wire dq_oe_nw;
   wire [QSB:0] dm_hi_w, dm_lo_w;
   wire [MSB:0] dq_hi_w, dq_lo_w;
 
-  assign dq_oe_nw = ~dfi_wstb_i;
-
   // todo: good enough ??
   always @(posedge clock_270) begin
-    dq_oe_n  <= dq_oe_nw;
-    mask_reg <= ~dfi_mask_i;
-    data_reg <= dfi_data_i;
+    dq_oe_n <= ~dfi_wstb_i;
+    mask_q  <= ~dfi_mask_i;
+    wdat_q  <= dfi_data_i;
   end
 
   // DM outputs
-  assign dm_hi_w = mask_reg[SSB:DDR3_MASKS];
-  assign dm_lo_w = mask_reg[QSB:0];
+  assign dm_hi_w = mask_q[SSB:DDR3_MASKS];
+  assign dm_lo_w = mask_q[QSB:0];
 
   ODDR #(
       .TXCLK_POL(CLOCK_POLARITY),
@@ -277,8 +274,8 @@ module gw2a_ddr3_phy (
   );
 
   // DQ outputs
-  assign dq_hi_w = data_reg[DSB:DDR3_WIDTH];
-  assign dq_lo_w = data_reg[MSB:0];
+  assign dq_hi_w = wdat_q[DSB:DDR3_WIDTH];
+  assign dq_lo_w = wdat_q[MSB:0];
 
   ODDR #(
       .TXCLK_POL(CLOCK_POLARITY),
@@ -295,37 +292,17 @@ module gw2a_ddr3_phy (
 
   // -- Read Data Valid Signals -- //
 
-  wire rd_en_w, rd_en_y;
-
-  shift_register #(
-      .WIDTH(1),
-      .DEPTH(8)
-  ) rvld_srl_inst (
-      .clock (clock),
-      .wren_i(1'b1),
-      .data_i(dfi_rden_i),
-      .addr_i(CAPTURE_DELAY),
-      .data_o(rd_en_w)
-  );
-
-  shift_register #(
-      .WIDTH(1),
-      .DEPTH(8)
-  ) rlst_srl_inst (
-      .clock (clock),
-      .wren_i(1'b1),
-      .data_i(dfi_rden_i),
-      .addr_i(CAPTURE_DELAY-1),
-      .data_o(rd_en_y)
-  );
+  reg [CAPTURE_DELAY-1:0] reads_q;
 
   always @(posedge clock) begin
     if (reset) begin
+      reads_q <= 0;
       valid_q <= 1'b0;
-      last_q <= 1'b0;
+      last_q  <= 1'b0;
     end else begin
-      valid_q <= rd_en_w;
-      last_q <= ~rd_en_y & rd_en_w;
+      reads_q <= {dfi_rden_i, reads_q[CAPTURE_DELAY-1:1]};
+      valid_q <= reads_q[0];
+      last_q  <= ~reads_q[1] & reads_q[0];
     end
   end
 
