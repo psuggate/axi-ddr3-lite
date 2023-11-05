@@ -1,5 +1,5 @@
 `timescale 1ns / 100ps
-// `define __gowin_for_the_win
+`define __gowin_for_the_win
 module axi_ddr3_lite_tb;
 
   // -- Simulation Settings -- //
@@ -12,6 +12,16 @@ module axi_ddr3_lite_tb;
 
   parameter DDR_COL_BITS = 10;
   localparam CSB = DDR_COL_BITS - 1;
+
+`ifdef __gowin_for_the_win
+  localparam PHY_WR_DELAY = 3;
+  localparam PHY_RD_DELAY = 3;
+  localparam WR_PREFETCH  = 1'b1;
+`else
+  localparam PHY_WR_DELAY = 1;
+  localparam PHY_RD_DELAY = 1;
+  localparam WR_PREFETCH  = 1'b0;
+`endif
 
   // Trims an additional clock-cycle of latency, if '1'
   parameter LOW_LATENCY = 1'b1;  // 0 or 1
@@ -62,7 +72,7 @@ module axi_ddr3_lite_tb;
   wire locked, clock, reset;
   wire clk_ddr, clk_ddr_dqs, clk_ref;
 
-`ifdef __gowin_for_the_win
+`ifdef __salad__X__gowin_for_the_win
   // todo: work out actual values ...
   gowin_rpll #(
       .FCLKIN("27"),
@@ -233,52 +243,51 @@ module axi_ddr3_lite_tb;
   GSR GSR ();
 
   // generic_ddr3_dfi_phy
-  gowin_ddr3_dfi_phy #(
+  gw2a_ddr3_phy #(
       .DDR3_WIDTH(16),  // (default)
-      .ADDR_BITS(15),  // default: 14
+      .ADDR_BITS(DDR_ROW_BITS),  // default: 14
       .SOURCE_CLOCK(2'b01),  // (default)
-      .CAPTURE_DELAY(3'h0)  // (default)
+      .CAPTURE_DELAY(3'h2)
   ) u_phy (
       .clock  (clock),
       .reset  (reset),
       .clk_ddr(clk_ddr),
 
-      .cfg_valid_i(1'b0),
-      .cfg_data_i ({16'h0000, 4'h4, 4'h4, 8'h00}),
-
-      .dfi_cke_i(dfi_cke),
-      .dfi_reset_n_i(dfi_rst_n),
-      .dfi_cs_n_i(dfi_cs_n),
-      .dfi_ras_n_i(dfi_ras_n),
-      .dfi_cas_n_i(dfi_cas_n),
-      .dfi_we_n_i(dfi_we_n),
-      .dfi_odt_i(dfi_odt),
+      .dfi_rst_ni(dfi_rst_n),
+      .dfi_cke_i (dfi_cke),
+      .dfi_cs_ni (dfi_cs_n),
+      .dfi_ras_ni(dfi_ras_n),
+      .dfi_cas_ni(dfi_cas_n),
+      .dfi_we_ni (dfi_we_n),
+      .dfi_odt_i (dfi_odt),
       .dfi_bank_i(dfi_bank),
       .dfi_addr_i(dfi_addr),
 
+      .dfi_wstb_i(dfi_wstb),
       .dfi_wren_i(dfi_wren),
       .dfi_mask_i(dfi_mask),
       .dfi_data_i(dfi_wdata),
 
-      .dfi_rden_i (dfi_rden),
-      .dfi_valid_o(dfi_valid),
-      .dfi_data_o (dfi_rdata),
+      .dfi_rden_i(dfi_rden),
+      .dfi_rvld_o(dfi_valid),
+      .dfi_last_o(dfi_last),
+      .dfi_data_o(dfi_rdata),
 
-      .ddr3_ck_p_o(ddr_ck_p_w),
-      .ddr3_ck_n_o(ddr_ck_n_w),
-      .ddr3_cke_o(ddr_cke_w),
-      .ddr3_reset_n_o(ddr_reset_n_w),
-      .ddr3_cs_n_o(ddr_cs_n_w),
-      .ddr3_ras_n_o(ddr_ras_n_w),
-      .ddr3_cas_n_o(ddr_cas_n_w),
-      .ddr3_we_n_o(ddr_we_n_w),
-      .ddr3_odt_o(ddr_odt_w),
-      .ddr3_ba_o(ddr_ba_w),
-      .ddr3_a_o(ddr_addr_w),
-      .ddr3_dm_o(ddr_dm_w),
-      .ddr3_dqs_p_io(ddr_dqs_p_w),
-      .ddr3_dqs_n_io(ddr_dqs_n_w),
-      .ddr3_dq_io(ddr_dq_w)
+      .ddr_ck_po(ddr_ck_p),
+      .ddr_ck_no(ddr_ck_n),
+      .ddr_rst_no(ddr_rst_n),
+      .ddr_cke_o(ddr_cke),
+      .ddr_cs_no(ddr_cs_n),
+      .ddr_ras_no(ddr_ras_n),
+      .ddr_cas_no(ddr_cas_n),
+      .ddr_we_no(ddr_we_n),
+      .ddr_odt_o(ddr_odt),
+      .ddr_ba_o(ddr_ba),
+      .ddr_a_o(ddr_a),
+      .ddr_dm_o(ddr_dm),
+      .ddr_dqs_pio(ddr_dqs_p),
+      .ddr_dqs_nio(ddr_dqs_n),
+      .ddr_dq_io(ddr_dq)
   );
 
 `else
@@ -342,6 +351,9 @@ module axi_ddr3_lite_tb;
       .DDR_ROW_BITS (DDR_ROW_BITS),
       .DDR_COL_BITS (DDR_COL_BITS),
       .DDR_DQ_WIDTH (WIDTH / 2),
+      .PHY_WR_DELAY (PHY_WR_DELAY),
+      .PHY_RD_DELAY (PHY_RD_DELAY),
+      .WR_PREFETCH  (WR_PREFETCH),
       .LOW_LATENCY  (LOW_LATENCY),
       .AXI_ID_WIDTH (REQID),
       .MEM_ID_WIDTH (REQID),

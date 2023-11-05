@@ -66,6 +66,12 @@ module ddr3_ddl (
   // Trims an additional clock-cycle of latency, if '1'
   parameter LOW_LATENCY = 1'b1;  // 0 or 1
 
+  // Uses an the 'wr_strob' signal to clock out the WRITE data from the upstream
+  // FIFO, when enabled (vs. the 'wr_ready' signal, which has one more cycle of
+  // delay).
+  // Note: the 'gw2a_ddr3_phy' requires this to be enabled
+  parameter WR_PREFETCH = 1'b0;
+
   // Data-path and address settings
   parameter DDR_ROW_BITS = 13;
   localparam RSB = DDR_ROW_BITS - 1;
@@ -84,8 +90,11 @@ module ddr3_ddl (
 
   // Note: these latencies are due to the registers and IOBs in the PHY for the
   //   commands, addresses, and the data-paths.
-  parameter PHY_WR_LATENCY = 1 + LOW_LATENCY;
-  parameter PHY_RD_LATENCY = 1 + LOW_LATENCY;
+  parameter PHY_WR_DELAY = 1;
+  parameter PHY_RD_DELAY = 1;
+
+  localparam [WSB:0] WR_SHIFTS = DDR_CWL - PHY_WR_DELAY - LOW_LATENCY - 2;
+  localparam [WSB:0] RD_SHIFTS = DDR_CL - PHY_RD_DELAY - LOW_LATENCY - 2;
 
   // A DDR3 burst has length of 8 transfers (DDR), so four clock/memory cycles
   // todo: ...
@@ -199,7 +208,7 @@ module ddr3_ddl (
   assign ctl_rdy_o = ready;
   assign precharge = ctl_adr_i[10];
 
-  assign mem_wready_o = wr_ready;
+  assign mem_wready_o = WR_PREFETCH ? wr_strob : wr_ready;
   assign mem_rvalid_o = dfi_rvld_i;
   assign mem_rlast_o = dfi_last_i;
   assign mem_rddata_o = dfi_data_i;
@@ -527,9 +536,6 @@ module ddr3_ddl (
 
 
   // -- READ- and WRITE- Data-Paths -- //
-
-  localparam [WSB:0] WR_SHIFTS = DDR_CWL - PHY_WR_LATENCY - 2;
-  localparam [WSB:0] RD_SHIFTS = DDR_CL - PHY_RD_LATENCY - 2;
 
   wire store_w, wr_rdy_w;
   wire fetch_w, rd_rdy_w;

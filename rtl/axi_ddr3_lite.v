@@ -74,8 +74,20 @@ module axi_ddr3_lite (
   parameter DDR_CWL = 6;
   parameter DDR_DLL_OFF = 1;
 
+  // These additional delays depend on how many registers are in the data-output
+  // and data-capture paths, of the DDR3 PHY being used.
+  // Note: the 'gw2a_ddr3_phy' requires these to be '3'
+  parameter PHY_WR_DELAY = 1;
+  parameter PHY_RD_DELAY = 1;
+
   // Trims an additional clock-cycle of latency, if '1'
   parameter LOW_LATENCY = 1'b1;  // 0 or 1
+
+  // Uses an the 'wr_strob' signal to clock out the WRITE data from the upstream
+  // FIFO, when enabled (vs. the 'wr_ready' signal, which has one more cycle of
+  // delay).
+  // Note: the 'gw2a_ddr3_phy' requires this to be enabled
+  parameter WR_PREFETCH = 1'b0;
 
   // Enables the (read-) bypass port
   parameter BYPASS_ENABLE = 1'b0;
@@ -409,6 +421,9 @@ module axi_ddr3_lite (
       .DDR_FREQ_MHZ(DDR_FREQ_MHZ),
       .DDR_ROW_BITS(DDR_ROW_BITS),
       .DDR_COL_BITS(DDR_COL_BITS),
+      .PHY_WR_DELAY(PHY_WR_DELAY),
+      .PHY_RD_DELAY(PHY_RD_DELAY),
+      .WR_PREFETCH (WR_PREFETCH),
       .LOW_LATENCY (LOW_LATENCY),
       .DFI_DQ_WIDTH(PHY_DAT_BITS),
       .DFI_DM_WIDTH(PHY_STB_BITS)

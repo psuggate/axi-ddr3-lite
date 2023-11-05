@@ -23,10 +23,12 @@ module generic_ddr3_phy (
     dfi_odt_i,
     dfi_bank_i,
     dfi_addr_i,
+
     dfi_wstb_i,
     dfi_wren_i,
     dfi_mask_i,
     dfi_data_i,
+
     dfi_rden_i,
     dfi_rvld_o,
     dfi_last_o,

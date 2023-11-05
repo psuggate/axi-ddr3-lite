@@ -157,7 +157,7 @@ module ddr3_fsm (
   localparam [3:0] ST_REFR = 4'b0001;
 
   reg req_q, req_x, req_s;
-  reg [2:0] cmd_q, cmd_x, ba_q, ba_x;
+  reg [2:0] cmd_q, cmd_x, ba_q;
   reg [RSB:0] adr_q, adr_x;
 
   wire auto_w, refresh;
@@ -269,6 +269,8 @@ module ddr3_fsm (
         end
 
         ST_ACTV, ST_WRIT, ST_READ: begin
+          ba_q  <= ba_q; // note: return to 'IDLE' to bank-switch
+
           wrack <= ddl_rdy_i & req_s & store_w & mem_wrreq_i;
           rdack <= ddl_rdy_i & req_s & fetch_w & mem_rdreq_i;
 
@@ -298,6 +300,8 @@ module ddr3_fsm (
         end
 
         ST_REFR: begin
+          ba_q  <= ba_q; // note: return to 'IDLE' to bank-switch
+
           wrack <= 1'b0;
           rdack <= 1'b0;
 

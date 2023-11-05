@@ -20,9 +20,6 @@ module gw2a_ddr3_phy (
 
     clk_ddr,
 
-    cfg_valid_i,
-    cfg_data_i,
-
     dfi_cke_i,
     dfi_rst_ni,
     dfi_cs_ni,
@@ -32,11 +29,15 @@ module gw2a_ddr3_phy (
     dfi_odt_i,
     dfi_bank_i,
     dfi_addr_i,
+
+    dfi_wstb_i,
     dfi_wren_i,
     dfi_mask_i,
     dfi_data_i,
+
     dfi_rden_i,
-    dfi_valid_o,
+    dfi_rvld_o,
+    dfi_last_o,
     dfi_data_o,
 
     ddr_ck_po,
@@ -77,9 +78,6 @@ module gw2a_ddr3_phy (
 
   input clk_ddr;  // Same phase, but twice freq of 'clock'
 
-  input cfg_valid_i;
-  input [31:0] cfg_data_i;
-
   input dfi_cke_i;
   input dfi_rst_ni;
   input dfi_cs_ni;
@@ -91,12 +89,14 @@ module gw2a_ddr3_phy (
   input [2:0] dfi_bank_i;
   input [ASB:0] dfi_addr_i;
 
+  input dfi_wstb_i;
   input dfi_wren_i;
   input [SSB:0] dfi_mask_i;
   input [DSB:0] dfi_data_i;
 
   input dfi_rden_i;
-  output dfi_valid_o;
+  output dfi_rvld_o;
+  output dfi_last_o;
   output [DSB:0] dfi_data_o;
 
   output ddr_ck_po;
@@ -128,15 +128,16 @@ module gw2a_ddr3_phy (
   reg ras_nq, cas_nq, we_nq, odt_q;
   reg [2:0] ba_q;
 
-  reg valid_q;
+  reg valid_q, last_q;
   reg [ASB:0] addr_q;
   reg [DSB:0] data_q;
 
 
   // -- DFI Read-Data Signal Assignments -- //
 
-  assign dfi_valid_o = valid_q;
-  assign dfi_data_o  = data_q;
+  assign dfi_rvld_o = valid_q;
+  assign dfi_last_o = last_q;
+  assign dfi_data_o = data_q;
 
 
   // -- DDR3 Signal Assignments -- //
@@ -174,10 +175,10 @@ module gw2a_ddr3_phy (
     if (reset) begin
       cke_q  <= 1'b0;
       rst_nq <= 1'b0;
-      cs_nq  <= 1'b0;  // todo: 1'b1 ??
-      ras_nq <= 1'b0;  // todo: 1'b1 ??
-      cas_nq <= 1'b0;  // todo: 1'b1 ??
-      we_nq  <= 1'b0;  // todo: 1'b1 ??
+      cs_nq  <= 1'b1;  // todo: 1'b1 ??
+      ras_nq <= 1'b1;  // todo: 1'b1 ??
+      cas_nq <= 1'b1;  // todo: 1'b1 ??
+      we_nq  <= 1'b1;  // todo: 1'b1 ??
       ba_q   <= 3'b0;
       addr_q <= {ADDR_BITS{1'b0}};
       odt_q  <= 1'b0;
@@ -200,11 +201,13 @@ module gw2a_ddr3_phy (
   reg  dqs_q;
   wire dqs_w;
 
+  assign dqs_w = ~dfi_wstb_i & ~dfi_wren_i;
+
   always @(posedge clock) begin
     if (reset) begin
       dqs_q <= 1'b1;
     end else begin
-      dqs_q <= ~dfi_wren_i;
+      dqs_q <= dqs_w;
     end
   end
 
@@ -213,7 +216,7 @@ module gw2a_ddr3_phy (
       .INIT(DQSX_ODDR_INIT)
   ) dqs_p_oddr_inst[QSB:0] (
       .CLK(~clock),
-      .TX (~dfi_wren_i & dqs_q),
+      .TX (dqs_w),
       .D0 (1'b1),
       .D1 (1'b0),
       .Q0 (dqs_p),
@@ -225,7 +228,7 @@ module gw2a_ddr3_phy (
       .INIT(DQSX_ODDR_INIT)
   ) dqs_n_oddr_inst[QSB:0] (
       .CLK(~clock),
-      .TX (~dfi_wren_i & dqs_q),
+      .TX (dqs_w),
       .D0 (1'b0),
       .D1 (1'b1),
       .Q0 (dqs_n),
@@ -235,86 +238,69 @@ module gw2a_ddr3_phy (
 
   // -- Write-Data Outputs -- //
 
-  reg clock_270, dat_oe_n;
+  reg clock_270, dq_oe_n;
   reg [DSB:0] data_reg;
   reg [SSB:0] mask_reg;
 
+  // todo: good enough ??
   always @(negedge clk_ddr) begin
     clock_270 <= clock;
   end
 
-  wire [MSB:0] dq_hi_w, dq_lo_w;
+  wire dq_oe_nw;
   wire [QSB:0] dm_hi_w, dm_lo_w;
+  wire [MSB:0] dq_hi_w, dq_lo_w;
 
-  assign dq_hi_w = data_reg[DSB:DDR3_WIDTH];
-  assign dq_lo_w = data_reg[MSB:0];
+  assign dq_oe_nw = ~dfi_wstb_i;
 
-  assign dm_hi_w = mask_reg[SSB:DDR3_MASKS];
-  assign dm_lo_w = mask_reg[QSB:0];
-
+  // todo: good enough ??
   always @(posedge clock_270) begin
-    dat_oe_n <= ~dfi_wren_i;
-    mask_reg <= dfi_mask_i;
+    dq_oe_n  <= dq_oe_nw;
+    mask_reg <= ~dfi_mask_i;
     data_reg <= dfi_data_i;
   end
 
-  ODDR #(
-      .TXCLK_POL(CLOCK_POLARITY),
-      .INIT(DATA_ODDR_INIT)
-  ) dat_oddr_inst[MSB:0] (
-      .CLK(clock_270),
-      .TX (dat_oe_n),
-      .D0 (dq_lo_w),
-      .D1 (dq_hi_w),
-      .Q0 (dq_w),
-      .Q1 (dq_t)
-  );
+  // DM outputs
+  assign dm_hi_w = mask_reg[SSB:DDR3_MASKS];
+  assign dm_lo_w = mask_reg[QSB:0];
 
   ODDR #(
       .TXCLK_POL(CLOCK_POLARITY),
       .INIT(DATA_ODDR_INIT)
   ) dm_oddr_inst[QSB:0] (
       .CLK(clock_270),
-      .TX (dat_oe_n),
+      .TX (dq_oe_n),
       .D0 (dm_lo_w),
       .D1 (dm_hi_w),
       .Q0 (dm_w),
       .Q1 ()
   );
 
-  /*
-wire dat_d4_t;
-wire [MSB:0] dat_d4_w;
+  // DQ outputs
+  assign dq_hi_w = data_reg[DSB:DDR3_WIDTH];
+  assign dq_lo_w = data_reg[MSB:0];
 
-OSER4
-#( .TXCLK_POL(CLOCK_POLARITY),
-   .HWL("false"),
-   .GSREN("false"),
-   .LSREN("true")
- ) dq_oser4_inst [MSB:0]
- ( .FCLK(~clk_ddr), // 200 MHz, 270 degree phase-shifted
-   .PCLK(clock), // 100 MHz
-   .RESET(reset),
-   .TX0(dfi_wren_i),
-   .TX1(dfi_wren_i),
-   .D0(dat_lo_w),
-   .D1(dat_lo_w),
-   .D2(dat_hi_w),
-   .D3(dat_hi_w),
-   .Q0(dat_d4_w),
-   .Q1(dat_d4_t)
- );
-*/
+  ODDR #(
+      .TXCLK_POL(CLOCK_POLARITY),
+      .INIT(DATA_ODDR_INIT)
+  ) dat_oddr_inst[MSB:0] (
+      .CLK(clock_270),
+      .TX (dq_oe_n),
+      .D0 (dq_lo_w),
+      .D1 (dq_hi_w),
+      .Q0 (dq_w),
+      .Q1 (dq_t)
+  );
 
 
   // -- Read Data Valid Signals -- //
 
-  wire rd_en_w;
+  wire rd_en_w, rd_en_y;
 
   shift_register #(
       .WIDTH(1),
       .DEPTH(8)
-  ) rd_srl_inst (
+  ) rvld_srl_inst (
       .clock (clock),
       .wren_i(1'b1),
       .data_i(dfi_rden_i),
@@ -322,11 +308,24 @@ OSER4
       .data_o(rd_en_w)
   );
 
+  shift_register #(
+      .WIDTH(1),
+      .DEPTH(8)
+  ) rlst_srl_inst (
+      .clock (clock),
+      .wren_i(1'b1),
+      .data_i(dfi_rden_i),
+      .addr_i(CAPTURE_DELAY-1),
+      .data_o(rd_en_y)
+  );
+
   always @(posedge clock) begin
     if (reset) begin
       valid_q <= 1'b0;
+      last_q <= 1'b0;
     end else begin
       valid_q <= rd_en_w;
+      last_q <= ~rd_en_y & rd_en_w;
     end
   end
 
