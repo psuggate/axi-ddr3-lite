@@ -13,11 +13,6 @@ module ddr3_cfg (
     clock,
     reset,
 
-    cfg_valid_i,  // toods ??
-    cfg_ready_o,
-    cfg_data_i,
-    cfg_data_o,
-
     dfi_rst_no,  // Control these IOB's directly
     dfi_cke_o,
     dfi_cs_no,
@@ -48,12 +43,6 @@ module ddr3_cfg (
 
   input clock;
   input reset;
-
-  // On-the-fly setting updates (if enabled)
-  input cfg_valid_i;
-  output cfg_ready_o;
-  input [31:0] cfg_data_i;
-  output [31:0] cfg_data_o;
 
   // (Pseudo-) DDR3 PHY Interface (-ish)
   output dfi_rst_no;

@@ -9,6 +9,39 @@ module GSR;
 
 endmodule  // GSR
 
+module TBUF (
+    O,
+    I,
+    OEN
+);
+
+  input I, OEN;
+  output O;
+
+  bufif0 TB (O, I, OEN);
+
+endmodule  // TBUF (output buffer with tri-state control)
+
+module TLVDS_IOBUF (
+    O,
+    IO,
+    IOB,
+    I,
+    OEN
+);
+  output O;
+  inout IO, IOB;
+  input I, OEN;
+  reg O;
+  bufif0 IB (IO, I, OEN);
+  notif0 YB (IOB, I, OEN);
+  always @(IO or IOB) begin
+    if (IO == 1'b1 && IOB == 1'b0) O <= IO;
+    else if (IO == 1'b0 && IOB == 1'b1) O <= IO;
+    else if (IO == 1'bx || IOB == 1'bx) O <= 1'bx;
+  end
+endmodule
+
 module IDDR (
     Q0,
     Q1,

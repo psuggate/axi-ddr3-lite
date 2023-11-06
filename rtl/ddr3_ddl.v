@@ -131,11 +131,6 @@ module ddr3_ddl (
   output mem_rlast_o;  // todo: a good idea ??
   output [MSB:0] mem_rddata_o;
 
-  output byp_rvalid_o;  // Read fast-path port
-  input byp_rready_i;
-  output byp_rlast_o;  // todo: a good idea ??
-  output [MSB:0] byp_rddata_o;
-
   // (Pseudo-) DDR3 PHY Interface (-ish)
   output dfi_ras_no;
   output dfi_cas_no;
@@ -288,28 +283,6 @@ module ddr3_ddl (
   //  - can use last command as the state-value ??
 
   reg [2:0] state;
-
-  always @(posedge clock) begin
-    if (!ddr_cke_i) begin
-      ready <= 1'b0;
-      busy  <= 1'b0;
-      delay <= DINIT;
-      count <= CZERO;
-    end else if (busy || !ready) begin
-      delay <= {1'b0, delay[DSB:1]};
-      if (busy) begin
-        count <= cnext;
-      end
-      if (cnext == CZERO) begin
-        busy  <= 1'b0;
-        ready <= 1'b1;
-      end else begin
-        ready <= delay[0];
-      end
-    end else if (ctl_req_i && ready) begin
-      ready <= 1'b0;
-    end
-  end
 
   always @(posedge clock) begin
     if (reset || !ddr_cke_i) begin

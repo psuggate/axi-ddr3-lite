@@ -25,26 +25,28 @@ module shift_register (
 
   genvar ii;
   generate
-    // begin : g_shift_register
-    reg [MSB:0] srl[0:DEPTH-1];
+    begin : g_shift
 
-    for (ii = 0; ii < DEPTH - 1; ii = ii + 1) begin
-      always @(posedge clock) begin
-        if (wren_i) begin
-          srl[ii+1] <= srl[ii];
+      // begin : g_shift_register
+      reg [MSB:0] srl[0:DEPTH-1];
+
+      for (ii = 0; ii < DEPTH - 1; ii = ii + 1) begin : g_forshi
+        always @(posedge clock) begin
+          if (wren_i) begin
+            srl[ii+1] <= srl[ii];
+          end
         end
       end
-    end
 
-    always @(posedge clock) begin
-      if (wren_i) begin
-        srl[0] <= data_i;
+      always @(posedge clock) begin
+        if (wren_i) begin
+          srl[0] <= data_i;
+        end
+
+        data_q <= srl[addr_i];
       end
 
-      data_q <= srl[addr_i];
     end
-
-    // end
   endgenerate  // g_shift_register
 
 endmodule  // shift_register

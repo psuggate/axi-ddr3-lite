@@ -16,11 +16,11 @@ module axi_ddr3_lite_tb;
 `ifdef __gowin_for_the_win
   localparam PHY_WR_DELAY = 3;
   localparam PHY_RD_DELAY = 1;
-  localparam WR_PREFETCH  = 1'b1;
+  localparam WR_PREFETCH = 1'b1;
 `else
   localparam PHY_WR_DELAY = 1;
   localparam PHY_RD_DELAY = 1;
-  localparam WR_PREFETCH  = 1'b0;
+  localparam WR_PREFETCH = 1'b0;
 `endif
 
   // Trims an additional clock-cycle of latency, if '1'
@@ -507,9 +507,9 @@ module axi_ddr3_lite_tb;
         end
 
         if (rvalid && rready) begin
-          count <= count - 1;
+          count  <= count - 1;
           rready <= ~rlast;
-          data <= {rdata, data[127:WIDTH]};
+          data   <= {rdata, data[127:WIDTH]};
         end
 
         done <= rvalid & rready & rlast;

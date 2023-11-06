@@ -34,7 +34,8 @@ localparam DDR_TWAKE = 500000;  // after RESET# deasserts, before first command
 localparam DDR_TCKE0 = 10;  // at least 10 ns between CKE := 0 and RESET# := 1
 localparam DDR_CCKE1 = 5;  // at least 5x cycles between CK valid and CKE := 1
 parameter DDR_TXS = 170;  // todo
-parameter DDR_TXPR = $max(DDR_TXS, 5 * TCK);  // tXPR := max(tXS; 5x tCK)
+parameter DDR_TXPR = 170;  // tXPR := max(tXS; 5x tCK)
+// parameter DDR_TXPR = $max(DDR_TXS, 5 * TCK);  // tXPR := max(tXS; 5x tCK)
 // parameter DDR_TRRD = 10; // tRRD := max(10ns; 4x tCK)
 
 // DDR3-800E (6-6-6) speed bin parameters (from pp. 157)

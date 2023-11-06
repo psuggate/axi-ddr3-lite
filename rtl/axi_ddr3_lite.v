@@ -179,8 +179,6 @@ module axi_ddr3_lite (
   output byp_rlast_o;
 
   output dfi_rst_no;
-  output dfi_ck_po;
-  output dfi_ck_no;
   output dfi_cke_o;
   output dfi_cs_no;
   output dfi_ras_no;
@@ -216,7 +214,6 @@ module axi_ddr3_lite (
 
   wire ddl_run, ddl_req, ddl_seq, ddl_ref, ddl_rdy;
   wire [2:0] ddl_cmd, ddl_ba;
-  wire [ISB:0] ddl_tid;
   wire [RSB:0] ddl_adr;
 
   wire cfg_req, cfg_run, cfg_rdy, cfg_ref;
@@ -264,7 +261,7 @@ module axi_ddr3_lite (
       .axi_awid_i(axi_awid_i),
       .axi_awlen_i(axi_awlen_i),
       .axi_awburst_i(axi_awburst_i),
-      // .axi_awsize_i(3'b010),
+      .axi_awsize_i(3'b010),
       .axi_awaddr_i(axi_awaddr_i[ASB:ADDRS_LSB]),
 
       .axi_wvalid_i(axi_wvalid_i),  // AXI4 Write Data Port
@@ -283,7 +280,7 @@ module axi_ddr3_lite (
       .axi_arid_i(axi_arid_i),
       .axi_arlen_i(axi_arlen_i),
       .axi_arburst_i(axi_arburst_i),
-      // .axi_arsize_i(3'b010),
+      .axi_arsize_i(3'b010),
       .axi_araddr_i(axi_araddr_i[ASB:ADDRS_LSB]),
 
       .axi_rvalid_o(axi_rvalid_o),
@@ -355,7 +352,6 @@ module axi_ddr3_lite (
       .ddl_rdy_i(ddl_rdy),
       .ddl_ref_i(ddl_ref),
       .ddl_cmd_o(ddl_cmd),
-      .ddl_tid_o(ddl_tid),
       .ddl_ba_o (ddl_ba),
       .ddl_adr_o(ddl_adr)
   );
@@ -475,9 +471,6 @@ module axi_ddr3_lite (
   ) ddr3_cfg_inst (
       .clock(clock),
       .reset(reset),
-
-      .cfg_valid_i(1'b0),
-      .cfg_data_i ('bx),
 
       .dfi_rst_no(dfi_rst_no),
       .dfi_cke_o (dfi_cke_o),

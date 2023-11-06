@@ -119,12 +119,10 @@ module gw2a_ddr3_phy (
   inout [MSB:0] ddr_dq_io;
 
 
-  wire dqs_t, dqs_s;
-  wire dq_t;
-  wire [QSB:0] dm_w;
-  wire [MSB:0] dq_w;
+  wire [QSB:0] dqs_t, dqs_s, dm_w;
+  wire [QSB:0] dqs_p, dqs_n;
+  wire [MSB:0] dq_t, dq_w;
 
-  reg [QSB:0] dqs_p, dqs_n;
   reg cke_q, rst_nq, cs_nq;
   reg ras_nq, cas_nq, we_nq, odt_q;
   reg [2:0] ba_q;
@@ -136,30 +134,30 @@ module gw2a_ddr3_phy (
 
   // -- DFI Read-Data Signal Assignments -- //
 
-  assign dfi_rvld_o  = valid_q;
-  assign dfi_last_o  = last_q;
-  assign dfi_data_o  = data_q;
+  assign dfi_rvld_o = valid_q;
+  assign dfi_last_o = last_q;
+  assign dfi_data_o = data_q;
 
 
   // -- DDR3 Signal Assignments -- //
 
-  assign ddr_ck_po   = ~clock;
-  assign ddr_ck_no   = clock;
+  assign ddr_ck_po  = ~clock;
+  assign ddr_ck_no  = clock;
 
-  assign ddr_cke_o   = cke_q;
-  assign ddr_rst_no  = rst_nq;
-  assign ddr_cs_no   = cs_nq;
-  assign ddr_ras_no  = ras_nq;
-  assign ddr_cas_no  = cas_nq;
-  assign ddr_we_no   = we_nq;
-  assign ddr_odt_o   = odt_q;
-  assign ddr_ba_o    = ba_q;
-  assign ddr_a_o     = addr_q;
+  assign ddr_cke_o  = cke_q;
+  assign ddr_rst_no = rst_nq;
+  assign ddr_cs_no  = cs_nq;
+  assign ddr_ras_no = ras_nq;
+  assign ddr_cas_no = cas_nq;
+  assign ddr_we_no  = we_nq;
+  assign ddr_odt_o  = odt_q;
+  assign ddr_ba_o   = ba_q;
+  assign ddr_a_o    = addr_q;
 
-  assign ddr_dqs_pio = dqs_t ? {DDR3_MASKS{1'bz}} : dqs_p;
-  assign ddr_dqs_nio = dqs_s ? {DDR3_MASKS{1'bz}} : dqs_n;
-  assign ddr_dm_o    = dm_w;
-  assign ddr_dq_io   = dq_t ? {DDR3_WIDTH{1'bz}} : dq_w;
+  //   assign ddr_dqs_pio = dqs_t ? {DDR3_MASKS{1'bz}} : dqs_p;
+  //   assign ddr_dqs_nio = dqs_s ? {DDR3_MASKS{1'bz}} : dqs_n;
+  assign ddr_dm_o   = dm_w;
+  //   assign ddr_dq_io   = dq_t ? {DDR3_WIDTH{1'bz}} : dq_w;
 
 
   // -- IOB DDR Register Settings -- //
@@ -198,8 +196,9 @@ module gw2a_ddr3_phy (
 
   // -- DDR3 Data Strobes -- //
 
-  reg  dqs_q;
+  reg dqs_q;
   wire dqs_w;
+  wire [QSB:0] dqs_pi;
 
   assign dqs_w = ~dfi_wstb_i & ~dfi_wren_i;
 
@@ -223,6 +222,15 @@ module gw2a_ddr3_phy (
       .Q1 (dqs_t)
   );
 
+  TLVDS_IOBUF dqs_iobuf_inst[QSB:0] (
+      .I  (dqs_p),
+      .OEN(dqs_t),
+      .O  (dqs_pi),
+      .IO (ddr_dqs_pio),
+      .IOB(ddr_dqs_nio)
+  );
+
+  /*
   ODDR #(
       .TXCLK_POL(CLOCK_POLARITY),
       .INIT(DQSX_ODDR_INIT)
@@ -234,6 +242,19 @@ module gw2a_ddr3_phy (
       .Q0 (dqs_n),
       .Q1 (dqs_s)
   );
+
+TBUF dqs_p_tbuf_inst[QSB:0]
+( .I(dqs_p),
+  .OEN(dqs_t),
+  .O(ddr_dqs_pio)
+ );
+
+TBUF dqs_n_tbuf_inst[QSB:0]
+( .I(dqs_n),
+  .OEN(dqs_s),
+  .O(ddr_dqs_nio)
+ );
+*/
 
 
   // -- Write-Data Outputs -- //
@@ -289,6 +310,12 @@ module gw2a_ddr3_phy (
       .Q1 (dq_t)
   );
 
+  TBUF dq_tbuf_inst[MSB:0] (
+      .I  (dq_w),
+      .OEN(dq_t),
+      .O  (ddr_dq_io)
+  );
+
 
   // -- Read Data Valid Signals -- //
 
@@ -311,6 +338,12 @@ module gw2a_ddr3_phy (
 
   wire [QSB:0] dqs_pi0, dqs_pi1, dqs_ni0, dqs_ni1;
 
+  assign dqs_pi0 = dqs_pi;
+  assign dqs_pi1 = dqs_pi;
+  assign dqs_ni0 = ~dqs_pi;
+  assign dqs_ni1 = ~dqs_pi;
+
+  /*
   // One set of these DQS signals will be used for source-synchronous data-
   // capture.
   IDDR #(
@@ -332,6 +365,7 @@ module gw2a_ddr3_phy (
       .Q0 (dqs_ni0),
       .Q1 (dqs_ni1)
   );
+*/
 
 
   // -- Data Capture on Read -- //

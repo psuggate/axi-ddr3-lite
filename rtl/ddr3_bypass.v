@@ -45,7 +45,6 @@ module ddr3_bypass (
     byp_ref_i,
     byp_rdy_i,
     byp_cmd_o,
-    byp_tid_o,
     byp_ba_o,
     byp_adr_o,
 
@@ -149,7 +148,6 @@ module ddr3_bypass (
   input byp_rdy_i;
   input byp_ref_i;
   output [2:0] byp_cmd_o;
-  output [ISB:0] byp_tid_o;
   output [2:0] byp_ba_o;
   output [RSB:0] byp_adr_o;
 
@@ -273,56 +271,19 @@ module ddr3_bypass (
 
   // -- Address Logic -- //
 
-// Output address & select
-assign asel_w = axi_arvalid_i & axi_arready_o;
-assign ba_w   = asel_w ? bank_w : req_q ? ba_q  : ctl_ba_i;
-assign adr_w  = asel_w ? row_w  : req_q ? adr_q : ctl_adr_i;
+  // Output address & select
+  assign asel_w = axi_arvalid_i & axi_arready_o;
+  assign ba_w = asel_w ? bank_w : req_q ? ba_q : ctl_ba_i;
+  assign adr_w = asel_w ? row_w : req_q ? adr_q : ctl_adr_i;
 
   // AUTO-PRECHARGE bit
   // todo: gonna have to detect sequences ourselves ...
   assign auto_w = axi_arvalid_i && axi_arburst_i == 2'b01 && axi_arlen_i == 8'd3;
 
-// Bypass-address capture
-assign bank_w = axi_araddr_i[DDR_COL_BITS+2:DDR_COL_BITS];
-assign row_w  = axi_araddr_i[ASB:DDR_COL_BITS+3];
-assign col_w  = {{ADR_PAD_BITS{1'b0}}, auto_w, axi_araddr_i[CSB:0]};
-
-/*
-  assign {row_w, bank_w, col_l} = axi_araddr_i;
-
-  // Bit 10 is the AUTO-PRECHARGE (PRECHARGE-ALL, and ZQCL) indicator bit, so
-  // assemble the column address with this bit.
-  assign {col_w[RSB:11], col_w[9:0]} = {{(DDR_ROW_BITS - DDR_COL_BITS - 1) {1'b0}}, col_l};
-  assign col_w[10] = auto_w;
-
-  // todo: is this combinational-delay acceptable !?
-  assign ba_w = req_q ? ba_q : axi_arvalid_i & arack ? bank_w : ctl_ba_i;
-  assign adr_w = req_q ? adr_q : axi_arvalid_i & arack ? row_w : ctl_adr_i;
-
-
-  // Capture the bypass-address for subsequent stages of the transaction
-  always @(posedge clock) begin
-    case (state)
-      ST_IDLE: begin
-        ba_q  <= bank_w;
-        adr_q <= row_w;
-      end
-
-      ST_ACTV, ST_READ, ST_PREC: begin
-        if (byp_rdy_i) begin
-          ba_q  <= ba_x;
-          adr_q <= adr_x;
-        end
-      end
-
-      default: begin
-        $error("%10t: Invalid state = 0x%1", $time, state);
-        ba_q  <= 'bx;
-        adr_q <= 'bx;
-      end
-    endcase
-  end
-*/
+  // Bypass-address capture
+  assign bank_w = axi_araddr_i[DDR_COL_BITS+2:DDR_COL_BITS];
+  assign row_w = axi_araddr_i[ASB:DDR_COL_BITS+3];
+  assign col_w = {{ADR_PAD_BITS{1'b0}}, auto_w, axi_araddr_i[CSB:0]};
 
 
   // -- PRECHARGE Detection -- //
@@ -393,18 +354,6 @@ assign col_w  = {{ADR_PAD_BITS{1'b0}}, auto_w, axi_araddr_i[CSB:0]};
   // reads.
   // todo: ...
 
-  always @(posedge clock or posedge reset) begin
-    if (!reset && axi_arvalid_i && axi_arready_o) begin
-      if (axi_arburst_i != 2'b01) begin
-        $error("%10t: Only AXI4 INCR bursts are supported (BURST = %1d)", $time, axi_arburst_i);
-      end
-      if (axi_arlen_i != 8'h03) begin
-        $error("%10t: Only AXI4 4x32b bursts are supported (LEN = %1d)", $time, axi_arlen_i);
-      end
-    end
-  end
-
-
   always @(posedge clock) begin
     if (reset) begin
       burst <= 1'b0;
@@ -466,7 +415,7 @@ assign col_w  = {{ADR_PAD_BITS{1'b0}}, auto_w, axi_araddr_i[CSB:0]};
         end
 
         ST_ACTV: begin
-          ba_q  <= ba_q; // note: return to 'IDLE' to bank-switch
+          ba_q  <= ba_q;  // note: return to 'IDLE' to bank-switch
           arack <= 1'b0;
 
           if (byp_rdy_i) begin
@@ -483,7 +432,7 @@ assign col_w  = {{ADR_PAD_BITS{1'b0}}, auto_w, axi_araddr_i[CSB:0]};
           if (byp_rdy_i) begin
             req_q <= 1'b0;
             cmd_q <= CMD_NOOP;
-            adr_q <= 'bx; // row_w;
+            adr_q <= 'bx;  // row_w;
           end
 
           if (axi_rvalid_o && axi_rready_i && axi_rlast_o) begin
@@ -510,138 +459,20 @@ assign col_w  = {{ADR_PAD_BITS{1'b0}}, auto_w, axi_araddr_i[CSB:0]};
   end
 
 
-  // -- Acknowledge Signals -- //
-/*
-  // todo: generate the AXI4 flow-control signals for the read-data path
-  always @(posedge clock) begin
-    if (!byp_run_i) begin
-      arack <= 1'b0;
-      rdack <= 1'b0;
-    end else begin
-      if (axi_arvalid_i && arack) begin
-        arack <= 1'b0;
-      end else if (!req_q) begin
-        arack <= axi_rready_i;
-      end else begin
-        arack <= arack;
-      end
-
-      rdack <= 1'b0;  // todo ...
-    end
-  end
-
-
-  // -- Next-Command Logic -- //
-
-  always @(posedge clock) begin
-    if (reset) begin
-      snext <= ST_IDLE;
-      seq_x <= 1'b0;
-      req_x <= 1'b0;
-      cmd_x <= CMD_NOOP;
-      ba_x  <= 'bx;
-      adr_x <= 'bx;
-    end else begin
-      case (state)
-        ST_IDLE: begin
-          if (!axi_arvalid_i) begin
-            snext <= ST_IDLE;
-            seq_x <= 1'b0;
-            req_x <= 1'b0;
-            cmd_x <= 'bx;
-            ba_x  <= 'bx;
-            adr_x <= 'bx;
-          end else begin
-            snext <= ST_READ;
-            req_x <= 1'b1;
-            seq_x <= ~auto_w;
-            cmd_x <= CMD_READ;
-            ba_x  <= bank_w;
-            adr_x <= col_w;
-          end
-        end
-
-        ST_ACTV, ST_READ: begin
-          if (byp_rdy_i) begin
-            snext <= req_s ? ST_READ : ST_IDLE;
-            seq_x <= seq_s;
-            req_x <= req_s;
-            cmd_x <= cmd_s;
-            ba_x  <= ba_s;
-            adr_x <= col_s;
-          end
-        end
-
-        default: begin
-          if (byp_rdy_i) begin
-            snext <= ST_IDLE;
-            seq_x <= 1'b0;
-            req_x <= 1'b0;
-            cmd_x <= 'bx;
-            ba_x  <= 'bx;
-            adr_x <= 'bx;
-          end
-        end
-      endcase
-    end
-  end
-
-  // Determines if any requests (RD, WR, BYP) allow for additional sequences of
-  // commands to be issued, for any of the open banks/rows.
-  // todo:
-  always @(posedge clock) begin
-    if (reset) begin
-      seq_s <= 1'b0;
-      req_s <= 1'b0;
-      cmd_s <= 'bx;
-      ba_s  <= 'bx;
-      col_s <= 'bx;
-    end else begin
-      case (state)
-        ST_IDLE: begin
-          seq_s <= ~auto_w;  // todo
-          req_s <= 1'b0;
-          cmd_s <= 'bx;
-          ba_s  <= 'bx;
-          col_s <= 'bx;
-        end
-
-        ST_ACTV, ST_READ: begin
-          // Attempt to queue up another command, if part of a sequence, and
-          // the next command is already waiting to be dispatched
-          // todo: can this fail, if the 'last' command does not show up, in-
-          //   time ??
-          if (seq_x) begin
-            seq_s <= axi_arvalid_i & axi_rready_i & ~auto_w;  // todo
-            req_s <= 1'b1;  // todo
-            cmd_s <= cmd_x;
-            ba_s  <= ba_x;
-            col_s <= col_w;
-          end else begin
-            seq_s <= 1'b0;
-            req_s <= 1'b0;
-            cmd_s <= 'bx;
-            ba_s  <= 'bx;
-            col_s <= 'bx;
-          end
-        end
-
-        default: begin
-          seq_s <= 1'b0;
-          req_s <= 1'b0;
-          cmd_s <= 'bx;
-          ba_s  <= 'bx;
-          col_s <= 'bx;
-        end
-      endcase
-    end
-  end
-*/
-
-
   // -- Simulation Only -- //
 
 `ifdef __icarus
+  always @(posedge clock or posedge reset) begin
+    if (!reset && axi_arvalid_i && axi_arready_o) begin
+      if (axi_arburst_i != 2'b01) begin
+        $error("%10t: Only AXI4 INCR bursts are supported (BURST = %1d)", $time, axi_arburst_i);
+      end
+      if (axi_arlen_i != 8'h03) begin
+        $error("%10t: Only AXI4 4x32b bursts are supported (LEN = %1d)", $time, axi_arlen_i);
+      end
+    end
+  end
+
   reg [39:0] dbg_state, dbg_snext;
 
   always @* begin

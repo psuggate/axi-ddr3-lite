@@ -1,6 +1,7 @@
 `timescale 1ns / 100ps
-module gowin_rpll (
+module gw2a_rpll (
     clkout,  // 120 MHz by default
+    clockd,
     lock,
     clkin
 );
@@ -29,6 +30,7 @@ module gowin_rpll (
   parameter DEVICE = "GW2A-18C";
 
   output clkout;
+  output clockd;
   output lock;
   input clkin;
 
@@ -66,7 +68,7 @@ module gowin_rpll (
       .CLKOUT(clkout),
       .LOCK(lock),
       .CLKOUTP(clkoutp_o),
-      .CLKOUTD(clkoutd_o),
+      .CLKOUTD(clockd),
       .CLKOUTD3(clkoutd3_o),
       .RESET(gw_gnd),
       .RESET_P(gw_gnd),
@@ -80,4 +82,4 @@ module gowin_rpll (
       .FDLY({gw_gnd, gw_gnd, gw_gnd, gw_gnd})
   );
 
-endmodule  // gowin_rpll
+endmodule  // gw2a_rpll

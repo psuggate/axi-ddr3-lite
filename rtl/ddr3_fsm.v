@@ -35,7 +35,6 @@ module ddr3_fsm (
     ddl_ref_i,
     ddl_rdy_i,
     ddl_cmd_o,
-    ddl_tid_o,
     ddl_ba_o,
     ddl_adr_o
 );
@@ -118,7 +117,6 @@ module ddr3_fsm (
   input ddl_rdy_i;
   input ddl_ref_i;
   output [2:0] ddl_cmd_o;
-  output [ISB:0] ddl_tid_o;
   output [2:0] ddl_ba_o;
   output [RSB:0] ddl_adr_o;
 
@@ -187,11 +185,7 @@ module ddr3_fsm (
   wire wrsel;
   wire [1:0] asel;
 
-  assign asel = reset ? 2'b11
-              : req_x ? 2'b00
-              : mem_rdreq_i ? 2'b01
-              : mem_wrreq_i ? 2'b10
-              : 2'b00 ;
+  assign asel = reset ? 2'b11 : req_x ? 2'b00 : mem_rdreq_i ? 2'b01 : mem_wrreq_i ? 2'b10 : 2'b00;
 
   assign row_w  = asel == 2'b11 ? cfg_adr_i
                 : asel == 2'b10 ? mem_wradr_i[ASB:DDR_COL_BITS + 3]
@@ -249,7 +243,7 @@ module ddr3_fsm (
             req_x <= 1'b1;
             cmd_x <= mem_rdreq_i ? CMD_READ : CMD_WRIT;
             req_s <= (mem_rdreq_i & ~mem_rdlst_i) |  // Sequence of BL8 ops ??
-                     (mem_wrreq_i & ~mem_rdreq_i & ~mem_wrlst_i);
+            (mem_wrreq_i & ~mem_rdreq_i & ~mem_wrlst_i);
             wrack <= ~mem_rdreq_i & mem_wrreq_i;
             rdack <= mem_rdreq_i;
           end else begin
@@ -266,7 +260,7 @@ module ddr3_fsm (
         end
 
         ST_ACTV, ST_WRIT, ST_READ: begin
-          ba_q  <= ba_q; // note: return to 'IDLE' to bank-switch
+          ba_q  <= ba_q;  // note: return to 'IDLE' to bank-switch
 
           wrack <= ~wrack & ddl_rdy_i & req_s & store_w & mem_wrreq_i;
           rdack <= ~rdack & ddl_rdy_i & req_s & fetch_w & mem_rdreq_i;
@@ -298,7 +292,7 @@ module ddr3_fsm (
         end
 
         ST_REFR: begin
-          ba_q  <= ba_q; // note: return to 'IDLE' to bank-switch
+          ba_q  <= ba_q;  // note: return to 'IDLE' to bank-switch
 
           wrack <= 1'b0;
           rdack <= 1'b0;

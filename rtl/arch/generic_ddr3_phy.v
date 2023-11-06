@@ -108,7 +108,8 @@ module generic_ddr3_phy (
 
 
   reg dqs_t, dq_t;
-  reg [QSB:0] dqs_p, dqs_n, dm_q;
+  wire [QSB:0] dqs_p, dqs_n;
+  reg [QSB:0] dm_q;
   reg [MSB:0] dq_q;
   reg cke_q, rst_nq, cs_nq;
   reg ras_nq, cas_nq, we_nq, odt_q;

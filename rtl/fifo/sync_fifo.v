@@ -138,7 +138,6 @@ module sync_fifo (
           xvalid <= 1'b0;
         end else begin
           if (fetch) begin
-            raddr  <= raddr_next;
             xvalid <= 1'b1;
             xdata  <= sram[raddr[ASB:0]];
           end else if (xvalid && xready) begin

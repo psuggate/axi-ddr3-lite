@@ -23,6 +23,7 @@ module ddr3_axi_ctrl (
     axi_awaddr_i,
     axi_awid_i,
     axi_awlen_i,
+    axi_awsize_i,
     axi_awburst_i,
 
     axi_wvalid_i,
@@ -41,6 +42,7 @@ module ddr3_axi_ctrl (
     axi_araddr_i,
     axi_arid_i,
     axi_arlen_i,
+    axi_arsize_i,
     axi_arburst_i,
 
     axi_rready_i,
