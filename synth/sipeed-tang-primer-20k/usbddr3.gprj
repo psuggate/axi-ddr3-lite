@@ -1,0 +1,47 @@
+<?xml version="1" encoding="UTF-8"?>
+<!DOCTYPE gowin-fpga-project>
+<Project>
+    <Template>FPGA</Template>
+    <Version>5</Version>
+    <Device name="GW2A-18C" pn="GW2A-LV18PG256C8/I7">gw2a18c-011</Device>
+    <FileList>
+        <File path="../../rtl/arch/generic_ddr3_phy.v" type="file.verilog" enable="1"/>
+        <File path="../../rtl/arch/gw2a_ddr3_phy.v" type="file.verilog" enable="1"/>
+        <File path="../../rtl/arch/gw2a_rpll.v" type="file.verilog" enable="1"/>
+        <File path="../../rtl/axi_ddr3_lite.v" type="file.verilog" enable="1"/>
+        <File path="../../rtl/axi_rd_path.v" type="file.verilog" enable="1"/>
+        <File path="../../rtl/axi_wr_path.v" type="file.verilog" enable="1"/>
+        <File path="../../rtl/ddr3_axi_ctrl.v" type="file.verilog" enable="1"/>
+        <File path="../../rtl/ddr3_bypass.v" type="file.verilog" enable="1"/>
+        <File path="../../rtl/ddr3_cfg.v" type="file.verilog" enable="1"/>
+        <File path="../../rtl/ddr3_ddl.v" type="file.verilog" enable="1"/>
+        <File path="../../rtl/ddr3_fsm.v" type="file.verilog" enable="1"/>
+        <File path="../../rtl/ddr3_settings.vh" type="file.verilog" enable="0"/>
+        <File path="../../rtl/fifo/packet_fifo.v" type="file.verilog" enable="1"/>
+        <File path="../../rtl/fifo/sync_fifo.v" type="file.verilog" enable="1"/>
+        <File path="../../rtl/misc/axi_chunks.v" type="file.verilog" enable="1"/>
+        <File path="../../rtl/misc/axis_skid.v" type="file.verilog" enable="1"/>
+        <File path="../../rtl/misc/shift_register.v" type="file.verilog" enable="1"/>
+        <File path="./axi_ddr3_top.v" type="file.verilog" enable="1"/>
+        <File path="./axis_ddr3_ctrl.v" type="file.verilog" enable="1"/>
+        <File path="../../../axis_usbd/rtl/arch/arch_cdc_array.v" type="file.verilog" enable="1"/>
+        <File path="../../../axis_usbd/rtl/arch/gowin_clkdiv.v" type="file.verilog" enable="1"/>
+        <File path="../../../axis_usbd/rtl/arch/gowin_rpll.v" type="file.verilog" enable="1"/>
+        <File path="../../../axis_usbd/rtl/fifo/afifo16.v" type="file.verilog" enable="1"/>
+        <File path="../../../axis_usbd/rtl/fifo/afifo_gray.v" type="file.verilog" enable="1"/>
+        <File path="../../../axis_usbd/rtl/fifo/axis_afifo.v" type="file.verilog" enable="1"/>
+        <File path="../../../axis_usbd/rtl/fifo/fifo_dc_gray.v" type="file.verilog" enable="1"/>
+        <File path="../../../axis_usbd/rtl/usb/bulk_ep_axis_bridge.v" type="file.verilog" enable="1"/>
+        <File path="../../../axis_usbd/rtl/usb/bulk_ep_control.v" type="file.verilog" enable="1"/>
+        <File path="../../../axis_usbd/rtl/usb/bulk_ep_in.v" type="file.verilog" enable="1"/>
+        <File path="../../../axis_usbd/rtl/usb/bulk_ep_out.v" type="file.verilog" enable="1"/>
+        <File path="../../../axis_usbd/rtl/usb/ulpi_bulk_axis.v" type="file.verilog" enable="1"/>
+        <File path="../../../axis_usbd/rtl/usb/usb_packet.v" type="file.verilog" enable="1"/>
+        <File path="../../../axis_usbd/rtl/usb/usb_std_request.v" type="file.verilog" enable="1"/>
+        <File path="../../../axis_usbd/rtl/usb/usb_tlp.v" type="file.verilog" enable="1"/>
+        <File path="../../../axis_usbd/rtl/usb/usb_ulpi.v" type="file.verilog" enable="1"/>
+        <File path="../../../axis_usbd/rtl/usb/usb_xfer.v" type="file.verilog" enable="1"/>
+        <File path="./gw2a-tang-primer.cst" type="file.cst" enable="1"/>
+        <File path="./gw2a-tang-primer.sdc" type="file.sdc" enable="1"/>
+    </FileList>
+</Project>
