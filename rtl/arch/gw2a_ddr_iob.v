@@ -13,7 +13,7 @@ module gw2a_ddr_iob
  IO
  );
 
-parameter [1:0] SHIFT = 2'b00;
+parameter [2:0] SHIFT = 3'b000;
 
 input PCLK;
 input FCLK;
@@ -27,21 +27,25 @@ output Q1;
 inout IO;
 
 
-reg q0_r, q1_r;
+reg q0_r, q1_r, d0_q;
 wire d_iw, di0_w, di1_w, di2_w, di3_w, d_ow, t_w;
 wire CALIB = 1'b0;
 
-assign Q0 = q0_r;
-assign Q1 = q1_r;
+assign Q0 = SHIFT[2] ? d0_q : q0_r;
+assign Q1 = SHIFT[2] ? q0_r : q1_r;
 
 
 always @* begin
-  case (SHIFT)
+  case (SHIFT[1:0])
       default: {q0_r, q1_r} = {di0_w, di2_w};
       2'b01: {q0_r, q1_r} = {di1_w, di3_w};
       2'b10: {q0_r, q1_r} = {di2_w, di0_w};
       2'b11: {q0_r, q1_r} = {di3_w, di1_w};
   endcase
+end
+
+always @(posedge PCLK) begin
+  d0_q <= q1_r;
 end
 
 

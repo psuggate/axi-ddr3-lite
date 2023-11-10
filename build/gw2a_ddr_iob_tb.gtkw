@@ -1,15 +1,15 @@
 [*]
 [*] GTKWave Analyzer v3.3.104 (w)1999-2020 BSI
-[*] Fri Nov 10 06:29:22 2023
+[*] Fri Nov 10 19:47:14 2023
 [*]
 [dumpfile] "./gw2a_ddr_iob_tb.vcd"
-[dumpfile_mtime] "Fri Nov 10 04:28:16 2023"
-[dumpfile_size] 16615
+[dumpfile_mtime] "Fri Nov 10 19:45:32 2023"
+[dumpfile_size] 54958
 [savefile] "./gw2a_ddr_iob_tb.gtkw"
 [timestart] 0
 [size] 1920 1043
 [pos] -1 -1
-*-16.174013 85000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+*-16.174013 150000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] gw2a_ddr_iob_tb.
 [sst_width] 233
 [signals_width] 110
@@ -19,14 +19,17 @@
 gw2a_ddr_iob_tb.clk_x1
 gw2a_ddr_iob_tb.clk_x2
 gw2a_ddr_iob_tb.reset
+[color] 3
 gw2a_ddr_iob_tb.oe_nq
-gw2a_ddr_iob_tb.oe_pq
-@29
-gw2a_ddr_iob_tb.oe_qn
+@22
+gw2a_ddr_iob_tb.dat_q[7:0]
 @28
-gw2a_ddr_iob_tb.dat_q[1:0]
-gw2a_ddr_iob_tb.dat_w[1:0]
-gw2a_ddr_iob_tb.iob_w
-gw2a_ddr_iob_tb.u_gw2a_ddr_iob.OEN
+gw2a_ddr_iob_tb.oe_pq
+[color] 2
+gw2a_ddr_iob_tb.oe_qn
+@22
+gw2a_ddr_iob_tb.dat_w[7:0]
+@23
+gw2a_ddr_iob_tb.iob_w[3:0]
 [pattern_trace] 1
 [pattern_trace] 0

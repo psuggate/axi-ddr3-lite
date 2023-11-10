@@ -4,7 +4,7 @@
  * 
  * Notes:
  *  - assumes that the AXI4 interface converts write-data into 128-bit chunks,
- *    padding as required;
+ *    (written as 4x 32-bit sequential transfers) padding as required;
  *  - read data will also be a (continuous) stream of 128-bit chunks, so the
  *    AXI4 interface will have to drop any (unwanted) trailing data, if not
  *    required;
@@ -69,12 +69,6 @@ module gw2a_ddr3_phy (
   parameter ADDR_BITS = 14;
   localparam ASB = ADDR_BITS - 1;
 
-  // Selects 1-of-4 source-clock phases, for data-capture
-  parameter [1:0] SOURCE_CLOCK = 2'b01;
-
-  // Number of clock-cycles from 'dfi_rden_i' to 'dfi_rvld_o'
-  parameter [2:0] CAPTURE_DELAY = 3'h2;
-
 
   input clock;
   input reset;
@@ -127,7 +121,7 @@ module gw2a_ddr3_phy (
   reg ras_nq, cas_nq, we_nq, odt_q;
   reg [2:0] ba_q;
 
-  reg valid_q, last_q;
+  reg delay_q, valid_q, last_q;
   reg [ASB:0] addr_q;
   reg [DSB:0] data_q;
 
@@ -136,7 +130,6 @@ module gw2a_ddr3_phy (
 
   assign dfi_rvld_o = valid_q;
   assign dfi_last_o = last_q;
-  assign dfi_data_o = data_q;
 
 
   // -- DDR3 Signal Assignments -- //
@@ -153,11 +146,6 @@ module gw2a_ddr3_phy (
   assign ddr_odt_o  = odt_q;
   assign ddr_ba_o   = ba_q;
   assign ddr_a_o    = addr_q;
-
-  //   assign ddr_dqs_pio = dqs_t ? {DDR3_MASKS{1'bz}} : dqs_p;
-  //   assign ddr_dqs_nio = dqs_s ? {DDR3_MASKS{1'bz}} : dqs_n;
-  assign ddr_dm_o   = dm_w;
-  //   assign ddr_dq_io   = dq_t ? {DDR3_WIDTH{1'bz}} : dq_w;
 
 
   // -- IOB DDR Register Settings -- //
@@ -194,8 +182,99 @@ module gw2a_ddr3_phy (
   end
 
 
-  // -- DDR3 Data Strobes -- //
+  // -- Read Data Valid Signals -- //
 
+  always @(posedge clock) begin
+    if (reset) begin
+      delay_q <= 1'b0;
+      valid_q <= 1'b0;
+      last_q  <= 1'b0;
+    end else begin
+      {valid_q, delay_q} <= {delay_q, dfi_rden_i};
+      last_q <= delay_q & ~dfi_rden_i;
+    end
+  end
+
+
+  // -- DDR3 Data Path IOBs -- //
+
+  localparam SHIFT = 3'b100;
+
+  generate
+    for (genvar ii = 0; ii < DDR3_WIDTH; ii++) begin : gen_dq_iobs
+
+      gw2a_ddr_iob #(
+          .SHIFT(SHIFT)
+      ) u_gw2a_dq_iob (
+          .PCLK(clock),
+          .FCLK(~clk_ddr),
+          .RESET(reset),
+          .OEN(~dfi_wren_i),
+          .D0(dfi_data_i[ii]),
+          .D1(dfi_data_i[DDR3_WIDTH + ii]),
+          .Q0(dfi_data_o[ii]),
+          .Q1(dfi_data_o[DDR3_WIDTH + ii]),
+          .IO(ddr_dq_io[ii])
+      );
+
+    end
+  endgenerate
+
+
+  // -- Write-Data Masks Outputs -- //
+
+  generate
+    for (genvar ii = 0; ii < DDR3_MASKS; ii++) begin : gen_dm_iobs
+
+      gw2a_ddr_iob #(
+          .SHIFT(SHIFT)
+      ) u_gw2a_dm_iob (
+          .PCLK(clock),
+          .FCLK(~clk_ddr),
+          .RESET(reset),
+          .OEN(~dfi_wren_i),
+          .D0(~dfi_mask_i[ii]),
+          .D1(~dfi_mask_i[DDR3_MASKS + ii]),
+          .Q0(),
+          .Q1(),
+          .IO(ddr_dm_o[ii])
+      );
+
+    end
+  endgenerate
+
+
+  // -- Read- & Write- Data Strobes -- //
+
+`ifdef __fancy_salad
+  // todo: WIP
+  // todo: TLVDS !?
+  wire dqs_w;
+
+  assign dqs_w = ~dfi_wstb_i & ~dfi_wren_i;
+
+  generate
+    for (genvar ii = 0; ii < DDR3_MASKS; ii++) begin : gen_dqs_iobs
+
+      gw2a_ddr_iob #(
+          .SHIFT(SHIFT)
+      ) u_gw2a_dqs_p_iob (
+          .PCLK(clock),
+          .FCLK(clk_ddr),
+          .RESET(reset),
+          .OEN(dqs_w),
+          .D0(1'b1),
+          .D1(1'b0),
+          .Q0(),
+          .Q1(),
+          .IO(ddr_dqs_pio[ii])
+      );
+
+    end
+  endgenerate
+
+`else
+  // note: Does not synthesise !!
   reg dqs_q;
   wire dqs_w;
   wire [QSB:0] dqs_pi;
@@ -230,174 +309,7 @@ module gw2a_ddr3_phy (
       .IOB(ddr_dqs_nio)
   );
 
-  /*
-  ODDR #(
-      .TXCLK_POL(CLOCK_POLARITY),
-      .INIT(DQSX_ODDR_INIT)
-  ) dqs_n_oddr_inst[QSB:0] (
-      .CLK(~clock),
-      .TX (dqs_w),
-      .D0 (1'b0),
-      .D1 (1'b1),
-      .Q0 (dqs_n),
-      .Q1 (dqs_s)
-  );
-
-TBUF dqs_p_tbuf_inst[QSB:0]
-( .I(dqs_p),
-  .OEN(dqs_t),
-  .O(ddr_dqs_pio)
- );
-
-TBUF dqs_n_tbuf_inst[QSB:0]
-( .I(dqs_n),
-  .OEN(dqs_s),
-  .O(ddr_dqs_nio)
- );
-*/
-
-
-  // -- Write-Data Outputs -- //
-
-  reg clock_270, dq_oe_n;
-  reg [DSB:0] wdat_q;
-  reg [SSB:0] mask_q;
-
-  // todo: good enough ??
-  always @(negedge clk_ddr) begin
-    clock_270 <= clock;
-  end
-
-  wire [QSB:0] dm_hi_w, dm_lo_w;
-  wire [MSB:0] dq_hi_w, dq_lo_w;
-
-  // todo: good enough ??
-  always @(posedge clock_270) begin
-    dq_oe_n <= ~dfi_wstb_i;
-    mask_q  <= ~dfi_mask_i;
-    wdat_q  <= dfi_data_i;
-  end
-
-  // DM outputs
-  assign dm_hi_w = mask_q[SSB:DDR3_MASKS];
-  assign dm_lo_w = mask_q[QSB:0];
-
-  ODDR #(
-      .TXCLK_POL(CLOCK_POLARITY),
-      .INIT(DATA_ODDR_INIT)
-  ) dm_oddr_inst[QSB:0] (
-      .CLK(clock_270),
-      .TX (dq_oe_n),
-      .D0 (dm_lo_w),
-      .D1 (dm_hi_w),
-      .Q0 (dm_w),
-      .Q1 ()
-  );
-
-  // DQ outputs
-  assign dq_hi_w = wdat_q[DSB:DDR3_WIDTH];
-  assign dq_lo_w = wdat_q[MSB:0];
-
-  ODDR #(
-      .TXCLK_POL(CLOCK_POLARITY),
-      .INIT(DATA_ODDR_INIT)
-  ) dat_oddr_inst[MSB:0] (
-      .CLK(clock_270),
-      .TX (dq_oe_n),
-      .D0 (dq_lo_w),
-      .D1 (dq_hi_w),
-      .Q0 (dq_w),
-      .Q1 (dq_t)
-  );
-
-  TBUF dq_tbuf_inst[MSB:0] (
-      .I  (dq_w),
-      .OEN(dq_t),
-      .O  (ddr_dq_io)
-  );
-
-
-  // -- Read Data Valid Signals -- //
-
-  reg [CAPTURE_DELAY-1:0] reads_q;
-
-  always @(posedge clock) begin
-    if (reset) begin
-      reads_q <= 0;
-      valid_q <= 1'b0;
-      last_q  <= 1'b0;
-    end else begin
-      reads_q <= {dfi_rden_i, reads_q[CAPTURE_DELAY-1:1]};
-      valid_q <= reads_q[0];
-      last_q  <= ~reads_q[1] & reads_q[0];
-    end
-  end
-
-
-  // -- Source-Synchronous Data-Capture Clocks -- //
-
-  wire [QSB:0] dqs_pi0, dqs_pi1, dqs_ni0, dqs_ni1;
-
-  assign dqs_pi0 = dqs_pi;
-  assign dqs_pi1 = dqs_pi;
-  assign dqs_ni0 = ~dqs_pi;
-  assign dqs_ni1 = ~dqs_pi;
-
-  /*
-  // One set of these DQS signals will be used for source-synchronous data-
-  // capture.
-  IDDR #(
-      .Q0_INIT(1'b1),
-      .Q1_INIT(1'b1)
-  ) dqs_p_iddr_inst[QSB:0] (
-      .CLK(clk_ddr),
-      .D  (ddr_dqs_pio),
-      .Q0 (dqs_pi0),
-      .Q1 (dqs_pi1)
-  );
-
-  IDDR #(
-      .Q0_INIT(1'b1),
-      .Q1_INIT(1'b1)
-  ) dqs_niddr_inst[QSB:0] (
-      .CLK(clk_ddr),
-      .D  (ddr_dqs_nio),
-      .Q0 (dqs_ni0),
-      .Q1 (dqs_ni1)
-  );
-*/
-
-
-  // -- Data Capture on Read -- //
-
-  wire [MSB:0] dq_hi, dq_lo;
-
-  always @(posedge clock) begin
-    data_q <= {dq_hi, dq_lo};
-  end
-
-  // Choose a source-clock for source-synchronous data-capture
-  wire [QSB:0] clk_src = SOURCE_CLOCK[1] == 1'b0
-             ? (SOURCE_CLOCK[0] == 1'b0 ? dqs_pi0 : dqs_pi1)
-             : (SOURCE_CLOCK[0] == 1'b0 ? dqs_ni0 : dqs_ni1)
-             ;
-
-  genvar ii;
-  generate
-    for (ii = 0; ii < DDR3_MASKS; ii = ii + 1) begin : g_dq_in
-
-      IDDR #(
-          .Q0_INIT(1'b1),
-          .Q1_INIT(1'b1)
-      ) dql_iddr_inst[(ii+1)*8-1:(ii*8)] (
-          .CLK(clk_src[ii]),
-          .D  (ddr_dq_io[(ii+1)*8-1:(ii*8)]),
-          .Q0 (dq_lo[(ii+1)*8-1:(ii*8)]),
-          .Q1 (dq_hi[(ii+1)*8-1:(ii*8)])
-      );
-
-    end
-  endgenerate
+`endif
 
 
 endmodule  // gw2a_ddr3_phy

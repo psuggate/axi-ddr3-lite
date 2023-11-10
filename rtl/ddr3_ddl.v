@@ -94,7 +94,7 @@ module ddr3_ddl (
   parameter PHY_RD_DELAY = 1;
 
   localparam [WSB:0] WR_SHIFTS = DDR_CWL - PHY_WR_DELAY - LOW_LATENCY - 2;
-  localparam [WSB:0] RD_SHIFTS = DDR_CL - PHY_RD_DELAY - LOW_LATENCY - 2;
+  localparam [WSB:0] RD_SHIFTS = DDR_CL + PHY_RD_DELAY - LOW_LATENCY - 4;
 
   // A DDR3 burst has length of 8 transfers (DDR), so four clock/memory cycles
   // todo: ...
