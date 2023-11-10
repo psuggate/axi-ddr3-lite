@@ -357,3 +357,169 @@ module OSER4 (
 
 
 endmodule  // OSER4 (4 to 1 serializer)
+
+module IDES4 (Q0, Q1, Q2, Q3, D, CALIB, PCLK, FCLK, RESET);
+
+parameter GSREN = "false"; //"true"; "false"
+parameter LSREN = "true";    //"true"; "false"
+
+input D, FCLK, PCLK, CALIB, RESET;
+output Q0,Q1,Q2,Q3;
+wire grstn;
+wire lrstn; 
+//synthesis translate_off
+
+assign grstn = (GSREN == "true") ? GSR.GSRO : 1'b1;
+assign lrstn = (LSREN == "true") ? (~RESET) : 1'b1;
+
+reg Dd0,Dd1;
+reg [3:0] D_data,data;
+reg D_en1,D_en;
+reg Dd_sel,calib_state;
+reg [3:0] Q_data;
+reg reset_delay;
+wire CALIBdata_rising_p;
+reg [2:0] CALIBdata;
+wire dcnt_en;
+reg Dd0_reg0,Dd0_reg1,Dd1_reg0,Dd1_reg1;
+
+initial begin
+    calib_state = 1'b0;
+    D_en1 = 1'b0;
+    D_en = 1'b0;
+    Dd_sel = 1'b0;
+end
+
+always @(posedge FCLK or negedge grstn or negedge lrstn) begin
+    if (!grstn) begin
+        Dd0 <= 1'b0;
+    end else if (!lrstn) begin
+        Dd0 <= 1'b0;
+    end else begin
+        Dd0 <= D;
+    end
+end
+
+always @(negedge FCLK or negedge grstn or negedge lrstn) begin
+    if (!grstn) begin
+        Dd1 <= 1'b0;
+    end else if (!lrstn) begin
+        Dd1 <= 1'b0;
+    end else begin
+        Dd1 <= D;
+    end
+end
+
+always @(posedge FCLK or negedge grstn or negedge lrstn) begin
+    if (!grstn) begin
+        Dd0_reg0 <= 1'b0;
+        Dd0_reg1 <= 1'b0;
+        Dd1_reg0 <= 1'b0;
+        Dd1_reg1 <= 1'b0;
+    end else if (!lrstn) begin
+        Dd0_reg0 <= 1'b0;
+        Dd0_reg1 <= 1'b0;
+        Dd1_reg0 <= 1'b0;
+        Dd1_reg1 <= 1'b0;
+    end else begin
+        Dd0_reg0 <= Dd0;
+        Dd0_reg1 <= Dd0_reg0;
+        Dd1_reg0 <= Dd1;
+        Dd1_reg1 <= Dd1_reg0;
+    end
+end
+
+always @(posedge FCLK or negedge grstn or negedge lrstn) begin
+    if (!grstn) begin
+        reset_delay <= 1'b0;
+    end else if (!lrstn) begin
+        reset_delay <= 1'b0;
+    end else begin
+        reset_delay <= 1'b1;
+    end
+end
+
+always @(posedge FCLK or negedge reset_delay) begin
+    if (!reset_delay) begin
+        CALIBdata <= 3'b0;
+    end else begin
+        CALIBdata <= {CALIBdata[1:0], CALIB};
+    end
+end
+
+assign CALIBdata_rising_p =  CALIBdata[1] && (~CALIBdata[2]);
+assign dcnt_en = ~(CALIBdata_rising_p && calib_state);
+
+always @(posedge FCLK or negedge reset_delay) begin
+    if (!reset_delay) begin
+        calib_state <= 1'b0;
+        D_en1 <= 1'b0;
+        D_en  <= 1'b0;
+        Dd_sel <= 1'b0;
+    end else begin
+        D_en <= ~D_en1;
+        if (CALIBdata_rising_p) begin
+            calib_state <= ~calib_state;
+            Dd_sel <= ~Dd_sel;
+        end else begin
+            calib_state <= calib_state;
+            Dd_sel <= Dd_sel;
+        end
+        
+        if (dcnt_en) begin
+            D_en1 <= ~D_en1;
+        end else begin
+            D_en1 <= D_en1;
+        end
+    end
+end
+
+always @(Dd_sel or Dd0 or Dd0_reg0 or Dd0_reg1 or Dd1_reg0 or Dd1_reg1) begin
+    if(Dd_sel) begin
+        D_data[3] = Dd0;
+        D_data[2] = Dd1_reg0;
+        D_data[1] = Dd0_reg0;
+        D_data[0] = Dd1_reg1;
+    end else begin
+        D_data[3] = Dd1_reg0;
+        D_data[2] = Dd0_reg0;
+        D_data[1] = Dd1_reg1;
+        D_data[0] = Dd0_reg1;
+    end
+end
+
+always @(posedge FCLK or negedge grstn or negedge lrstn) begin
+    if (!grstn) begin
+        data <= 4'b0;
+    end else if (!lrstn) begin
+        data <= 4'b0;
+    end else if (D_en) begin
+        data <= D_data;
+    end
+end
+
+always @(posedge PCLK or negedge grstn or negedge lrstn) begin
+    if (!grstn) begin
+        Q_data <= 4'b0;
+    end else if (!lrstn) begin
+        Q_data <= 4'b0;
+    end else begin
+        Q_data <= data;
+    end
+end
+
+assign {Q3,Q2,Q1,Q0} = Q_data;
+//synthesis translate_on
+
+endmodule // IDES4 (4 to 1 deserializer)
+
+module IOBUF (O, IO, I, OEN);
+
+input I,OEN;
+output O;
+inout IO;
+
+buf OB (O, IO);
+bufif0 IB (IO,I,OEN);
+    
+endmodule //IOBUF (inout buffer)
