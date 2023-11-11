@@ -132,10 +132,10 @@ module axis_ddr3_ctrl (
   wire fetch_w, store_w;
   wire xvalid, xready, xlast;
   wire [MSB:0] xdata;
-  reg [3:0] state;
+  reg  [  3:0] state;
 
-// FIFO control signals
-reg fifo_write_q, fifo_wlast_q;
+  // FIFO control signals
+  reg fifo_write_q, fifo_wlast_q;
 
 
   // -- I/O Assignments -- //
@@ -174,27 +174,27 @@ reg fifo_write_q, fifo_wlast_q;
   assign xready = state == ST_SEND && count == 3;
 
 
-// -- FIFO Control Logic -- //
+  // -- FIFO Control Logic -- //
 
-wire fifo_write_w = s_valid_i && store && count == 3;
-wire fifo_wlast_w = s_last_i && store;
-
-always @(posedge clock) begin
-  if (reset) begin
-    fifo_write_q <= 1'b0;
-    fifo_wlast_q <= 1'b0;
-  end else begin
-    fifo_write_q <= fifo_write_w;
-    fifo_wlast_q <= fifo_wlast_w;
-  end
-end
-
-
-// -- Main Finite State Machine (FSM) -- //
+  wire fifo_write_w = s_valid_i && store && count == 3;
+  wire fifo_wlast_w = s_last_i && store;
 
   always @(posedge clock) begin
     if (reset) begin
-      state <= ST_IDLE;
+      fifo_write_q <= 1'b0;
+      fifo_wlast_q <= 1'b0;
+    end else begin
+      fifo_write_q <= fifo_write_w;
+      fifo_wlast_q <= fifo_wlast_w;
+    end
+  end
+
+
+  // -- Main Finite State Machine (FSM) -- //
+
+  always @(posedge clock) begin
+    if (reset) begin
+      state  <= ST_IDLE;
       mvalid <= 1'b0;
       mlast  <= 1'b0;
       fetch  <= 1'b0;

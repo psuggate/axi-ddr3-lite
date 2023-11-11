@@ -118,13 +118,13 @@ module axi_ddr3_top (
   // So 27.0 MHz divided by 9, then x40 = 120 MHz.
   gw2a_rpll #(
       .FCLKIN("27"),
-      .IDIV_SEL(3),    // = / 4
+      .IDIV_SEL(3),  // = / 4
       .FBDIV_SEL(28),  // = * 29
-      .ODIV_SEL(4),    // = / 4
-      .DYN_SDIV_SEL(2) // = / 2
+      .ODIV_SEL(4),  // = / 4
+      .DYN_SDIV_SEL(2)  // = / 2
   ) axis_rpll_inst (
-      .clkout(ddr_clk),    // 200 MHz
-      .clockd(clock),      // 100 MHz
+      .clkout(ddr_clk),  // 200 MHz
+      .clockd(clock),    // 100 MHz
       .lock  (rst_n),
       .clkin (clk_26)
   );

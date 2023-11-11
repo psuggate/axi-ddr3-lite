@@ -211,9 +211,9 @@ module gw2a_ddr3_phy (
           .RESET(reset),
           .OEN(~dfi_wren_i),
           .D0(dfi_data_i[ii]),
-          .D1(dfi_data_i[DDR3_WIDTH + ii]),
+          .D1(dfi_data_i[DDR3_WIDTH+ii]),
           .Q0(dfi_data_o[ii]),
-          .Q1(dfi_data_o[DDR3_WIDTH + ii]),
+          .Q1(dfi_data_o[DDR3_WIDTH+ii]),
           .IO(ddr_dq_io[ii])
       );
 
@@ -223,29 +223,25 @@ module gw2a_ddr3_phy (
 
   // -- Write-Data Masks Outputs -- //
 
-assign ddr_dm_o = 0;
-
-/*
   generate
     for (genvar ii = 0; ii < DDR3_MASKS; ii++) begin : gen_dm_iobs
 
-      gw2a_ddr_iob #(
-          .SHIFT(SHIFT)
-      ) u_gw2a_dm_iob (
-          .PCLK(clock),
-          .FCLK(~clk_ddr),
+      OSER4 u_gw2a_dm_oser4 (
+          .FCLK(clock),
+          .PCLK(~clk_ddr),
           .RESET(reset),
-          .OEN(1'b0), // ~dfi_wren_i),
+          .TX0(1'b0),
+          .TX1(1'b0),
           .D0(~dfi_mask_i[ii]),
-          .D1(~dfi_mask_i[DDR3_MASKS + ii]),
-          .Q0(),
-          .Q1(),
-          .IO(ddr_dm_o[ii])
+          .D1(~dfi_mask_i[ii]),
+          .D2(~dfi_mask_i[DDR3_MASKS+ii]),
+          .D3(~dfi_mask_i[DDR3_MASKS+ii]),
+          .Q0(ddr_dm_o[ii]),
+          .Q1()
       );
 
     end
   endgenerate
-*/
 
 
   // -- Read- & Write- Data Strobes -- //
@@ -259,7 +255,11 @@ assign ddr_dm_o = 0;
 
       gw2a_ddr_iob #(
           .SHIFT(SHIFT),
+`ifdef __icarus
+          .TLVDS(1'b1)
+`else
           .TLVDS(1'b0)
+`endif
       ) u_gw2a_dqs_iob (
           .PCLK(clock),
           .FCLK(clk_ddr),

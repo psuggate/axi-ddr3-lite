@@ -77,7 +77,7 @@ module axis_ddr3_ctrl_tb;
   // Used to control the AXI-S -> DDR3 transactions
   reg s_tvalid, s_tlast, m_tready;
   wire m_tvalid, s_tready, m_tlast;
-  reg [7:0] s_tdata;
+  reg  [7:0] s_tdata;
   wire [7:0] m_tdata;
 
   // AXI4 Signals to/from the Memory Controller
@@ -374,14 +374,14 @@ module axis_ddr3_ctrl_tb;
       reg [31:0] command;
 
       s_tvalid <= 1'b1;
-      s_tlast  <= 1'b0;
+      s_tlast <= 1'b0;
       m_tready <= 1'b0;
       {s_tdata, command} <= {len, 1'b1, tid, addr};
       count <= 4;
 
       while (!done) begin
         @(posedge clock);
-        
+
         {s_tdata, command} <= {command[31:0], 8'bx};
         count <= count - 1;
         s_tlast <= count == 1;
@@ -394,7 +394,7 @@ module axis_ddr3_ctrl_tb;
 
       count <= {22'h0, len, 2'b11};
       s_tvalid <= 1'b1;
-      s_tlast  <= 1'b0;
+      s_tlast <= 1'b0;
       m_tready <= 1'b1;
       s_tdata <= $urandom;
 
@@ -429,21 +429,21 @@ module axis_ddr3_ctrl_tb;
       reg [31:0] command;
 
       s_tvalid <= 1'b1;
-      s_tlast  <= 1'b0;
+      s_tlast <= 1'b0;
       m_tready <= 1'b0;
       {s_tdata, command} <= {len, 1'b0, tid, addr};
       count <= 4;
 
       while (!done) begin
         @(posedge clock);
-        
+
         {s_tdata, command} <= {command[31:0], 8'bx};
         count <= count - 1;
         s_tlast <= count == 1;
         s_tvalid <= count > 0;
         done <= count == 0;
       end
-      done     <= 1'b0;
+      done <= 1'b0;
       @(posedge clock);
 
       count    <= {22'h0, len, 2'b11};
@@ -469,4 +469,4 @@ module axis_ddr3_ctrl_tb;
   endtask  // axis_fetch
 
 
-endmodule // axis_ddr3_ctrl_tb
+endmodule  // axis_ddr3_ctrl_tb
