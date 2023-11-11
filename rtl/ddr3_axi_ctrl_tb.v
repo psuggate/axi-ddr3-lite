@@ -273,7 +273,7 @@ module ddr3_axi_ctrl_tb;
       .axi_rid_o(rid),
       .axi_rdata_o(rdata),
 
-      .mem_wrreq_o(store),   // WRITE requests to FSM
+      .mem_wrreq_o(store),  // WRITE requests to FSM
       .mem_wrack_i(accept & store),
       .mem_wrerr_i(1'b0),
       .mem_wrtid_o(wreqid),
@@ -285,7 +285,7 @@ module ddr3_axi_ctrl_tb;
       .mem_wmask_o(wr_mask),
       .mem_wdata_o(wr_data),
 
-      .mem_rdreq_o(fetch),   // READ requests to FSM
+      .mem_rdreq_o(fetch),  // READ requests to FSM
       .mem_rdack_i(accept & fetch),
       .mem_rderr_i(1'b0),
       .mem_rdtid_o(rreqid),
@@ -302,7 +302,7 @@ module ddr3_axi_ctrl_tb;
 
   task axi_store;
     input [ASB:0] addr;
-  input [7:0] len;
+    input [7:0] len;
     begin
       integer count;
       reg done = 0;
@@ -338,7 +338,7 @@ module ddr3_axi_ctrl_tb;
       end
 
       @(posedge clock);
-/*
+      /*
       @(posedge clock);
 
       while (!awready) begin

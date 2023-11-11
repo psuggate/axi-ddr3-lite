@@ -64,7 +64,7 @@ module axi_ddr3_top (
   localparam HIGH_SPEED = 1'b1;
   localparam CHANNEL_IN_ENABLE = 1'b1;
   localparam CHANNEL_OUT_ENABLE = 1'b1;
-  localparam PACKET_MODE = 1'b0;
+  localparam PACKET_MODE = 1'b1;
 
 
   input clk_26;
@@ -103,16 +103,16 @@ module axi_ddr3_top (
 
   localparam PHY_WR_DELAY = 3;
   localparam PHY_RD_DELAY = 3;
-  localparam WR_PREFETCH = 1'b1;
+  localparam WR_PREFETCH = 1'b0;
 
   // Trims an additional clock-cycle of latency, if '1'
   parameter LOW_LATENCY = 1'b1;  // 0 or 1
 
 
-  wire clock, rst_n, reset;
+  wire clock, rst_n, reset, locked;
   wire axi_clk, ddr_clk, usb_clk, usb_rst_n;
 
-  assign reset   = ~rst_n;
+  assign reset   = ~locked;
   assign axi_clk = clock;
 
   // So 27.0 MHz divided by 9, then x40 = 120 MHz.
@@ -125,7 +125,7 @@ module axi_ddr3_top (
   ) axis_rpll_inst (
       .clkout(ddr_clk),  // 200 MHz
       .clockd(clock),    // 100 MHz
-      .lock  (rst_n),
+      .lock  (locked),
       .clkin (clk_26)
   );
 

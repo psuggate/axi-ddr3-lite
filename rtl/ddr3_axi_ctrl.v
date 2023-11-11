@@ -216,10 +216,10 @@ module ddr3_axi_ctrl (
   always @(posedge clock) begin
     if (reset) begin
       req_id <= TZERO;
+    end else if (issued) begin
+      req_id <= req_id + 1;
     end else begin
-      if (issued) begin
-        req_id <= req_id + 1;
-      end
+      req_id <= req_id;
     end
   end
 

@@ -202,7 +202,7 @@ module axi_ddr3_lite (
   // AXI <-> FSM signals
   wire fsm_wrreq, fsm_wrlst, fsm_wrack, fsm_wrerr;
   wire fsm_rdreq, fsm_rdlst, fsm_rdack, fsm_rderr;
-  wire byp_rdreq, byp_rdlst, byp_rdack, byp_rderr;
+  wire byp_rdreq, byp_rdack, byp_rderr;
   wire [TSB:0] fsm_wrtid, fsm_rdtid, byp_rdtid;
   wire [FSB:0] fsm_wradr, fsm_rdadr, byp_rdadr;
 
@@ -228,17 +228,8 @@ module axi_ddr3_lite (
   wire [MSB:0] by_data;
 
 
-  // assign fsm_wrlst = 1'b1;
-  // assign fsm_rdlst = 1'b1;
-  assign byp_rdlst = 1'b1;
-
-
   always @(posedge clock) begin
-    if (reset) begin
-      enable <= 1'b0;
-    end else if (cfg_run) begin
-      enable <= 1'b1;
-    end
+    enable <= ~reset & cfg_run;
   end
 
 

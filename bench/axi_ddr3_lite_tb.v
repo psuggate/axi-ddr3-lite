@@ -27,6 +27,9 @@ module axi_ddr3_lite_tb;
   // Trims an additional clock-cycle of latency, if '1'
   parameter LOW_LATENCY = 1'b1;  // 0 or 1
 
+  parameter BYPASS_ENABLE = 1'b1;
+
+
   // -- Data-path and address settings -- //
 
   localparam WIDTH = 32;
@@ -358,7 +361,7 @@ module axi_ddr3_lite_tb;
       .LOW_LATENCY  (LOW_LATENCY),
       .AXI_ID_WIDTH (REQID),
       .MEM_ID_WIDTH (REQID),
-      .BYPASS_ENABLE(1)
+      .BYPASS_ENABLE(BYPASS_ENABLE)
   ) ddr_core_inst (
       .clock(clock),  // system clock
       .reset(reset),  // synchronous reset

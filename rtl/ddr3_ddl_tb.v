@@ -175,9 +175,7 @@ module ddr3_ddl_tb;
 
   gw2a_ddr3_phy #(
       .DDR3_WIDTH(WIDTH / 2),  // (default)
-      .ADDR_BITS(DDR3_ROW_BITS),  // default: 14
-      .SOURCE_CLOCK(2'b01),  // (default)
-      .CAPTURE_DELAY(3'h2)  // (default)
+      .ADDR_BITS(DDR3_ROW_BITS)
   ) gw2a_ddr3_phy_inst (
       .clock  (clock),
       .reset  (reset),

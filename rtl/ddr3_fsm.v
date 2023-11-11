@@ -171,7 +171,9 @@ module ddr3_fsm (
   assign cfg_rdy_o = ddl_rdy_i;
 
   assign mem_wrack_o = wrack;
+  assign mem_wrerr_o = 1'b0;
   assign mem_rdack_o = rdack;
+  assign mem_rderr_o = 1'b0;
 
   assign ddl_req_o = req_q;
   assign ddl_seq_o = req_x;
@@ -223,8 +225,8 @@ module ddr3_fsm (
       adr_q <= row_w;
       req_x <= 1'b0;
       cmd_x <= CMD_NOOP;
-      adr_x <= 'bx;
-      // req_s <= 1'b0;
+      adr_x <= {DDR_ROW_BITS{1'bx}};
+      req_s <= 1'b0;
       wrack <= 1'b0;
       rdack <= 1'b0;
     end else begin
@@ -274,8 +276,10 @@ module ddr3_fsm (
             // Command issued, issue another as part of a sequence?
             if (!req_s) begin
               snext <= ST_IDLE;
-              cmd_x <= CMD_NOOP;
               req_x <= 1'b0;
+              cmd_x <= CMD_NOOP;
+              adr_x <= adr_x;
+              req_s <= 1'b0;
             end else if (store_w && mem_wrreq_i || fetch_w && mem_rdreq_i) begin
               snext <= snext;
               req_x <= req_x;
@@ -286,16 +290,34 @@ module ddr3_fsm (
             end else begin
               // todo: this should just be a 'WAIT' ??
               $error("%10t: Unimplemented", $time);
+              snext <= snext;
+              req_x <= req_x;
+              cmd_x <= cmd_x;
+              adr_x <= adr_x;
+              req_s <= req_s;
               // #100 $fatal;
             end
+          end else begin
+            state <= state;
+            snext <= snext;
+            req_q <= req_q;
+            cmd_q <= cmd_q;
+            adr_q <= adr_q;
+            req_x <= req_x;
+            cmd_x <= cmd_x;
+            adr_x <= adr_x;
+            req_s <= req_s;
           end
         end
 
         ST_REFR: begin
+          snext <= ST_IDLE;
           ba_q  <= ba_q;  // note: return to 'IDLE' to bank-switch
 
-          wrack <= 1'b0;
-          rdack <= 1'b0;
+          req_x <= req_x;
+          cmd_x <= cmd_x;
+          adr_x <= adr_x;
+          req_s <= 1'b0;
 
           // Wait for all outstanding REFRESH operations to complete
           // Note: 'ddl_ref_i' stays asserted until REFRESH is about to finish
@@ -306,15 +328,32 @@ module ddr3_fsm (
             adr_q <= row_w;
           end else begin
             state <= state;
+            req_q <= req_q;
+            cmd_q <= cmd_q;
+            adr_q <= adr_q;
           end
+
+          wrack <= 1'b0;
+          rdack <= 1'b0;
         end
 
         default: begin
-          wrack <= 1'b0;
-          rdack <= 1'b0;
-
           $error("Oh noes");
           state <= ST_IDLE;
+          snext <= ST_IDLE;
+
+          req_q <= cfg_req_i;
+          cmd_q <= cfg_cmd_i;
+          ba_q  <= bank_w;
+          adr_q <= row_w;
+
+          req_x <= 1'b0;
+          cmd_x <= CMD_NOOP;
+          adr_x <= {DDR_ROW_BITS{1'bx}};
+          req_s <= 1'b0;
+
+          wrack <= 1'b0;
+          rdack <= 1'b0;
           // #100 $fatal;
         end
       endcase

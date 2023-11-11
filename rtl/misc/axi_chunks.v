@@ -27,7 +27,6 @@ module axi_chunks (
 
   parameter CHUNK = 2;
   localparam CSB = 7 - CHUNK;
-  // localparam CHUNK_SIZE = (AXI_WIDTH / OUT_WIDTH) << 2;
   localparam CHUNK_SIZE = 1 << (2 + $clog2(AXI_WIDTH) - $clog2(OUT_WIDTH));
 
   parameter REQID = 4;
@@ -80,8 +79,8 @@ module axi_chunks (
   always @(posedge clock) begin
     if (reset) begin
       busy_q <= 1'b0;
-      trid_q <= 'bx;
-      addr_q <= 'bx;
+      trid_q <= {REQID{1'bx}};
+      addr_q <= {ADDRS{1'bx}};
       count  <= 0;
     end else if (!busy_q && avalid_i && xready_i) begin
       busy_q <= alen_i[7:CHUNK] != 0;
