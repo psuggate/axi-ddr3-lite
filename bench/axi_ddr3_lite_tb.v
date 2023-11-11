@@ -16,8 +16,8 @@ module axi_ddr3_lite_tb;
 `ifdef __gowin_for_the_win
   localparam PHY_WR_DELAY = 3;
   localparam PHY_RD_DELAY = 3;
-  // localparam WR_PREFETCH = 1'b1;
-  localparam WR_PREFETCH = 1'b0;
+  localparam WR_PREFETCH = 1'b1;
+  // localparam WR_PREFETCH = 1'b0;
 `else
   localparam PHY_WR_DELAY = 1;
   localparam PHY_RD_DELAY = 1;
@@ -300,7 +300,8 @@ module axi_ddr3_lite_tb;
   // (read-)data is registered ...
   generic_ddr3_phy #(
       .DDR3_WIDTH(16),  // (default)
-      .ADDR_BITS(DDR_ROW_BITS)  // default: 14
+      .ADDR_BITS(DDR_ROW_BITS),  // default: 14
+      .WR_PREFETCH(WR_PREFETCH)
   ) ddr3_phy_inst (
       .clock  (clock),
       .reset  (reset),

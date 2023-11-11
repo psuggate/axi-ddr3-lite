@@ -245,7 +245,8 @@ module axi_ddr3_lite (
       .DATA_FIFO_DEPTH(DATA_FIFO_DEPTH)
   ) ddr3_axi_ctrl_inst (
       .clock(clock),
-      .reset(~enable),
+      .reset(reset),
+      // .reset(~enable),
 
       .axi_awvalid_i(axi_awvalid_i),  // AXI4 Write Address Port
       .axi_awready_o(axi_awready_o),

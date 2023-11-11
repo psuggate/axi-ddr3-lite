@@ -101,7 +101,7 @@ module axi_ddr3_top (
 
   localparam PHY_WR_DELAY = 3;
   localparam PHY_RD_DELAY = 3;
-  localparam WR_PREFETCH = 1'b0;
+  localparam WR_PREFETCH = 1'b1;
 
   // Trims an additional clock-cycle of latency, if '1'
   parameter LOW_LATENCY = 1'b0;  // 0 or 1
@@ -114,7 +114,7 @@ module axi_ddr3_top (
   assign axi_clk = clock;
 
 
-// `define __use_250_MHz
+  // `define __use_250_MHz
 `ifdef __use_250_MHz
   localparam DDR_FREQ_MHZ = 125;
 
@@ -359,6 +359,7 @@ module axi_ddr3_top (
   // -- DDR3 PHY -- //
 
   gw2a_ddr3_phy #(
+      .WR_PREFETCH(WR_PREFETCH),
       .DDR3_WIDTH(16),  // (default)
       .ADDR_BITS(DDR_ROW_BITS)
   ) u_phy (

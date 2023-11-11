@@ -148,6 +148,7 @@ module ddr3_fsm (
   localparam ADR_PAD_BITS = DDR_ROW_BITS - DDR_COL_BITS - 1;
 
   // DDR3 controller states
+  // todo: effectively there are only three states, so refactor ...
   localparam [3:0] ST_IDLE = 4'b0000;
   localparam [3:0] ST_READ = 4'b1000;
   localparam [3:0] ST_WRIT = 4'b0100;
