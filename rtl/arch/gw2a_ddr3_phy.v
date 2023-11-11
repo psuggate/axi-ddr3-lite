@@ -145,7 +145,7 @@ module gw2a_ddr3_phy (
         data_q <= dfi_data_i;
       end
 
-    end else begin
+    end else begin : gen_no_prefetch
 
       // Connect the outputs of the FIFO's directly to the IOB's, even though
       // this will result in quite a lot of routing and combinational delay.
@@ -176,13 +176,6 @@ module gw2a_ddr3_phy (
   assign ddr_odt_o  = odt_q;
   assign ddr_ba_o   = ba_q;
   assign ddr_a_o    = addr_q;
-
-
-  // -- IOB DDR Register Settings -- //
-
-  localparam CLOCK_POLARITY = 1'b0;
-  localparam DATA_ODDR_INIT = 1'b0;
-  localparam DQSX_ODDR_INIT = 1'b1;
 
 
   // -- DDR3 Command Signals -- //

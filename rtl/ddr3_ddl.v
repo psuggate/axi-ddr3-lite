@@ -357,11 +357,10 @@ module ddr3_ddl (
               busy  <= 1'b0;
               delay <= 0;
               count <= {CBITS{1'bx}};
-              $display("%10t: DDL: Unnecessary NOP request", $time);
             end
 
             default: begin
-              $error("%10t: DDL: Invalid command: 0x%1x", $time, ctl_cmd_i);
+              // Invalid command ...
               busy  <= 1'b0;
               count <= {CBITS{1'bx}};
               delay <= 0;
@@ -387,11 +386,7 @@ module ddr3_ddl (
             CMD_READ: delay <= precharge ? DELAY_RDA_TO_ACT : DELAY__RD_TO__RD;
             CMD_WRIT: delay <= precharge ? DELAY_WRA_TO_ACT : DELAY__WR_TO__WR;
             CMD_ACTV: delay <= DELAY_ACT_TO_ACT_S;
-            default: begin
-              delay <= {DELAY{1'bx}};
-              $error("%10t: DDL: Unexpected command (0x%1x) in 'ST_ACTV'", $time, ctl_cmd_i);
-              $fatal;
-            end
+            default:  delay <= {DELAY{1'bx}};
           endcase
 
           busy  <= 1'b0;
@@ -415,11 +410,7 @@ module ddr3_ddl (
             CMD_READ: delay <= precharge ? DELAY_RDA_TO_ACT : DELAY__RD_TO__RD;
             CMD_WRIT: delay <= precharge ? DELAY_WRA_TO_ACT : DELAY__RD_TO__WR;
             CMD_ACTV: delay <= 2;
-            default: begin
-              delay <= {DELAY{1'bx}};
-              $error("%10t: DDL: Unexpected command (0x%1x) in 'ST_READ'", $time, ctl_cmd_i);
-              $fatal;
-            end
+            default:  delay <= {DELAY{1'bx}};
           endcase
 
           busy  <= 1'b0;
@@ -445,11 +436,7 @@ module ddr3_ddl (
             CMD_WRIT: delay <= precharge ? DELAY_WRA_TO_ACT : DELAY__WR_TO__WR;
             CMD_READ: delay <= precharge ? DELAY_RDA_TO_ACT : DELAY__WR_TO__RD;
             CMD_ACTV: delay <= 2;
-            default: begin
-              delay <= {DELAY{1'bx}};
-              $error("%10t: DDL: Unexpected command (0x%1x) in 'ST_WRIT'", $time, ctl_cmd_i);
-              $fatal;
-            end
+            default:  delay <= {DELAY{1'bx}};
           endcase
 
           busy  <= 1'b0;
@@ -462,11 +449,7 @@ module ddr3_ddl (
           case (ctl_cmd_i)
             CMD_ACTV: delay <= DELAY_PRE_TO_ACT;
             CMD_REFR: delay <= DELAY_REF_TO_ACT;
-            default: begin
-              delay <= {DELAY{1'bx}};
-              $error("%10t: DDL: Unexpected command (0x%1x) in 'ST_PREC'", $time, ctl_cmd_i);
-              $fatal;
-            end
+            default:  delay <= {DELAY{1'bx}};
           endcase
 
           busy  <= 1'b0;
@@ -478,15 +461,8 @@ module ddr3_ddl (
 
           case (ctl_cmd_i)
             CMD_ACTV: delay <= DELAY_ACT_TO_R_W;
-            CMD_REFR: begin
-              $display("%10t: DDL: Back-to-back REFRESH commands issued", $time);
-              delay <= DELAY_REF_TO_ACT;
-            end
-            default: begin
-              delay <= {DELAY{1'bx}};
-              $error("%10t: DDL: Unexpected command (0x%1x) in 'ST_REFR'", $time, ctl_cmd_i);
-              $fatal;
-            end
+            CMD_REFR: delay <= DELAY_REF_TO_ACT;
+            default:  delay <= {DELAY{1'bx}};
           endcase
 
           busy  <= 1'b0;
@@ -501,11 +477,7 @@ module ddr3_ddl (
             CMD_REFR: delay <= DELAY_REF_TO_ACT;
             CMD_PREC: delay <= DELAY_PRE_TO_ACT;
             CMD_ZQCL: delay <= 0;
-            default: begin
-              delay <= {DELAY{1'bx}};
-              $error("%10t: DDL: Unexpected command (0x%1x) in 'ST_MODE'", $time, ctl_cmd_i);
-              $fatal;
-            end
+            default:  delay <= {DELAY{1'bx}};
           endcase
 
           case (ctl_cmd_i)
@@ -527,11 +499,7 @@ module ddr3_ddl (
             CMD_ACTV: delay <= DELAY_ACT_TO_R_W;
             CMD_REFR: delay <= DELAY_REF_TO_ACT;
             CMD_PREC: delay <= DELAY_PRE_TO_ACT;
-            default: begin
-              delay <= {DELAY{1'bx}};
-              $error("%10t: DDL: Unexpected command (0x%1x) in 'ST_ZQCL'", $time, ctl_cmd_i);
-              $fatal;
-            end
+            default:  delay <= {DELAY{1'bx}};
           endcase
 
           busy  <= 1'b0;
@@ -539,7 +507,7 @@ module ddr3_ddl (
         end
 
         default: begin
-          $error("%10t: DDL: Unexpected state: 0x%02x", $time, state);
+          // Unexpected state ...
           state <= CMD_NOOP;
           ready <= 1'b0;
           busy  <= 1'b0;
@@ -634,6 +602,124 @@ module ddr3_ddl (
   // -- Simulation Only -- //
 
 `ifdef __icarus
+  // Make some noise during simulation ...
+  always @(posedge clock) begin
+    if (!reset && ddr_cke_i && !busy && ctl_req_i && ready) begin
+      case (state)
+        CMD_NOOP: begin
+          case (ctl_cmd_i)
+            CMD_ACTV, CMD_PREC, CMD_REFR, CMD_MODE, CMD_ZQCL: begin
+              $display("%10t: DDL: Next command '0x%1x' from 'ST_IDLE'", $time, ctl_cmd_i);
+            end
+            CMD_NOOP: $display("%10t: DDL: Unnecessary NOP request", $time);
+            default:  $error("%10t: DDL: Invalid command: 0x%1x", $time, ctl_cmd_i);
+          endcase
+        end
+
+        CMD_ACTV: begin
+          case (ctl_cmd_i)
+            CMD_ACTV, CMD_WRIT, CMD_READ: begin
+              $display("%10t: DDL: Next command '0x%1x' from 'ST_ACTV'", $time, ctl_cmd_i);
+            end
+            default: begin
+              $error("%10t: DDL: Unexpected command (0x%1x) in 'ST_ACTV'", $time, ctl_cmd_i);
+              $fatal;
+            end
+          endcase
+        end
+
+        CMD_READ: begin
+          case (ctl_cmd_i)
+            CMD_ACTV, CMD_WRIT, CMD_READ: begin
+              $display("%10t: DDL: Next command '0x%1x' from 'ST_READ'", $time, ctl_cmd_i);
+            end
+            default: begin
+              $error("%10t: DDL: Unexpected command (0x%1x) in 'ST_READ'", $time, ctl_cmd_i);
+              $fatal;
+            end
+          endcase
+        end
+
+        CMD_WRIT: begin
+          case (ctl_cmd_i)
+            CMD_ACTV, CMD_WRIT, CMD_READ: begin
+              $display("%10t: DDL: Next command '0x%1x' from 'ST_WRIT'", $time, ctl_cmd_i);
+            end
+            default: begin
+              $error("%10t: DDL: Unexpected command (0x%1x) in 'ST_WRIT'", $time, ctl_cmd_i);
+              $fatal;
+            end
+          endcase
+        end
+
+        CMD_PREC: begin
+          case (ctl_cmd_i)
+            CMD_ACTV, CMD_REFR: begin
+              $display("%10t: DDL: Next command '0x%1x' from 'ST_PREC'", $time, ctl_cmd_i);
+            end
+            default: begin
+              $error("%10t: DDL: Unexpected command (0x%1x) in 'ST_PREC'", $time, ctl_cmd_i);
+              $fatal;
+            end
+          endcase
+        end
+
+        CMD_REFR: begin
+          case (ctl_cmd_i)
+            CMD_ACTV: begin
+              $display("%10t: DDL: Next command '0x%1x' from 'ST_REFR'", $time, ctl_cmd_i);
+            end
+            CMD_REFR: begin
+              $display("%10t: DDL: Back-to-back REFRESH commands issued", $time);
+            end
+            default: begin
+              $error("%10t: DDL: Unexpected command (0x%1x) in 'ST_REFR'", $time, ctl_cmd_i);
+              $fatal;
+            end
+          endcase
+        end
+
+        CMD_MODE: begin
+          case (ctl_cmd_i)
+            CMD_MODE, CMD_REFR, CMD_PREC, CMD_ZQCL: begin
+              $display("%10t: DDL: Next command '0x%1x' from 'ST_MODE'", $time, ctl_cmd_i);
+            end
+            default: begin
+              $error("%10t: DDL: Unexpected command (0x%1x) in 'ST_MODE'", $time, ctl_cmd_i);
+              $fatal;
+            end
+          endcase
+        end
+
+        CMD_ZQCL: begin
+          case (ctl_cmd_i)
+            CMD_ACTV, CMD_REFR, CMD_PREC: begin
+              $display("%10t: DDL: Next command '0x%1x' from 'ST_ZQCL'", $time, ctl_cmd_i);
+            end
+            default: begin
+              $error("%10t: DDL: Unexpected command (0x%1x) in 'ST_ZQCL'", $time, ctl_cmd_i);
+              $fatal;
+            end
+          endcase
+        end
+
+        default: $error("%10t: DDL: Unexpected state: 0x%02x", $time, state);
+      endcase
+    end
+  end
+
+  always @(posedge clock) begin
+    if (!reset && ddr_cke_i && !ddr_cs_ni) begin
+      if (busy && ready) begin
+        $error("%10t: Can not by BUSY && READY at the same time!", $time);
+        $fatal;
+      end
+    end
+  end
+
+
+  // -- Pretty States in GtkWave -- //
+
   reg [79:0] dbg_state;
 
   always @* begin
@@ -666,15 +752,6 @@ module ddr3_ddl (
       CMD_NOOP: dbg_cmd = "---";
       default:  dbg_cmd = "XXX";
     endcase
-  end
-
-  always @(posedge clock) begin
-    if (!reset && ddr_cke_i && !ddr_cs_ni) begin
-      if (busy && ready) begin
-        $error("%10t: Can not by BUSY && READY at the same time!", $time);
-        $fatal;
-      end
-    end
   end
 
 `endif
