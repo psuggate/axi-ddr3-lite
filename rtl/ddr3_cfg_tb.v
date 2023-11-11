@@ -67,7 +67,6 @@ module ddr3_cfg_tb;
 
   wire ddl_run, ddl_req, ddl_seq, ddl_rdy, ddl_ref;
   wire [2:0] ddl_cmd, ddl_ba;
-  wire [ISB:0] ddl_tid;
   wire [RSB:0] ddl_adr;
 
   // Memory Controller Signals (to the DDL/PHY)
@@ -396,7 +395,6 @@ module ddr3_cfg_tb;
       .ddl_rdy_i(ddl_rdy),
       .ddl_ref_i(cfg_ref),  // todo ...
       .ddl_cmd_o(ddl_cmd),
-      .ddl_tid_o(ddl_tid),
       .ddl_ba_o (ddl_ba),
       .ddl_adr_o(ddl_adr)
   );
@@ -416,11 +414,6 @@ module ddr3_cfg_tb;
   ) ddr3_cfg_inst (
       .clock(clock),
       .reset(reset),
-
-      .cfg_valid_i(cfg_valid),  // toods ??
-      .cfg_ready_o(),
-      .cfg_data_i (cfg_data),
-      .cfg_data_o (),
 
       .dfi_rst_no(dfi_rst_n),  // Control these IOB's directly
       .dfi_cke_o (dfi_cke),

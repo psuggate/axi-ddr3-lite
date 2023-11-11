@@ -223,6 +223,9 @@ module gw2a_ddr3_phy (
 
   // -- Write-Data Masks Outputs -- //
 
+assign ddr_dm_o = 0;
+
+/*
   generate
     for (genvar ii = 0; ii < DDR3_MASKS; ii++) begin : gen_dm_iobs
 
@@ -232,7 +235,7 @@ module gw2a_ddr3_phy (
           .PCLK(clock),
           .FCLK(~clk_ddr),
           .RESET(reset),
-          .OEN(~dfi_wren_i),
+          .OEN(1'b0), // ~dfi_wren_i),
           .D0(~dfi_mask_i[ii]),
           .D1(~dfi_mask_i[DDR3_MASKS + ii]),
           .Q0(),
@@ -242,13 +245,11 @@ module gw2a_ddr3_phy (
 
     end
   endgenerate
+*/
 
 
   // -- Read- & Write- Data Strobes -- //
 
-`ifdef __fancy_salad
-  // todo: WIP
-  // todo: TLVDS !?
   wire dqs_w;
 
   assign dqs_w = ~dfi_wstb_i & ~dfi_wren_i;
@@ -257,8 +258,9 @@ module gw2a_ddr3_phy (
     for (genvar ii = 0; ii < DDR3_MASKS; ii++) begin : gen_dqs_iobs
 
       gw2a_ddr_iob #(
-          .SHIFT(SHIFT)
-      ) u_gw2a_dqs_p_iob (
+          .SHIFT(SHIFT),
+          .TLVDS(1'b0)
+      ) u_gw2a_dqs_iob (
           .PCLK(clock),
           .FCLK(clk_ddr),
           .RESET(reset),
@@ -267,49 +269,12 @@ module gw2a_ddr3_phy (
           .D1(1'b0),
           .Q0(),
           .Q1(),
-          .IO(ddr_dqs_pio[ii])
+          .IO(ddr_dqs_pio[ii]),
+          .IOB(ddr_dqs_nio[ii])
       );
 
     end
   endgenerate
-
-`else
-  // note: Does not synthesise !!
-  reg dqs_q;
-  wire dqs_w;
-  wire [QSB:0] dqs_pi;
-
-  assign dqs_w = ~dfi_wstb_i & ~dfi_wren_i;
-
-  always @(posedge clock) begin
-    if (reset) begin
-      dqs_q <= 1'b1;
-    end else begin
-      dqs_q <= dqs_w;
-    end
-  end
-
-  ODDR #(
-      .TXCLK_POL(CLOCK_POLARITY),
-      .INIT(DQSX_ODDR_INIT)
-  ) dqs_p_oddr_inst[QSB:0] (
-      .CLK(~clock),
-      .TX (dqs_w),
-      .D0 (1'b1),
-      .D1 (1'b0),
-      .Q0 (dqs_p),
-      .Q1 (dqs_t)
-  );
-
-  TLVDS_IOBUF dqs_iobuf_inst[QSB:0] (
-      .I  (dqs_p),
-      .OEN(dqs_t),
-      .O  (dqs_pi),
-      .IO (ddr_dqs_pio),
-      .IOB(ddr_dqs_nio)
-  );
-
-`endif
 
 
 endmodule  // gw2a_ddr3_phy

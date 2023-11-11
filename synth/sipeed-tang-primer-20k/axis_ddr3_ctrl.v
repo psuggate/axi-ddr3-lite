@@ -46,15 +46,15 @@ module axis_ddr3_ctrl (
     rdata_i
 );
 
-  localparam WIDTH = 32;
+  parameter WIDTH = 32;
   localparam MSB = WIDTH - 1;
-  localparam MASKS = WIDTH / 8;
+  parameter MASKS = WIDTH / 8;
   localparam SSB = MASKS - 1;
 
-  localparam ADDRS = 27;
+  parameter ADDRS = 27;
   localparam ASB = ADDRS - 1;
 
-  localparam REQID = 4;
+  parameter REQID = 4;
   localparam ISB = REQID - 1;
 
 
@@ -134,6 +134,9 @@ module axis_ddr3_ctrl (
   wire [MSB:0] xdata;
   reg [3:0] state;
 
+// FIFO control signals
+reg fifo_write_q, fifo_wlast_q;
+
 
   // -- I/O Assignments -- //
 
@@ -171,6 +174,24 @@ module axis_ddr3_ctrl (
   assign xready = state == ST_SEND && count == 3;
 
 
+// -- FIFO Control Logic -- //
+
+wire fifo_write_w = s_valid_i && store && count == 3;
+wire fifo_wlast_w = s_last_i && store;
+
+always @(posedge clock) begin
+  if (reset) begin
+    fifo_write_q <= 1'b0;
+    fifo_wlast_q <= 1'b0;
+  end else begin
+    fifo_write_q <= fifo_write_w;
+    fifo_wlast_q <= fifo_wlast_w;
+  end
+end
+
+
+// -- Main Finite State Machine (FSM) -- //
+
   always @(posedge clock) begin
     if (reset) begin
       state <= ST_IDLE;
@@ -183,6 +204,8 @@ module axis_ddr3_ctrl (
     end else begin
       case (state)
         ST_IDLE: begin
+          count <= 0;
+
           if (s_valid_i && s_ready_o) begin
             // Byte-shift in the command:
             //   {1b, 3b, 4b, 24b]
@@ -234,7 +257,7 @@ module axis_ddr3_ctrl (
                    xdata[31:24] ;
 
           mvalid <= xvalid;
-          mlast <= xlast;
+          mlast <= count == 3 && xlast;
 
           if (mvalid && m_ready_i) begin
             count <= cnext;
@@ -302,9 +325,9 @@ module axis_ddr3_ctrl (
       .clock(clock),
       .reset(reset),
 
-      .valid_i(s_valid_i && store && count == 3),
+      .valid_i(fifo_write_q),
       .ready_o(s_ready_o),
-      .last_i (s_last_i & store),
+      .last_i (fifo_wlast_q),
       .drop_i (1'b0),
       .data_i ({{MASKS{1'b1}}, wdata}),
 
@@ -334,27 +357,24 @@ module axis_ddr3_ctrl (
       .data_o ({xlast, xdata})
   );
 
-/*
-  packet_fifo #(
-      .WIDTH (WIDTH),
-      .ABITS (9),
-      .OUTREG(1)
-  ) rddata_fifo_inst (
-      .clock(clock),
-      .reset(reset),
 
-      .valid_i(rvalid_i),
-      .ready_o(rready_o),
-      .last_i (rlast_i),
-      .drop_i (1'b0),
-      .data_i (rdata_i),
+  // -- Simulation Only -- //
 
-      .valid_o(xvalid),
-      .ready_i(xready),
-      .last_o (xlast),
-      .data_o (xdata)
-  );
-*/
+`ifdef __icarus
+  reg [39:0] dbg_state;
+
+  always @* begin
+    case (state)
+      ST_IDLE: dbg_state = reset ? "INIT" : "IDLE";
+      ST_READ: dbg_state = "READ";
+      ST_WAIT: dbg_state = "WAIT";
+      ST_SEND: dbg_state = "SEND";
+      ST_RECV: dbg_state = "RECV";
+      ST_WRIT: dbg_state = "WRIT";
+      default: dbg_state = "XXX";
+    endcase
+  end
+`endif
 
 
 endmodule  // axis_ddr3_ctrl

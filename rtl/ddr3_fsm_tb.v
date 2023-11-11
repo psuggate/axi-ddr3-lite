@@ -99,7 +99,6 @@ module ddr3_fsm_tb;
   reg ddl_cke;
   wire ddl_run, ddl_rdy, ddl_req, ddl_seq, ddl_ref;
   wire [2:0] ddl_cmd, ddl_ba;
-  wire [ISB:0] ddl_tid;
   wire [RSB:0] ddl_adr;
 
   wire cfg_req, cfg_rdy, cfg_ref;
@@ -200,9 +199,6 @@ module ddr3_fsm_tb;
       end
     end
   end
-
-
-  // -- DFI Data Layer -- //
 
 
   // -- DDR3 PHI Interface Modules -- //
@@ -339,7 +335,6 @@ module ddr3_fsm_tb;
       .ddl_rdy_i(ddl_rdy),
       .ddl_ref_i(cfg_ref),
       .ddl_cmd_o(ddl_cmd),
-      .ddl_tid_o(ddl_tid),
       .ddl_ba_o (ddl_ba),
       .ddl_adr_o(ddl_adr)
   );
