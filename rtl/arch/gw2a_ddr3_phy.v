@@ -223,9 +223,25 @@ module gw2a_ddr3_phy (
 
   // -- Write-Data Masks Outputs -- //
 
+  reg [SSB:0] dm_q;
+
+  always @(posedge clock) begin
+    dm_q <= ~dfi_mask_i;
+  end
+
   generate
     for (genvar ii = 0; ii < DDR3_MASKS; ii++) begin : gen_dm_iobs
 
+      ODDR u_gw2a_dm_oddr (
+          .CLK(~clock),
+          .TX (1'b0),
+          .D0 (dm_q[ii]),
+          .D1 (dm_q[DDR3_MASKS+ii]),
+          .Q0 (ddr_dm_o[ii]),
+          .Q1 ()
+      );
+
+      /*
       OSER4 u_gw2a_dm_oser4 (
           .FCLK(clock),
           .PCLK(~clk_ddr),
@@ -239,6 +255,7 @@ module gw2a_ddr3_phy (
           .Q0(ddr_dm_o[ii]),
           .Q1()
       );
+      */
 
     end
   endgenerate

@@ -291,6 +291,9 @@ module axis_ddr3_ctrl_tb;
 
   // -- DDR3 PHY -- //
 
+  // GoWin Global System Reset signal tree.
+  GSR GSR ();
+
   gw2a_ddr3_phy #(
       .DDR3_WIDTH(16),  // (default)
       .ADDR_BITS(DDR_ROW_BITS)

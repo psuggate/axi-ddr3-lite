@@ -1,5 +1,4 @@
 `timescale 1ns / 100ps
-// `define __gowin_for_the_win
 module axi_ddr3_top (
     // Clock and reset from the dev-board
     clk_26,
@@ -97,7 +96,6 @@ module axi_ddr3_top (
   // -- Constants -- //
 
   // Settings for DLL=off mode
-  parameter DDR_FREQ_MHZ = 100;
   parameter DDR_CL = 6;
   parameter DDR_CWL = 6;
 
@@ -106,7 +104,7 @@ module axi_ddr3_top (
   localparam WR_PREFETCH = 1'b0;
 
   // Trims an additional clock-cycle of latency, if '1'
-  parameter LOW_LATENCY = 1'b1;  // 0 or 1
+  parameter LOW_LATENCY = 1'b0;  // 0 or 1
 
 
   wire clock, rst_n, reset, locked;
@@ -115,13 +113,32 @@ module axi_ddr3_top (
   assign reset   = ~locked;
   assign axi_clk = clock;
 
-  // So 27.0 MHz divided by 9, then x40 = 120 MHz.
+
+// `define __use_250_MHz
+`ifdef __use_250_MHz
+  localparam DDR_FREQ_MHZ = 125;
+
+  localparam IDIV_SEL = 3;
+  localparam FBDIV_SEL = 36;
+  localparam ODIV_SEL = 4;
+  localparam SDIV_SEL = 2;
+`else
+  localparam DDR_FREQ_MHZ = 100;
+
+  localparam IDIV_SEL = 3;
+  localparam FBDIV_SEL = 28;
+  localparam ODIV_SEL = 4;
+  localparam SDIV_SEL = 2;
+`endif
+
+
+  // So 27.0 MHz divided by 4, then x29 = 195.75 MHz.
   gw2a_rpll #(
       .FCLKIN("27"),
-      .IDIV_SEL(3),  // = / 4
-      .FBDIV_SEL(28),  // = * 29
-      .ODIV_SEL(4),  // = / 4
-      .DYN_SDIV_SEL(2)  // = / 2
+      .IDIV_SEL(IDIV_SEL),
+      .FBDIV_SEL(FBDIV_SEL),
+      .ODIV_SEL(ODIV_SEL),
+      .DYN_SDIV_SEL(SDIV_SEL)
   ) axis_rpll_inst (
       .clkout(ddr_clk),  // 200 MHz
       .clockd(clock),    // 100 MHz
