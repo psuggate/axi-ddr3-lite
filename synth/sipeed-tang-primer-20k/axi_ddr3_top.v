@@ -1,9 +1,11 @@
 `timescale 1ns / 100ps
-// `define __gowin_for_the_win
+`define __stumpy
 module axi_ddr3_top (
     // Clock and reset from the dev-board
     clk_26,
     rst_n,
+
+    leds,
 
     // USB ULPI pins on the dev-board
     ulpi_clk,
@@ -31,6 +33,19 @@ module axi_ddr3_top (
     ddr_dq
 );
 
+  // -- Constants -- //
+
+  // Settings for DLL=off mode
+  parameter DDR_CL = 6;
+  parameter DDR_CWL = 6;
+
+  localparam PHY_WR_DELAY = 3;
+  localparam PHY_RD_DELAY = 3;
+  localparam WR_PREFETCH = 1'b1;
+
+  // Trims an additional clock-cycle of latency, if '1'
+  parameter LOW_LATENCY = 1'b0;  // 0 or 1
+
   // Data-path widths
   localparam DDR_DQ_WIDTH = 16;
   localparam DSB = DDR_DQ_WIDTH - 1;
@@ -57,6 +72,7 @@ module axi_ddr3_top (
   localparam REQID = 4;
   localparam ISB = REQID - 1;
 
+  // USB configuration
   localparam FPGA_VENDOR = "gowin";
   localparam FPGA_FAMILY = "gw2a";
   localparam [63:0] SERIAL_NUMBER = "GULP0123";
@@ -69,6 +85,8 @@ module axi_ddr3_top (
 
   input clk_26;
   input rst_n;
+
+  output [5:0] leds;
 
   input ulpi_clk;
   output ulpi_rst;
@@ -94,40 +112,66 @@ module axi_ddr3_top (
   inout [DSB:0] ddr_dq;
 
 
-  // -- Constants -- //
-
-  // Settings for DLL=off mode
-  parameter DDR_FREQ_MHZ = 100;
-  parameter DDR_CL = 6;
-  parameter DDR_CWL = 6;
-
-  localparam PHY_WR_DELAY = 3;
-  localparam PHY_RD_DELAY = 3;
-  localparam WR_PREFETCH = 1'b1;
-
-  // Trims an additional clock-cycle of latency, if '1'
-  parameter LOW_LATENCY = 1'b1;  // 0 or 1
-
-
-  wire clock, rst_n, reset;
+  wire clock, rst_n, reset, locked;
   wire axi_clk, ddr_clk, usb_clk, usb_rst_n;
 
-  assign reset   = ~rst_n;
+  assign reset   = ~locked;
   assign axi_clk = clock;
 
-  // So 27.0 MHz divided by 9, then x40 = 120 MHz.
+
+  // `define __use_250_MHz
+`ifdef __use_250_MHz
+  localparam DDR_FREQ_MHZ = 125;
+
+  localparam IDIV_SEL = 3;
+  localparam FBDIV_SEL = 36;
+  localparam ODIV_SEL = 4;
+  localparam SDIV_SEL = 2;
+`else
+  localparam DDR_FREQ_MHZ = 100;
+
+  localparam IDIV_SEL = 3;
+  localparam FBDIV_SEL = 28;
+  localparam ODIV_SEL = 4;
+  localparam SDIV_SEL = 2;
+`endif
+
+
+  // So 27.0 MHz divided by 4, then x29 = 195.75 MHz.
   gw2a_rpll #(
       .FCLKIN("27"),
-      .IDIV_SEL(3),  // = / 4
-      .FBDIV_SEL(28),  // = * 29
-      .ODIV_SEL(4),  // = / 4
-      .DYN_SDIV_SEL(2)  // = / 2
+      .IDIV_SEL(IDIV_SEL),
+      .FBDIV_SEL(FBDIV_SEL),
+      .ODIV_SEL(ODIV_SEL),
+      .DYN_SDIV_SEL(SDIV_SEL)
   ) axis_rpll_inst (
       .clkout(ddr_clk),  // 200 MHz
       .clockd(clock),    // 100 MHz
-      .lock  (rst_n),
+      .lock  (locked),
       .clkin (clk_26)
   );
+
+
+// -- Start-up -- //
+
+reg rst_nq, ce_q, enab_q, enable;
+
+always @(posedge clk_26) begin
+  rst_nq <= rst_n;
+  ce_q   <= locked & rst_nq;
+end
+
+always @(posedge clock or negedge ce_q) begin
+  if (!ce_q) begin
+    enab_q <= 1'b0;
+    enable <= 1'b0;
+  end else begin
+    enab_q <= ce_q;
+    if (enab_q) begin
+      enable <= 1'b1;
+    end
+  end
+end
 
 
   wire s_tvalid, s_tready, s_tlast;
@@ -155,7 +199,7 @@ module axi_ddr3_top (
   wire [SSB:0] dfi_mask;
   wire [MSB:0] dfi_wdata, dfi_rdata;
 
-
+  // Miscellaneous
   reg [13:0] count;
   wire usb_sof, fifo_in_full, fifo_out_full, fifo_has_data, configured;
 
@@ -263,6 +307,7 @@ end
           .last_o (m_tlast),
           .data_o (m_tdata)
       );
+
 /*
 end else begin : g_sync_fifo
 
@@ -270,6 +315,8 @@ end else begin : g_sync_fifo
           .WIDTH (9),
           .ABITS (11),
           .OUTREG(1)
+          // .ABITS (4),
+          // .OUTREG(0)
       ) rddata_fifo_inst (
           .clock(usb_clk),
           .reset(~rst_n),
@@ -376,6 +423,8 @@ assign dfi_rden = 1'b0;
       .clock(clock),  // system clock
       .reset(reset),  // synchronous reset
 
+      .configured_o(configured),
+
       .axi_awvalid_i(awvalid),
       .axi_awready_o(awready),
       .axi_awaddr_i(awaddr),
@@ -449,6 +498,7 @@ assign dfi_rden = 1'b0;
   // -- DDR3 PHY -- //
 
   gw2a_ddr3_phy #(
+      .WR_PREFETCH(WR_PREFETCH),
       .DDR3_WIDTH(16),  // (default)
       .ADDR_BITS(DDR_ROW_BITS)
   ) u_phy (

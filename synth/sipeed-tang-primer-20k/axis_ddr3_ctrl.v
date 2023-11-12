@@ -57,6 +57,13 @@ module axis_ddr3_ctrl (
   parameter REQID = 4;
   localparam ISB = REQID - 1;
 
+`ifdef __icarus
+  parameter DATA_WR_FIFO = 1'b1;
+`else
+  parameter DATA_WR_FIFO = 1'b0;
+`endif
+  parameter DATA_RD_FIFO = 1'b0;
+
 
   input clock;
   input reset;
@@ -148,7 +155,6 @@ module axis_ddr3_ctrl (
   assign awvalid_o = awvld;
   assign awburst_o = 2'b01; // INCR
   assign awaddr_o  = addr_q;
-  // assign awlen_o = {3'b0, len_q, 2'b11};
   assign awlen_o = len_q;
   assign awid_o  = tid_q;
 
@@ -158,7 +164,6 @@ module axis_ddr3_ctrl (
   // Read address port
   assign arvalid_o = arvld;
   assign arburst_o = 2'b01; // INCR
-  // assign arlen_o   = {3'b0, len_q, 2'b11};
   assign arlen_o   = len_q;
   assign arid_o    = tid_q;
   assign araddr_o  = addr_q;
@@ -189,6 +194,16 @@ module axis_ddr3_ctrl (
     end
   end
 
+  always @(posedge clock) begin
+    if (state == ST_IDLE && s_valid_i && s_ready_o) begin
+      // Byte-shift in the command:
+      //   {1b, 3b, 4b, 24b]
+      {len_q, dir_q, tid_q, addr_q} <= {dir_q, tid_q, addr_q, s_data_i};
+    end else begin
+      {len_q, dir_q, tid_q, addr_q} <= {len_q, dir_q, tid_q, addr_q};
+    end
+  end
+
 
   // -- Main Finite State Machine (FSM) -- //
 
@@ -197,6 +212,7 @@ module axis_ddr3_ctrl (
       state  <= ST_IDLE;
       mvalid <= 1'b0;
       mlast  <= 1'b0;
+      mdata  <= 8'bx;
       fetch  <= 1'b0;
       store  <= 1'b0;
       awvld  <= 1'b0;
@@ -206,35 +222,50 @@ module axis_ddr3_ctrl (
         ST_IDLE: begin
           count <= 0;
 
-          if (s_valid_i && s_ready_o) begin
-            // Byte-shift in the command:
-            //   {1b, 3b, 4b, 24b]
-            {len_q, dir_q, tid_q, addr_q} <= {dir_q, tid_q, addr_q, s_data_i};
-
-            if (s_last_i) begin
-              fetch <= fetch_w;
-              arvld <= fetch_w;
-              store <= store_w;
-              state <= fetch_w ? ST_READ : ST_RECV;
-            end
-
+          if (s_valid_i && s_ready_o && s_last_i) begin
+            state <= fetch_w ? ST_READ : ST_RECV;
+            fetch <= fetch_w;
+            store <= store_w;
+            arvld <= fetch_w;
+          end else begin
+            state <= ST_IDLE;
+            fetch <= 1'b0;
+            store <= 1'b0;
+            awvld <= 1'b0;
+            arvld <= 1'b0;
           end
+
+          mvalid <= 1'b0;
+          mlast  <= 1'b0;
+          mdata  <= 8'bx;
         end
 
         // -- READ States -- //
 
         ST_READ: begin
+          count <= 0;
+          fetch <= 1'b1;
+          store <= 1'b0;
+          awvld <= 1'b0;
+
           if (arready_i) begin
-            arvld <= 1'b0;
-            fetch <= 1'b1;
             state <= ST_WAIT;
+            arvld <= 1'b0;
+          end else begin
+            state <= ST_READ;
+            arvld <= 1'b1;
           end
+
+          mvalid <= 1'b0;
+          mlast  <= 1'b0;
+          mdata  <= 8'bx;
         end
 
         ST_WAIT: begin
-          if (rvalid_i && rready_o && rlast_i) begin
-            fetch  <= 1'b0;
+          if (rvalid_i) begin
+            // if (rvalid_i && rready_o && rlast_i) begin
             mvalid <= 1'b1;
+            fetch  <= 1'b0;
 
             if (rid_i != tid_q || rresp_i != 2'b00) begin
               state <= ST_DAMN;
@@ -247,25 +278,38 @@ module axis_ddr3_ctrl (
               mdata <= xdata[7:0];
               count <= cnext;
             end
+          end else begin
+            count  <= 0;
+            state  <= ST_WAIT;
+            mvalid <= 1'b0;
+            mlast  <= 1'b0;
+            fetch  <= fetch;
           end
+          store <= 1'b0;
+          awvld <= 1'b0;
+          arvld <= 1'b0;
         end
 
         ST_SEND: begin
-          mdata <= count == 0 ? xdata[7:0] :
-                   count == 1 ? xdata[15:8] :
-                   count == 2 ? xdata[23:16] :
-                   xdata[31:24] ;
-
+          mdata  <= count == 0 ? xdata[7:0] :
+                    count == 1 ? xdata[15:8] :
+                    count == 2 ? xdata[23:16] :
+                    xdata[31:24] ;
           mvalid <= xvalid;
           mlast <= count == 3 && xlast;
 
           if (mvalid && m_ready_i) begin
             count <= cnext;
-
-            if (mlast) begin
-              state <= ST_IDLE;
-            end
+            state <= mlast ? ST_IDLE : ST_SEND;
+          end else begin
+            count <= count;
+            state <= ST_SEND;
           end
+
+          fetch <= 1'b0;
+          store <= 1'b0;
+          awvld <= 1'b0;
+          arvld <= 1'b0;
         end
 
         // -- WRITE States -- //
@@ -283,32 +327,62 @@ module axis_ddr3_ctrl (
         end
 
         ST_WRIT: begin
+          count <= 0;
+
           if (awready_i) begin
             awvld <= 1'b0;
+          end else begin
+            awvld <= awvld;
           end
 
           if (bvalid_i) begin
             store <= 1'b0;
+
             if (bid_i != tid_q || bresp_i != 2'b00) begin
               state  <= ST_DAMN;
               mvalid <= 1'b1;
               mlast  <= 1'b1;
               mdata  <= {2'b01, bresp_i, bid_i};
             end else begin
-              state <= ST_IDLE;
+              state  <= ST_IDLE;
+              mvalid <= 1'b0;
+              mlast  <= 1'b0;
+              mdata  <= 8'bx;
             end
+          end else begin
+            state  <= ST_WRIT;
+            mvalid <= 1'b0;
+            mlast  <= 1'b0;
+            mdata  <= 8'bx;
+            store  <= 1'b1;
           end
+
+          fetch <= 1'b0;
+          arvld <= 1'b0;
         end
 
         // -- ERROR States -- //
 
         default: begin
           $error("On noes!");
+          count <= 0;
+
           if (m_ready_i) begin
+            state  <= ST_IDLE;
             mvalid <= 1'b0;
             mlast  <= 1'b0;
-            state  <= ST_IDLE;
+            mdata  <= 8'bx;
+          end else begin
+            state  <= ST_DAMN;
+            mvalid <= 1'b1;
+            mlast  <= 1'b1;
+            mdata  <= mdata;
           end
+
+          fetch <= 1'b0;
+          store <= 1'b0;
+          awvld <= 1'b0;
+          arvld <= 1'b0;
         end
       endcase
     end
@@ -317,45 +391,74 @@ module axis_ddr3_ctrl (
 
   // -- Synchronous, 2 kB, Write-Data FIFO -- //
 
-  packet_fifo #(
-      .WIDTH (MASKS + WIDTH),
-      .ABITS (9),
-      .OUTREG(1)
-  ) wrdata_fifo_inst (
-      .clock(clock),
-      .reset(reset),
+  generate
+    if (DATA_WR_FIFO) begin : g_data_wr_fifo
 
-      .valid_i(fifo_write_q),
-      .ready_o(s_ready_o),
-      .last_i (fifo_wlast_q),
-      .drop_i (1'b0),
-      .data_i ({{MASKS{1'b1}}, wdata}),
+      assign wstrb_o = {MASKS{1'b1}};
 
-      .valid_o(wvalid_o),
-      .ready_i(wready_i & store),
-      .last_o (wlast_o),
-      .data_o ({wstrb_o, wdata_o})
-  );
+      packet_fifo #(
+          .WIDTH (WIDTH),
+          .ABITS (9),
+          .OUTREG(1)
+      ) wrdata_fifo_inst (
+          .clock(clock),
+          .reset(reset),
+
+          .valid_i(fifo_write_q),
+          .ready_o(s_ready_o),
+          .last_i (fifo_wlast_q),
+          .drop_i (1'b0),
+          .data_i (wdata),
+
+          .valid_o(wvalid_o),
+          .ready_i(wready_i & store),
+          .last_o (wlast_o),
+          .data_o (wdata_o)
+      );
+
+    end else begin
+
+      assign wvalid_o  = fifo_write_q;
+      assign s_ready_o = wready_i;  // & store;
+      assign wlast_o   = fifo_wlast_q;
+      assign wstrb_o   = {MASKS{1'b1}};
+      assign wdata_o   = wdata;
+
+    end
+  endgenerate
 
 
   // -- Synchronous, 2 kB, Read-Data FIFO -- //
 
-  sync_fifo #(
-      .WIDTH (WIDTH + 1),
-      .ABITS (9),
-      .OUTREG(1)
-  ) rddata_fifo_inst (
-      .clock(clock),
-      .reset(reset),
+  generate
+    if (DATA_RD_FIFO) begin : g_data_rd_fifo
 
-      .valid_i(rvalid_i),
-      .ready_o(rready_o),
-      .data_i ({rlast_i, rdata_i}),
+      sync_fifo #(
+          .WIDTH (WIDTH + 1),
+          .ABITS (9),
+          .OUTREG(1)
+      ) rddata_fifo_inst (
+          .clock(clock),
+          .reset(reset),
 
-      .valid_o(xvalid),
-      .ready_i(xready),
-      .data_o ({xlast, xdata})
-  );
+          .valid_i(rvalid_i),
+          .ready_o(rready_o),
+          .data_i ({rlast_i, rdata_i}),
+
+          .valid_o(xvalid),
+          .ready_i(xready),
+          .data_o ({xlast, xdata})
+      );
+
+    end else begin
+
+      assign xvalid = rvalid_i;
+      assign rready_o = xready;
+      assign xlast = rlast_i;
+      assign xdata = rdata_i;
+
+    end
+  endgenerate
 
 
   // -- Simulation Only -- //

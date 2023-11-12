@@ -196,131 +196,206 @@ module ddr3_cfg (
 
   always @(posedge clock) begin
     if (reset) begin
-      state  <= ST_RSTN;
-      req_q  <= 1'b0;
-      run_q  <= 1'b0;
+      state <= ST_RSTN;
+      req_q <= 1'b0;
+      run_q <= 1'b0;
       rst_nq <= 1'b0;
-      cke_q  <= 1'b0;
-      cs_nq  <= 1'b1;
+      cke_q <= 1'b0;
+      cs_nq <= 1'b1;
+      cmd_q <= CMD_NOOP;
+      {ba_q, adr_q} <= {(DDR_ROW_BITS + 3) {1'bx}};
     end else begin
       case (state)
         ST_RSTN: begin
           // RESET# to allow for power supply to stablise
-          req_q <= 1'b0;  // to mem. ctrl.
-          run_q <= 1'b0;
-
           cke_q <= 1'b0;  // to SDRAM
           cs_nq <= 1'b1;
+          req_q <= 1'b0;  // to mem. ctrl.
+          cmd_q <= CMD_NOOP;
+          run_q <= 1'b0;
 
           if (count < COUNTER_RSTN) begin
             state  <= ST_INIT;
             rst_nq <= 1'b1;
           end else begin
+            state  <= ST_RSTN;
             rst_nq <= 1'b0;  // to SDRAM
           end
+          {ba_q, adr_q} <= {(DDR_ROW_BITS + 3) {1'bx}};
         end
 
         ST_INIT: begin
           // SDRAM now begins its internal startup procedures
           rst_nq <= 1'b1;
           cs_nq  <= 1'b1;
+          req_q  <= 1'b0;
+          cmd_q  <= CMD_NOOP;
+          run_q  <= 1'b0;
 
           if (count < COUNTER_STRT) begin
             state <= ST_CKE1;
             cke_q <= 1'b1;
           end else begin
+            state <= ST_INIT;
             cke_q <= 1'b0;
           end
+          {ba_q, adr_q} <= {(DDR_ROW_BITS + 3) {1'bx}};
         end
 
         ST_CKE1: begin
           // CKE now asserted, so start issuing MODE commands ...
           // Note: CKE -> MRS2 requires >= 5x tCK
+          rst_nq <= 1'b1;
           state <= ST_MRS2;
+          cke_q <= 1'b1;
           cs_nq <= 1'b0;
           req_q <= 1'b1;
           cmd_q <= CMD_MODE;
+          run_q <= 1'b0;
           {ba_q, adr_q} <= {3'b010, MR2};
         end
 
         ST_MRS2: begin
+          rst_nq <= 1'b1;
+          cke_q  <= 1'b1;
+          cs_nq  <= 1'b0;
+          req_q  <= 1'b1;
+          cmd_q  <= CMD_MODE;
+          run_q  <= 1'b0;
+
           // Note: MRS2 -> MRS3 requires >= 12x tCK
           if (ctl_rdy_i) begin
             state <= ST_MRS3;
-            req_q <= 1'b1;
-            cmd_q <= CMD_MODE;
             {ba_q, adr_q} <= {3'b011, MR3};
+          end else begin
+            state <= ST_MRS2;
+            {ba_q, adr_q} <= {3'b010, MR2};
           end
         end
 
         ST_MRS3: begin
+          rst_nq <= 1'b1;
+          cke_q  <= 1'b1;
+          cs_nq  <= 1'b0;
+          req_q  <= 1'b1;
+          cmd_q  <= CMD_MODE;
+          run_q  <= 1'b0;
+
           // Note: MRS3 -> MRS1 requires >= 12x tCK
           if (ctl_rdy_i) begin
             state <= ST_MRS1;
-            req_q <= 1'b1;
-            cmd_q <= CMD_MODE;
             {ba_q, adr_q} <= {3'b001, MR1};
+          end else begin
+            state <= ST_MRS3;
+            {ba_q, adr_q} <= {3'b011, MR3};
           end
         end
 
         ST_MRS1: begin
+          rst_nq <= 1'b1;
+          cke_q  <= 1'b1;
+          cs_nq  <= 1'b0;
+          req_q  <= 1'b1;
+          cmd_q  <= CMD_MODE;
+          run_q  <= 1'b0;
+
           // Note: MRS1 -> MRS0 requires >= 12x tCK
           if (ctl_rdy_i) begin
             state <= ST_MRS0;
-            req_q <= 1'b1;
+            {ba_q, adr_q} <= {3'b000, MR0};
+          end else begin
+            state <= ST_MRS1;
+            {ba_q, adr_q} <= {3'b001, MR1};
+          end
+        end
+
+        ST_MRS0: begin
+          rst_nq <= 1'b1;
+          cke_q  <= 1'b1;
+          cs_nq  <= 1'b0;
+          req_q  <= 1'b1;
+          run_q  <= 1'b0;
+
+          // Note: MRS0 -> ZQCL requires >= 12x tCK
+          if (ctl_rdy_i) begin
+            state <= ST_ZQCL;
+            cmd_q <= CMD_ZQCL;
+            {ba_q, adr_q} <= {3'bx, 2'bx, 1'b1, 10'bx};
+          end else begin
+            state <= ST_MRS0;
             cmd_q <= CMD_MODE;
             {ba_q, adr_q} <= {3'b000, MR0};
           end
         end
 
-        ST_MRS0: begin
-          // Note: MRS0 -> ZQCL requires >= 12x tCK
-          if (ctl_rdy_i) begin
-            state <= ST_ZQCL;
-            req_q <= 1'b1;
-            cmd_q <= CMD_ZQCL;
-            {ba_q, adr_q} <= {3'bx, 2'bx, 1'b1, 10'bx};
-          end
-        end
-
         ST_ZQCL: begin
+          rst_nq <= 1'b1;
+          cke_q  <= 1'b1;
+          cs_nq  <= 1'b0;
+          req_q  <= 1'b1;
+          run_q  <= 1'b0;
+
           // Wait for the DDR3 device to calibrate the impedance of its data-
           // output drivers
           if (ctl_rdy_i) begin
             state <= ST_PREA;
-            req_q <= 1'b1;
+            cmd_q <= CMD_PREC;
+          end else begin
+            state <= ST_ZQCL;
+            cmd_q <= CMD_ZQCL;
+          end
+          {ba_q, adr_q} <= {3'bx, 2'bx, 1'b1, 10'bx};
+        end
+
+        ST_PREA: begin
+          rst_nq <= 1'b1;
+          cke_q  <= 1'b1;
+          cs_nq  <= 1'b0;
+          req_q  <= 1'b1;
+          run_q  <= 1'b0;
+
+          // Wait until timer has elapsed
+          if (ctl_rdy_i) begin
+            state <= ST_REFR;
+            cmd_q <= CMD_REFR;
+            {ba_q, adr_q} <= {(DDR_ROW_BITS + 3) {1'bx}};
+          end else begin
+            state <= ST_PREA;
             cmd_q <= CMD_PREC;
             {ba_q, adr_q} <= {3'bx, 2'bx, 1'b1, 10'bx};
           end
         end
 
-        ST_PREA: begin
-          // Wait until timer has elapsed
-          if (ctl_rdy_i) begin
-            state <= ST_REFR;
-            req_q <= 1'b1;
-            cmd_q <= CMD_REFR;
-            {ba_q, adr_q} <= 'bx;
-          end
-        end
-
         ST_REFR: begin
+          rst_nq <= 1'b1;
+          cke_q  <= 1'b1;
+          cs_nq  <= 1'b0;
+
           // Wait until timer has elapsed
           if (ctl_rdy_i) begin
             state <= ST_DONE;
             req_q <= 1'b0;
             cmd_q <= CMD_NOOP;
+            run_q <= 1'b1;
+          end else begin
+            state <= ST_REFR;
+            req_q <= 1'b1;
+            cmd_q <= CMD_REFR;
+            run_q <= 1'b0;
           end
-          {ba_q, adr_q} <= 'bx;
+          {ba_q, adr_q} <= {(DDR_ROW_BITS + 3) {1'bx}};
         end
 
         ST_DONE: begin
           // Chill here until RESET# asserts ...
-          if (ctl_rdy_i) begin
-            state <= ST_DONE;
-            run_q <= 1'b1;
-          end
-          {ba_q, adr_q} <= 'bx;
+          state <= ST_DONE;
+          rst_nq <= 1'b1;
+          cke_q <= 1'b1;
+          cs_nq <= 1'b0;
+          req_q <= 1'b0;
+          cmd_q <= CMD_NOOP;
+          run_q <= 1'b1;
+          {ba_q, adr_q} <= {(DDR_ROW_BITS + 3) {1'bx}};
         end
 
         default: begin
@@ -329,7 +404,10 @@ module ddr3_cfg (
           rst_nq <= 1'b0;
           cke_q <= 1'b0;
           cs_nq <= 1'b1;
-          {ba_q, adr_q} <= 'bx;
+          run_q <= 1'b0;
+          req_q <= 1'b0;
+          cmd_q <= CMD_NOOP;
+          {ba_q, adr_q} <= {(DDR_ROW_BITS + 3) {1'bx}};
         end
       endcase
     end

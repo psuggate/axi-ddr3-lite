@@ -211,7 +211,7 @@ module ddr3_bypass (
 
       assign ctl_rvalid_o = ~rdy_q & ddl_rvalid_i;
       assign ctl_rlast_o = req_q ? 1'bx : ddl_rlast_i;
-      assign ctl_rdata_o = req_q ? 'bx : ddl_rdata_i;
+      assign ctl_rdata_o = req_q ? {WIDTH{1'bx}} : ddl_rdata_i;
 
       assign byp_req_o = bypass | ctl_req_i;
       assign byp_seq_o = bypass ? 1'b0 : ctl_seq_i;  // todo
@@ -231,9 +231,9 @@ module ddr3_bypass (
 
       assign axi_rvalid_o = 1'b0;
       assign axi_rlast_o = 1'b0;
-      assign axi_rresp_o = 'bx;
-      assign axi_rid_o = 'bx;
-      assign axi_rdata_o = 'bx;
+      assign axi_rresp_o = 2'bx;
+      assign axi_rid_o = {REQID{1'bx}};
+      assign axi_rdata_o = {WIDTH{1'bx}};
 
       // Forward all signals directly to/from the memory controller
       assign ctl_run_o = byp_run_i;
@@ -296,6 +296,7 @@ module ddr3_bypass (
     if (reset) begin
       autop <= 1'b0;
     end else begin
+      autop <= autop;
     end
   end
 
@@ -306,8 +307,8 @@ module ddr3_bypass (
   always @(posedge clock) begin
     if (reset) begin
       active_q <= 1'b0;
-      actv_ba  <= 'bx;
-      actv_row <= 'bx;
+      actv_ba  <= 3'bx;
+      actv_row <= {DDR_ROW_BITS{1'bx}};
     end else if (ctl_req_i && byp_rdy_i) begin
       case (ctl_cmd_i)
         CMD_ACTV: begin
@@ -319,8 +320,8 @@ module ddr3_bypass (
         CMD_READ, CMD_WRIT: begin
           if (ctl_adr_i[10]) begin
             active_q <= 1'b0;
-            actv_ba  <= 'bx;
-            actv_row <= 'bx;
+            actv_ba  <= 3'bx;
+            actv_row <= {DDR_ROW_BITS{1'bx}};
           end else begin
             active_q <= active_q;
             actv_ba  <= actv_ba;
@@ -330,8 +331,8 @@ module ddr3_bypass (
 
         CMD_PREC: begin
           active_q <= 1'b0;
-          actv_ba  <= 'bx;
-          actv_row <= 'bx;
+          actv_ba  <= 3'bx;
+          actv_row <= {DDR_ROW_BITS{1'bx}};
         end
 
         default: begin
@@ -384,10 +385,10 @@ module ddr3_bypass (
       // until the configuration module asserts 'reset'.
       state <= ST_IDLE;
       req_q <= 1'b0;
-      cmd_q <= 'bx;
-      ba_q  <= 'bx;
-      adr_q <= 'bx;
-      adr_x <= 'bx;
+      cmd_q <= 3'bx;
+      ba_q  <= 3'bx;
+      adr_q <= {DDR_ROW_BITS{1'bx}};
+      adr_x <= {DDR_ROW_BITS{1'bx}};
       arack <= 1'b0;
     end else begin
       case (state)
@@ -415,35 +416,56 @@ module ddr3_bypass (
         end
 
         ST_ACTV: begin
+          req_q <= 1'b1;
           ba_q  <= ba_q;  // note: return to 'IDLE' to bank-switch
-          arack <= 1'b0;
+          adr_x <= adr_x;
 
           if (byp_rdy_i) begin
             state <= ST_READ;
-            req_q <= 1'b1;
             cmd_q <= CMD_READ;
             adr_q <= adr_x;
+          end else begin
+            state <= ST_ACTV;
+            cmd_q <= CMD_ACTV;
+            adr_q <= adr_q;
           end
+
+          arack <= 1'b0;
         end
 
         ST_READ: begin
-          arack <= 1'b0;
+          adr_x <= {DDR_ROW_BITS{1'bx}};
 
           if (byp_rdy_i) begin
             req_q <= 1'b0;
             cmd_q <= CMD_NOOP;
-            adr_q <= 'bx;  // row_w;
+            ba_q  <= 3'bx;
+            adr_q <= {DDR_ROW_BITS{1'bx}};  // row_w;
+          end else begin
+            req_q <= req_q;
+            cmd_q <= cmd_q;
+            ba_q  <= ba_q;
+            adr_q <= adr_q;
           end
 
           if (axi_rvalid_o && axi_rready_i && axi_rlast_o) begin
             state <= ST_IDLE;
+          end else begin
+            state <= ST_READ;
           end
+
+          arack <= 1'b0;
         end
 
         default: begin
-          arack <= 1'b0;
           $error("Oh noes");
           state <= ST_IDLE;
+          req_q <= 1'b0;
+          cmd_q <= 3'bx;
+          ba_q  <= 3'bx;
+          adr_q <= {DDR_ROW_BITS{1'bx}};
+          adr_x <= {DDR_ROW_BITS{1'bx}};
+          arack <= 1'b0;
           // #100 $fatal;
         end
       endcase

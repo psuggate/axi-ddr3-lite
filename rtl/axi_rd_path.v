@@ -95,7 +95,7 @@ module axi_rd_path (
   localparam ST_BUSY = 4'b0100;
 
 
-  reg aready, fetch;
+  reg aready;
   reg [3:0] state;
   wire cmd_ready, rcf_valid, rdf_ready, rrf_ready;
 
@@ -170,10 +170,10 @@ module axi_rd_path (
       .ABITS (CBITS),
       .OUTREG(CTRL_FIFO_BLOCK)
   ) response_fifo_inst (
-      .clock  (clock),
-      .reset  (reset),
+      .clock(clock),
+      .reset(reset),
 
-      .valid_i(fetch & mem_accept_i),
+      .valid_i(mem_accept_i),
       .ready_o(),
       .data_i (mem_reqid_o),
 

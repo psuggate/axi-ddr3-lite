@@ -165,6 +165,7 @@ module axi_wr_path (
             aready <= 1'b0;
             wready <= 1'b1;
           end else begin
+            state  <= ST_IDLE;
             aready <= 1'b1;
             wready <= 1'b0;
           end
@@ -181,6 +182,9 @@ module axi_wr_path (
             end else begin
               state <= ST_IDLE;
             end
+          end else begin
+            state  <= ST_FILL;
+            wready <= 1'b1;
           end
         end
 
@@ -190,12 +194,17 @@ module axi_wr_path (
             state  <= ST_IDLE;
             aready <= 1'b1;
           end else begin
+            state  <= ST_BUSY;
             aready <= 1'b0;
           end
+          wready <= 1'b0;
         end
 
         default: begin
           $error("%10t: WRITE data state-machine failure!", $time);
+          state  <= ST_IDLE;
+          aready <= 1'b0;
+          wready <= 1'b0;
           // $fatal;
         end
       endcase  // state
@@ -215,6 +224,8 @@ module axi_wr_path (
 
       if (mem_accept_i && !mem_wseq_o) begin
         bwrid <= mem_wrid_o;
+      end else begin
+        bwrid <= bwrid;
       end
 
       if (mem_ready_i && wdf_valid && wdf_last) begin

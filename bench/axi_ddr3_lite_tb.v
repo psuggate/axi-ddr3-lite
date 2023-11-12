@@ -16,8 +16,8 @@ module axi_ddr3_lite_tb;
 `ifdef __gowin_for_the_win
   localparam PHY_WR_DELAY = 3;
   localparam PHY_RD_DELAY = 3;
-  // localparam WR_PREFETCH = 1'b1;
-  localparam WR_PREFETCH = 1'b0;
+  localparam WR_PREFETCH = 1'b1;
+  // localparam WR_PREFETCH = 1'b0;
 `else
   localparam PHY_WR_DELAY = 1;
   localparam PHY_RD_DELAY = 1;
@@ -26,6 +26,9 @@ module axi_ddr3_lite_tb;
 
   // Trims an additional clock-cycle of latency, if '1'
   parameter LOW_LATENCY = 1'b1;  // 0 or 1
+
+  parameter BYPASS_ENABLE = 1'b1;
+
 
   // -- Data-path and address settings -- //
 
@@ -297,7 +300,8 @@ module axi_ddr3_lite_tb;
   // (read-)data is registered ...
   generic_ddr3_phy #(
       .DDR3_WIDTH(16),  // (default)
-      .ADDR_BITS(DDR_ROW_BITS)  // default: 14
+      .ADDR_BITS(DDR_ROW_BITS),  // default: 14
+      .WR_PREFETCH(WR_PREFETCH)
   ) ddr3_phy_inst (
       .clock  (clock),
       .reset  (reset),
@@ -358,7 +362,7 @@ module axi_ddr3_lite_tb;
       .LOW_LATENCY  (LOW_LATENCY),
       .AXI_ID_WIDTH (REQID),
       .MEM_ID_WIDTH (REQID),
-      .BYPASS_ENABLE(1)
+      .BYPASS_ENABLE(BYPASS_ENABLE)
   ) ddr_core_inst (
       .clock(clock),  // system clock
       .reset(reset),  // synchronous reset

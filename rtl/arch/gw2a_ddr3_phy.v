@@ -69,6 +69,9 @@ module gw2a_ddr3_phy (
   parameter ADDR_BITS = 14;
   localparam ASB = ADDR_BITS - 1;
 
+  parameter WR_PREFETCH = 1'b0;
+  parameter CLOCK_SHIFT = 3'b100;
+
 
   input clock;
   input reset;
@@ -113,17 +116,44 @@ module gw2a_ddr3_phy (
   inout [MSB:0] ddr_dq_io;
 
 
-  wire [QSB:0] dqs_t, dqs_s, dm_w;
-  wire [QSB:0] dqs_p, dqs_n;
-  wire [MSB:0] dq_t, dq_w;
-
   reg cke_q, rst_nq, cs_nq;
   reg ras_nq, cas_nq, we_nq, odt_q;
   reg [2:0] ba_q;
 
   reg delay_q, valid_q, last_q;
-  reg [ASB:0] addr_q;
-  reg [DSB:0] data_q;
+  reg  [ASB:0] addr_q;
+  wire [SSB:0] mask_w;
+  wire [DSB:0] data_w;
+
+
+  // -- Write-Data Prefetch and Registering -- //
+
+  generate
+    if (WR_PREFETCH) begin : gen_wr_prefetch
+
+      // Fetch the write -data & -masks a cycle earlier, so that an extra layer
+      // of pipeline registers can be placed between the outputs of the FIFO's
+      // and the IOB's.
+      reg [SSB:0] mask_q;
+      reg [DSB:0] data_q;
+
+      assign mask_w = mask_q;
+      assign data_w = data_q;
+
+      always @(posedge clock) begin
+        mask_q <= ~dfi_mask_i;
+        data_q <= dfi_data_i;
+      end
+
+    end else begin : gen_no_prefetch
+
+      // Connect the outputs of the FIFO's directly to the IOB's, even though
+      // this will result in quite a lot of routing and combinational delay.
+      assign mask_w = ~dfi_mask_i;
+      assign data_w = dfi_data_i;
+
+    end
+  endgenerate
 
 
   // -- DFI Read-Data Signal Assignments -- //
@@ -146,13 +176,6 @@ module gw2a_ddr3_phy (
   assign ddr_odt_o  = odt_q;
   assign ddr_ba_o   = ba_q;
   assign ddr_a_o    = addr_q;
-
-
-  // -- IOB DDR Register Settings -- //
-
-  localparam CLOCK_POLARITY = 1'b0;
-  localparam DATA_ODDR_INIT = 1'b0;
-  localparam DQSX_ODDR_INIT = 1'b1;
 
 
   // -- DDR3 Command Signals -- //
@@ -198,20 +221,18 @@ module gw2a_ddr3_phy (
 
   // -- DDR3 Data Path IOBs -- //
 
-  localparam SHIFT = 3'b100;
-
   generate
     for (genvar ii = 0; ii < DDR3_WIDTH; ii++) begin : gen_dq_iobs
 
       gw2a_ddr_iob #(
-          .SHIFT(SHIFT)
+          .SHIFT(CLOCK_SHIFT)
       ) u_gw2a_dq_iob (
           .PCLK(clock),
           .FCLK(~clk_ddr),
           .RESET(reset),
           .OEN(~dfi_wren_i),
-          .D0(dfi_data_i[ii]),
-          .D1(dfi_data_i[DDR3_WIDTH+ii]),
+          .D0(data_w[ii]),
+          .D1(data_w[DDR3_WIDTH+ii]),
           .Q0(dfi_data_o[ii]),
           .Q1(dfi_data_o[DDR3_WIDTH+ii]),
           .IO(ddr_dq_io[ii])
@@ -226,18 +247,13 @@ module gw2a_ddr3_phy (
   generate
     for (genvar ii = 0; ii < DDR3_MASKS; ii++) begin : gen_dm_iobs
 
-      OSER4 u_gw2a_dm_oser4 (
-          .FCLK(clock),
-          .PCLK(~clk_ddr),
-          .RESET(reset),
-          .TX0(1'b0),
-          .TX1(1'b0),
-          .D0(~dfi_mask_i[ii]),
-          .D1(~dfi_mask_i[ii]),
-          .D2(~dfi_mask_i[DDR3_MASKS+ii]),
-          .D3(~dfi_mask_i[DDR3_MASKS+ii]),
-          .Q0(ddr_dm_o[ii]),
-          .Q1()
+      ODDR u_gw2a_dm_oddr (
+          .CLK(~clock),
+          .TX (1'b0),
+          .D0 (mask_w[ii]),
+          .D1 (mask_w[DDR3_MASKS+ii]),
+          .Q0 (ddr_dm_o[ii]),
+          .Q1 ()
       );
 
     end
@@ -254,7 +270,7 @@ module gw2a_ddr3_phy (
     for (genvar ii = 0; ii < DDR3_MASKS; ii++) begin : gen_dqs_iobs
 
       gw2a_ddr_iob #(
-          .SHIFT(SHIFT),
+          .SHIFT(CLOCK_SHIFT),
 `ifdef __icarus
           .TLVDS(1'b1)
 `else
