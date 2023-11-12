@@ -156,25 +156,24 @@ module axi_ddr3_top (
   wire [MSB:0] dfi_wdata, dfi_rdata;
 
 
-<<<<<<< Updated upstream
-=======
-  // -- USB ULPI Bulk transfer endpoint (IN & OUT) -- //
-
   reg [13:0] count;
-  wire ulpi_data_t, usb_sof, fifo_in_full, fifo_out_full, fifo_has_data, configured;
-  wire [7:0] ulpi_data_o;
+  wire usb_sof, fifo_in_full, fifo_out_full, fifo_has_data, configured;
 
-  // assign leds = {~count[13], ~configured | ~count[12], ~fifo_in_full, ~fifo_out_full, 2'b11};
   assign leds = {~count[13], ~configured, ~fifo_in_full, ~fifo_out_full, 2'b11};
 
-always @(posedge usb_sof) begin
-  if (!usb_rst_n) begin
-    count <= 0;
-  end else begin
-    count <= count + 1;
+  always @(posedge usb_sof) begin
+    if (!usb_rst_n) begin
+      count <= 0;
+    end else begin
+      count <= count + 1;
+    end
   end
-end
 
+
+  // -- USB ULPI Bulk transfer endpoint (IN & OUT) -- //
+
+  wire ulpi_data_t;
+  wire [7:0] ulpi_data_o;
 
   assign ulpi_rst  = usb_rst_n;
   assign usb_clk   = ~ulpi_clk;
@@ -306,7 +305,7 @@ assign dfi_rden = 1'b0;
 
 `else
 
->>>>>>> Stashed changes
+
   // -- Controls the DDR3 via USB -- //
 
   axis_ddr3_ctrl axdr_ctrl_inst (
@@ -354,51 +353,6 @@ assign dfi_rden = 1'b0;
       .rid_i(rid),
       .rresp_i(rresp),
       .rdata_i(rdata)
-  );
-
-
-  // -- USB ULPI Bulk transfer endpoint (IN & OUT) -- //
-
-  wire ulpi_data_t;
-  wire [7:0] ulpi_data_o;
-
-  assign ulpi_rst  = usb_rst_n;
-  assign usb_clk   = ~ulpi_clk;
-  assign ulpi_data = ulpi_data_t ? {8{1'bz}} : ulpi_data_o;
-
-  ulpi_bulk_axis #(
-      .FPGA_VENDOR(FPGA_VENDOR),
-      .FPGA_FAMILY(FPGA_FAMILY),
-      .VENDOR_ID(16'hF4CE),
-      .PRODUCT_ID(16'h0003),
-      .HIGH_SPEED(HIGH_SPEED),
-      .SERIAL_NUMBER(SERIAL_NUMBER),
-      .CHANNEL_IN_ENABLE(CHANNEL_IN_ENABLE),
-      .CHANNEL_OUT_ENABLE(CHANNEL_OUT_ENABLE),
-      .PACKET_MODE(PACKET_MODE)
-  ) ulpi_bulk_axis_inst (
-      .ulpi_clock_i(usb_clk),
-      .ulpi_reset_o(usb_rst_n),
-
-      .ulpi_dir_i (ulpi_dir),
-      .ulpi_nxt_i (ulpi_nxt),
-      .ulpi_stp_o (ulpi_stp),
-      .ulpi_data_t(ulpi_data_t),
-      .ulpi_data_i(ulpi_data),
-      .ulpi_data_o(ulpi_data_o),
-
-      .aclk(clock),
-      .aresetn(rst_n),
-
-      .s_axis_tvalid_i(m_tvalid),
-      .s_axis_tready_o(m_tready),
-      .s_axis_tlast_i (m_tlast),
-      .s_axis_tdata_i (m_tdata),
-
-      .m_axis_tvalid_o(s_tvalid),
-      .m_axis_tready_i(s_tready),
-      .m_axis_tlast_o (s_tlast),
-      .m_axis_tdata_o (s_tdata)
   );
 
 
@@ -488,6 +442,8 @@ assign dfi_rden = 1'b0;
       .dfi_last_i(dfi_last),
       .dfi_data_i(dfi_rdata)
   );
+
+`endif
 
 
   // -- DDR3 PHY -- //
