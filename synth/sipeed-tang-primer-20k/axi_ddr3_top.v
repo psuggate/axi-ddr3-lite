@@ -1,8 +1,11 @@
 `timescale 1ns / 100ps
+`define __stumpy
 module axi_ddr3_top (
     // Clock and reset from the dev-board
     clk_26,
     rst_n,
+
+    leds,
 
     // USB ULPI pins on the dev-board
     ulpi_clk,
@@ -30,6 +33,19 @@ module axi_ddr3_top (
     ddr_dq
 );
 
+  // -- Constants -- //
+
+  // Settings for DLL=off mode
+  parameter DDR_CL = 6;
+  parameter DDR_CWL = 6;
+
+  localparam PHY_WR_DELAY = 3;
+  localparam PHY_RD_DELAY = 3;
+  localparam WR_PREFETCH = 1'b1;
+
+  // Trims an additional clock-cycle of latency, if '1'
+  parameter LOW_LATENCY = 1'b0;  // 0 or 1
+
   // Data-path widths
   localparam DDR_DQ_WIDTH = 16;
   localparam DSB = DDR_DQ_WIDTH - 1;
@@ -56,6 +72,7 @@ module axi_ddr3_top (
   localparam REQID = 4;
   localparam ISB = REQID - 1;
 
+  // USB configuration
   localparam FPGA_VENDOR = "gowin";
   localparam FPGA_FAMILY = "gw2a";
   localparam [63:0] SERIAL_NUMBER = "GULP0123";
@@ -63,11 +80,13 @@ module axi_ddr3_top (
   localparam HIGH_SPEED = 1'b1;
   localparam CHANNEL_IN_ENABLE = 1'b1;
   localparam CHANNEL_OUT_ENABLE = 1'b1;
-  localparam PACKET_MODE = 1'b1;
+  localparam PACKET_MODE = 1'b0;
 
 
   input clk_26;
   input rst_n;
+
+  output [5:0] leds;
 
   input ulpi_clk;
   output ulpi_rst;
@@ -91,20 +110,6 @@ module axi_ddr3_top (
   inout [QSB:0] ddr_dqs;
   inout [QSB:0] ddr_dqs_n;
   inout [DSB:0] ddr_dq;
-
-
-  // -- Constants -- //
-
-  // Settings for DLL=off mode
-  parameter DDR_CL = 6;
-  parameter DDR_CWL = 6;
-
-  localparam PHY_WR_DELAY = 3;
-  localparam PHY_RD_DELAY = 3;
-  localparam WR_PREFETCH = 1'b1;
-
-  // Trims an additional clock-cycle of latency, if '1'
-  parameter LOW_LATENCY = 1'b0;  // 0 or 1
 
 
   wire clock, rst_n, reset, locked;
@@ -147,6 +152,28 @@ module axi_ddr3_top (
   );
 
 
+// -- Start-up -- //
+
+reg rst_nq, ce_q, enab_q, enable;
+
+always @(posedge clk_26) begin
+  rst_nq <= rst_n;
+  ce_q   <= locked & rst_nq;
+end
+
+always @(posedge clock or negedge ce_q) begin
+  if (!ce_q) begin
+    enab_q <= 1'b0;
+    enable <= 1'b0;
+  end else begin
+    enab_q <= ce_q;
+    if (enab_q) begin
+      enable <= 1'b1;
+    end
+  end
+end
+
+
   wire s_tvalid, s_tready, s_tlast;
   wire [7:0] s_tdata;
 
@@ -172,6 +199,154 @@ module axi_ddr3_top (
   wire [SSB:0] dfi_mask;
   wire [MSB:0] dfi_wdata, dfi_rdata;
 
+
+  // -- USB ULPI Bulk transfer endpoint (IN & OUT) -- //
+
+  reg [13:0] count;
+  wire ulpi_data_t, usb_sof, fifo_in_full, fifo_out_full, configured;
+  wire [7:0] ulpi_data_o;
+
+  // assign leds = {~count[13], ~configured | ~count[12], ~fifo_in_full, ~fifo_out_full, 2'b11};
+  assign leds = {~count[13], ~configured, ~fifo_in_full, ~fifo_out_full, 2'b11};
+
+always @(posedge usb_sof) begin
+  if (!usb_rst_n) begin
+    count <= 0;
+  end else begin
+    count <= count + 1;
+  end
+end
+
+
+  assign ulpi_rst  = usb_rst_n;
+  assign usb_clk   = ~ulpi_clk;
+  assign ulpi_data = ulpi_data_t ? {8{1'bz}} : ulpi_data_o;
+
+  ulpi_bulk_axis #(
+      .FPGA_VENDOR(FPGA_VENDOR),
+      .FPGA_FAMILY(FPGA_FAMILY),
+      .VENDOR_ID(16'hF4CE),
+      .PRODUCT_ID(16'h0003),
+      .HIGH_SPEED(HIGH_SPEED),
+      .SERIAL_NUMBER(SERIAL_NUMBER),
+      .CHANNEL_IN_ENABLE(CHANNEL_IN_ENABLE),
+      .CHANNEL_OUT_ENABLE(CHANNEL_OUT_ENABLE),
+      .PACKET_MODE(PACKET_MODE)
+  ) ulpi_bulk_axis_inst (
+      .ulpi_clock_i(usb_clk),
+      .ulpi_reset_o(usb_rst_n),
+
+      .ulpi_dir_i (ulpi_dir),
+      .ulpi_nxt_i (ulpi_nxt),
+      .ulpi_stp_o (ulpi_stp),
+      .ulpi_data_t(ulpi_data_t),
+      .ulpi_data_i(ulpi_data),
+      .ulpi_data_o(ulpi_data_o),
+
+`ifdef __stumpy
+      .aclk(usb_clk),
+      .aresetn(usb_rst_n),
+`else
+      .aclk(clock),
+      .aresetn(enable),
+`endif
+
+      .fifo_in_full_o (fifo_in_full),
+      .fifo_out_full_o(fifo_out_full),
+      .usb_sof_o      (usb_sof),
+
+      .s_axis_tvalid_i(m_tvalid),
+      .s_axis_tready_o(m_tready),
+      .s_axis_tlast_i (m_tlast),
+      .s_axis_tdata_i (m_tdata),
+
+      .m_axis_tvalid_o(s_tvalid),
+      .m_axis_tready_i(s_tready),
+      .m_axis_tlast_o (s_tlast),
+      .m_axis_tdata_o (s_tdata)
+  );
+
+
+`ifdef __stumpy
+//
+//  Cut out the DDR3 controller, and just use a SRAM for the USB-connected RAM.
+//  Note: we can use AXI packets, if we like ??
+///
+reg rx_q;
+
+assign configured = rx_q;
+
+always @(posedge usb_clk or negedge ce_q) begin
+  if (!ce_q) begin
+    rx_q <= 1'b0;
+  end else begin
+    if (m_tready) begin
+      rx_q <= 1'b1;
+    end
+  end
+end
+
+generate if (PACKET_MODE) begin : g_packet_fifo
+
+      packet_fifo #(
+          .WIDTH (8),
+          .ABITS (11),
+          .OUTREG(1)
+      ) wrdata_fifo_inst (
+          .clock(usb_clk),
+          .reset(~rst_n),
+
+          .valid_i(s_tvalid),
+          .ready_o(s_tready),
+          .last_i (s_tlast),
+          .drop_i (1'b0),
+          .data_i (s_tdata),
+
+          .valid_o(m_tvalid),
+          .ready_i(m_tready),
+          .last_o (m_tlast),
+          .data_o (m_tdata)
+      );
+
+end else begin : g_sync_fifo
+
+      sync_fifo #(
+          .WIDTH (9),
+          .ABITS (4),
+          .OUTREG(0)
+      ) rddata_fifo_inst (
+          .clock(usb_clk),
+          .reset(~rst_n),
+
+          .valid_i(s_tvalid),
+          .ready_o(s_tready),
+          .data_i ({s_tlast, s_tdata}),
+
+          .valid_o(m_tvalid),
+          .ready_i(m_tready),
+          .data_o ({m_tlast, m_tdata})
+      );
+
+end
+endgenerate
+
+// Just set these signals in order to configure the IOBs of the FPGA.
+assign dfi_rst_n = 1'b0;
+assign dfi_cke = 1'b0;
+assign dfi_cs_n = 1'b1;
+assign dfi_ras_n = 1'b1;
+assign dfi_cas_n = 1'b1;
+assign dfi_we_n = 1'b1;
+assign dfi_odt = 1'b0;
+assign dfi_bank = 3'b111;
+assign dfi_addr = 13'h1fff;
+assign dfi_wstb = 1'b0;
+assign dfi_wren = 1'b0;
+assign dfi_mask = 2'b00;
+assign dfi_wdata = 16'hffff;
+assign dfi_rden = 1'b0;
+
+`else
 
   // -- Controls the DDR3 via USB -- //
 
@@ -223,51 +398,6 @@ module axi_ddr3_top (
   );
 
 
-  // -- USB ULPI Bulk transfer endpoint (IN & OUT) -- //
-
-  wire ulpi_data_t;
-  wire [7:0] ulpi_data_o;
-
-  assign ulpi_rst  = usb_rst_n;
-  assign usb_clk   = ~ulpi_clk;
-  assign ulpi_data = ulpi_data_t ? {8{1'bz}} : ulpi_data_o;
-
-  ulpi_bulk_axis #(
-      .FPGA_VENDOR(FPGA_VENDOR),
-      .FPGA_FAMILY(FPGA_FAMILY),
-      .VENDOR_ID(16'hF4CE),
-      .PRODUCT_ID(16'h0003),
-      .HIGH_SPEED(HIGH_SPEED),
-      .SERIAL_NUMBER(SERIAL_NUMBER),
-      .CHANNEL_IN_ENABLE(CHANNEL_IN_ENABLE),
-      .CHANNEL_OUT_ENABLE(CHANNEL_OUT_ENABLE),
-      .PACKET_MODE(PACKET_MODE)
-  ) ulpi_bulk_axis_inst (
-      .ulpi_clock_i(usb_clk),
-      .ulpi_reset_o(usb_rst_n),
-
-      .ulpi_dir_i (ulpi_dir),
-      .ulpi_nxt_i (ulpi_nxt),
-      .ulpi_stp_o (ulpi_stp),
-      .ulpi_data_t(ulpi_data_t),
-      .ulpi_data_i(ulpi_data),
-      .ulpi_data_o(ulpi_data_o),
-
-      .aclk(clock),
-      .aresetn(rst_n),
-
-      .s_axis_tvalid_i(m_tvalid),
-      .s_axis_tready_o(m_tready),
-      .s_axis_tlast_i (m_tlast),
-      .s_axis_tdata_i (m_tdata),
-
-      .m_axis_tvalid_o(s_tvalid),
-      .m_axis_tready_i(s_tready),
-      .m_axis_tlast_o (s_tlast),
-      .m_axis_tdata_o (s_tdata)
-  );
-
-
   //
   //  DDR Core Under New Test
   ///
@@ -287,6 +417,8 @@ module axi_ddr3_top (
   ) ddr_core_inst (
       .clock(clock),  // system clock
       .reset(reset),  // synchronous reset
+
+      .configured_o(configured),
 
       .axi_awvalid_i(awvalid),
       .axi_awready_o(awready),
@@ -354,6 +486,8 @@ module axi_ddr3_top (
       .dfi_last_i(dfi_last),
       .dfi_data_i(dfi_rdata)
   );
+
+`endif
 
 
   // -- DDR3 PHY -- //

@@ -1,6 +1,6 @@
 .PHONY:	sim build upload
 upload:
-	openFPGALoader --board tangprimer20k --write-sram impl/pnr/tang-usb.fs 
+	openFPGALoader --board tangprimer20k --write-sram impl/pnr/usbddr3.fs 
 
 DIR	:= ../../rtl
 OPT	:= -g2005-sv -D__icarus -Wall -I$(DIR)/ -I../../bench/

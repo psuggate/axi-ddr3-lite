@@ -3,6 +3,8 @@ module axi_ddr3_lite (
     clock,
     reset,
 
+    configured_o,
+
     axi_awvalid_i,
     axi_awready_o,
     axi_awaddr_i,
@@ -136,6 +138,8 @@ module axi_ddr3_lite (
   input clock;
   input reset;
 
+  output configured_o;
+
   input axi_awvalid_i;  // AXI4 Write Address Port
   output axi_awready_o;
   input [ASB:0] axi_awaddr_i;
@@ -227,6 +231,8 @@ module axi_ddr3_lite (
   wire by_valid, by_ready, by_last;
   wire [MSB:0] by_data;
 
+
+  assign configured_o = enable;
 
   always @(posedge clock) begin
     enable <= ~reset & cfg_run;
