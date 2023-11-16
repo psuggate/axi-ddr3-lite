@@ -4,6 +4,7 @@ module sync_fifo_tb;
   localparam WIDTH = 2;
   localparam MSB = WIDTH - 1;
   localparam ABITS = 4;
+  localparam ASB = ABITS - 1;
   localparam LIMIT = 10;
 
   reg clock = 1'b1;
@@ -43,8 +44,8 @@ module sync_fifo_tb;
 
   integer rx = 0;
 
-  localparam TEST_MODE = 2;
-  localparam OUTREG = 1;
+  localparam TEST_MODE = 3;
+  localparam OUTREG = 2;
 
   reg  xx_ready;
   wire ww_ready = (xx_ready || TEST_MODE < 3) && rd_ready && !done;
@@ -108,7 +109,9 @@ module sync_fifo_tb;
   end
 
 
-  // -- Module Under Test -- //
+  // -- Module Under New Test -- //
+
+  wire [ASB:0] sy_level;
 
   sync_fifo #(
       .WIDTH (WIDTH),
@@ -118,6 +121,8 @@ module sync_fifo_tb;
       .clock(clock),
       .reset(reset),
 
+      .level_o(sy_level),
+
       .valid_i(wr_valid),
       .ready_o(wr_ready),
       .data_i (wr_data),
@@ -125,6 +130,36 @@ module sync_fifo_tb;
       .valid_o(rd_valid),
       .ready_i(ww_ready),
       .data_o (rd_data)
+  );
+
+
+  // -- Core Under New Test -- //
+
+  wire pw_valid, pw_ready, pw_last, pw_drop, pr_valid, pr_last;
+  wire [MSB:0] pr_data;
+
+  assign pw_valid = wr_valid & pw_ready;
+  assign pw_last  = 1'b1;
+  assign pw_drop  = 1'b0;
+
+  packet_fifo #(
+      .WIDTH (WIDTH),
+      .ABITS (ABITS),
+      .OUTREG(OUTREG)
+  ) packet_fifo_inst (
+      .clock(clock),
+      .reset(reset),
+
+      .valid_i(pw_valid),
+      .ready_o(pw_ready),
+      .last_i (pw_last),
+      .drop_i (pw_drop),
+      .data_i (wr_data),
+
+      .valid_o(pr_valid),
+      .last_o (pr_last),
+      .ready_i(ww_ready),
+      .data_o (pr_data)
   );
 
 

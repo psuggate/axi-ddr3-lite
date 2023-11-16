@@ -82,6 +82,9 @@ module axi_ddr3_top (
   localparam CHANNEL_OUT_ENABLE = 1'b1;
   localparam PACKET_MODE = 1'b0;
 
+  // Use a packet FIFO for 'PACKET_MODE'?
+  localparam PACKET_FIFO = 1'b0;
+
 
   input clk_26;
   input rst_n;
@@ -286,7 +289,7 @@ always @(posedge usb_clk or negedge ce_q) begin
   end
 end
 
-// generate if (PACKET_MODE) begin : g_packet_fifo
+generate if (PACKET_FIFO) begin : g_packet_fifo
 
       packet_fifo #(
           .WIDTH (8),
@@ -308,13 +311,12 @@ end
           .data_o (m_tdata)
       );
 
-/*
 end else begin : g_sync_fifo
 
       sync_fifo #(
           .WIDTH (9),
           .ABITS (11),
-          .OUTREG(1)
+          .OUTREG(2)
           // .ABITS (4),
           // .OUTREG(0)
       ) rddata_fifo_inst (
@@ -332,7 +334,7 @@ end else begin : g_sync_fifo
 
 end
 endgenerate
-*/
+
 
 // Just set these signals in order to configure the IOBs of the FPGA.
 assign dfi_rst_n = 1'b0;
