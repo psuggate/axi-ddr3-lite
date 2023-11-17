@@ -316,7 +316,7 @@ end else begin : g_sync_fifo
       sync_fifo #(
           .WIDTH (9),
           .ABITS (11),
-          .OUTREG(2)
+          .OUTREG(3)
           // .ABITS (4),
           // .OUTREG(0)
       ) rddata_fifo_inst (

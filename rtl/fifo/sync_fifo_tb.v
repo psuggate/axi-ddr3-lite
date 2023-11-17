@@ -45,7 +45,7 @@ module sync_fifo_tb;
   integer rx = 0;
 
   localparam TEST_MODE = 3;
-  localparam OUTREG = 2;
+  localparam OUTREG = 3;
 
   reg  xx_ready;
   wire ww_ready = (xx_ready || TEST_MODE < 3) && rd_ready && !done;
@@ -112,6 +112,8 @@ module sync_fifo_tb;
   // -- Module Under New Test -- //
 
   wire [ASB:0] sy_level;
+  wire [MSB:0] dato = wr_valid & wr_ready ? wr_data : 'bz;
+  wire [MSB:0] datz = rd_valid & ww_ready ? rd_data : 'bz;
 
   sync_fifo #(
       .WIDTH (WIDTH),
