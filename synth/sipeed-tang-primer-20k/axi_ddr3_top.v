@@ -291,10 +291,63 @@ end
 
 generate if (PACKET_FIFO) begin : g_packet_fifo
 
+/*
+axis_fifo #(
+    .DEPTH(2048),
+    .DATA_WIDTH(8),
+    .KEEP_ENABLE(0),
+    .KEEP_WIDTH(1),
+    .LAST_ENABLE(1),
+    .ID_ENABLE(0),
+    .ID_WIDTH(1),
+    .DEST_ENABLE(0),
+    .DEST_WIDTH(1),
+    .USER_ENABLE(1),
+    .USER_WIDTH(1),
+    .RAM_PIPELINE(1),
+    .OUTPUT_FIFO_ENABLE(0),
+    .FRAME_FIFO(0),
+    .USER_BAD_FRAME_VALUE(0),
+    .USER_BAD_FRAME_MASK(0),
+    .DROP_BAD_FRAME(0),
+    .DROP_WHEN_FULL(0)
+)
+UUT (
+    .clk(usb_clk),
+    .rst(~rst_n),
+
+    // AXI input
+    .s_axis_tdata(s_tdata),
+    .s_axis_tkeep(0),
+    .s_axis_tvalid(s_tvalid),
+    .s_axis_tready(s_tready),
+    .s_axis_tlast(s_tlast),
+    .s_axis_tid(0),
+    .s_axis_tdest(0),
+    .s_axis_tuser(0),
+
+     .pause_req(0),
+
+    // AXI output
+    .m_axis_tdata(m_tdata),
+    .m_axis_tkeep(),
+    .m_axis_tvalid(m_tvalid),
+    .m_axis_tready(m_tready),
+    .m_axis_tlast(m_tlast),
+    .m_axis_tid(),
+    .m_axis_tdest(),
+    .m_axis_tuser(),
+    // Status
+    .status_overflow(),
+    .status_bad_frame(),
+    .status_good_frame()
+);
+*/
+
       packet_fifo #(
           .WIDTH (8),
           .ABITS (11),
-          .OUTREG(1)
+          .OUTREG(2)
       ) wrdata_fifo_inst (
           .clock(usb_clk),
           .reset(~rst_n),

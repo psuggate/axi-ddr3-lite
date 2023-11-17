@@ -3,6 +3,8 @@ module packet_fifo (
     clock,
     reset,
 
+    level_o,
+
     valid_i,
     ready_o,
     last_i,
@@ -26,10 +28,13 @@ module packet_fifo (
   localparam DEPTH = 1 << ABITS;
   localparam ASB = ABITS - 1;
   localparam ADDRS = ABITS + 1;
+  localparam AZERO = {ABITS{1'b0}};
 
 
   input clock;
   input reset;
+
+  output [ASB:0] level_o;
 
   input valid_i;
   output ready_o;
@@ -57,31 +62,41 @@ module packet_fifo (
 
   // Packet address signals
   reg [ABITS:0] paddr;
-  wire [ABITS:0] paddr_next;
 
   // Transition signals
-  wire fetch, store, match, wfull, empty, reject, accept;
+  reg [ASB:0] level_q;
+  wire fetch_w, store_w, match_w, wfull_w, empty_w, reject_a, accept_a;
+  wire [ABITS:0] level_w, waddr_w, raddr_w;
+
+      // Optional extra stage of registers, so that block SRAMs can be used.
+      reg xvalid, xlast;
+      wire xready;
+      reg [MSB:0] xdata;
 
 
+  assign level_o = level_q;
   assign ready_o = wready;
 
 
   // -- FIFO Status Signals -- //
 
-  wire wrfull_next = waddr_next[ASB:0] == raddr[ASB:0] && store && !fetch;
-  wire wrfull_curr = match && waddr[ABITS] != raddr[ABITS] && fetch == store;
+  wire wrfull_next = waddr_next[ASB:0] == raddr[ASB:0] && store_w && !fetch_w;
+  wire wrfull_curr = match_w && waddr[ABITS] != raddr[ABITS] && fetch_w == store_w;
 
-  wire rempty_next = raddr_next[ASB:0] == paddr[ASB:0] && fetch && !accept;
-  wire rempty_curr = paddr == raddr && fetch == accept;
+  wire rempty_next = raddr_next[ASB:0] == paddr[ASB:0] && fetch_w && !accept_a;
+  wire rempty_curr = paddr == raddr && fetch_w == accept_a;
 
+  assign accept_a = valid_i && wready && last_i && !drop_i;
+  assign reject_a = drop_i;  // ??
 
-  assign accept = valid_i && last_i && !drop_i && ready_o;
-  assign reject = drop_i;  // ??
+  assign store_w = valid_i && wready;
+  assign match_w = waddr[ASB:0] == raddr[ASB:0];
+  assign wfull_w = wrfull_curr || wrfull_next;
+  assign empty_w = rempty_curr || rempty_next;
 
-  assign store = wready && valid_i;
-  assign match = waddr[ASB:0] == raddr[ASB:0];
-  assign wfull = wrfull_curr || wrfull_next;
-  assign empty = rempty_curr || rempty_next;
+  assign level_w = waddr_w[ASB:0] - raddr_w[ASB:0];
+  assign waddr_w = store_w ? waddr_next : waddr;
+  assign raddr_w = fetch_w ? raddr_next : raddr;
 
 
   // -- Write Port -- //
@@ -90,14 +105,14 @@ module packet_fifo (
 
   always @(posedge clock) begin
     if (reset) begin
-      waddr  <= {ADDRS{1'b0}};
+      waddr  <= AZERO;
       wready <= 1'b0;
     end else begin
-      wready <= ~wfull;
+      wready <= ~wfull_w;
 
-      if (reject) begin
+      if (reject_a) begin
         waddr <= paddr;
-      end else if (valid_i && wready) begin
+      end else if (store_w) begin
         sram[waddr] <= {last_i, data_i};
         waddr <= waddr_next;
       end
@@ -107,15 +122,11 @@ module packet_fifo (
 
   // -- Frame Pointer -- //
 
-  assign paddr_next = paddr + 1;
-
   always @(posedge clock) begin
     if (reset) begin
-      paddr <= {ADDRS{1'b0}};
-    end else begin
-      if (accept) begin
-        paddr <= waddr_next;
-      end
+      paddr <= AZERO;
+    end else if (accept_a) begin
+      paddr <= waddr_next;
     end
   end
 
@@ -126,23 +137,30 @@ module packet_fifo (
 
   always @(posedge clock) begin
     if (reset) begin
-      raddr  <= {ADDRS{1'b0}};
+      raddr  <= AZERO;
       rvalid <= 1'b0;
     end else begin
-      if (empty && fetch) begin
-        rvalid <= 1'b0;
-      end else if (!empty && !fetch) begin
-        rvalid <= 1'b1;
-      end
+      rvalid <= ~empty_w;
 
-      if (fetch) begin
+      if (fetch_w) begin
         raddr <= raddr_next;
       end
     end
   end
 
 
-  // -- Output Register -- //
+  // -- FIFO Status -- //
+
+  always @(posedge clock) begin
+    if (reset) begin
+      level_q <= AZERO;
+    end else begin
+      level_q <= level_w[ASB:0];
+    end
+  end
+
+
+  // -- Output Register (OPTIONAL) -- //
 
   generate
     if (OUTREG == 0) begin : g_async
@@ -151,7 +169,7 @@ module packet_fifo (
 
       // Suitable for Xilinx Distributed SRAM's, and similar, with fast, async
       // reads.
-      assign fetch   = rvalid && ready_i;
+      assign fetch_w = rvalid && ready_i;
 
       assign valid_o = rvalid;
       assign last_o  = data_w[WIDTH];
@@ -160,19 +178,13 @@ module packet_fifo (
     end // g_async
   else if (OUTREG > 0) begin : g_outregs
 
-      // Add an extra stage of registers, so that block SRAMs can be used.
-      reg xvalid, xlast;
-      wire xready;
-      reg [MSB:0] xdata;
-
-      assign fetch = rvalid && (xvalid && xready || !xvalid);
+      assign fetch_w = rvalid && (xvalid && xready || !xvalid);
 
       always @(posedge clock) begin
         if (reset) begin
           xvalid <= 1'b0;
         end else begin
-          if (fetch) begin
-            // raddr <= raddr_next;
+          if (fetch_w) begin
             xvalid <= 1'b1;
             {xlast, xdata} <= sram[raddr[ASB:0]];
           end else if (xvalid && xready) begin
