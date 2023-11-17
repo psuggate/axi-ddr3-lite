@@ -44,7 +44,7 @@ module sync_fifo_tb;
 
   integer rx = 0;
 
-  localparam TEST_MODE = 3;
+  localparam TEST_MODE = 1;
   localparam OUTREG = 3;
 
   reg  xx_ready;
@@ -163,6 +163,82 @@ module sync_fifo_tb;
       .ready_i(ww_ready),
       .data_o (pr_data)
   );
+
+
+  //
+  //  Simulation Tasks
+  ///
+
+  // -- Run a Test -- //
+/*
+  task run_test;
+    input [1:0] mode;
+    input [31:0] limit;
+    begin
+      integer tx, rx;
+
+      done <= 1'b0;
+      tx <= 0;
+      rx <= 0;
+      wr_valid <= 0;
+      rd_ready <= 0;
+
+      @(posedge clock);
+      start <= 1'b1;
+
+      while (!done) begin
+        @(posedge clock);
+
+        xx_ready <= ~xx_ready;
+
+        if (start) begin
+          frame <= 1'b1;
+          start <= 1'b0;
+          rd_ready <= mode != 1;
+        end
+
+        if (frame) begin
+
+          if (mode == 1) begin
+            rd_ready <= tx > 4;
+          end
+
+          if (!wr_valid && wr_ready) begin
+            wr_valid <= tx < limit;
+            wr_data  <= $urandom;
+          end else if (wr_valid && wr_ready) begin
+            if (mode < 2) begin
+              wr_valid <= 1'b0;
+              wr_data  <= 'hx;
+            end else begin
+              wr_valid <= tx < limit - wr_ready;
+              wr_data  <= $urandom;
+            end
+
+            if (tx < limit) begin
+              tx <= tx + 1;
+            end
+          end
+
+          frame <= tx < limit;
+
+        end else begin
+          wr_valid <= 1'b0;
+          wr_data  <= 'hx;
+        end
+
+        if (rd_valid && ww_ready && rx < limit) begin
+          rx <= rx + 1;
+        end
+
+        done <= rx >= limit;
+
+      end
+
+      @(posedge clock);
+    end
+  endtask  // run_test
+*/
 
 
 endmodule  // sync_fifo_tb
