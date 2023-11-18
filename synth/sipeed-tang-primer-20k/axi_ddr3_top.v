@@ -80,7 +80,7 @@ module axi_ddr3_top (
   localparam HIGH_SPEED = 1'b1;
   localparam CHANNEL_IN_ENABLE = 1'b1;
   localparam CHANNEL_OUT_ENABLE = 1'b1;
-  localparam PACKET_MODE = 1'b0;
+  localparam PACKET_MODE = 1'b1;
 
   // Use a packet FIFO for 'PACKET_MODE'?
   localparam PACKET_FIFO = 1'b0;
@@ -206,6 +206,11 @@ end
   reg [13:0] count;
   wire usb_sof, fifo_in_full, fifo_out_full, fifo_has_data, configured;
 
+reg ulpi_error_q, ulpi_rx_overflow;
+wire flasher;
+
+assign flasher = ulpi_error_q ? count[11] & count[10] : ~count[13];
+
   assign leds = {~count[13], ~configured, ~fifo_in_full, ~fifo_out_full, 2'b11};
 
   always @(posedge usb_sof) begin
@@ -215,6 +220,17 @@ end
       count <= count + 1;
     end
   end
+
+
+// -- Some Errors -- //
+
+always @(posedge usb_clk) begin
+  if (!rst_n) begin
+    ulpi_error_q <= 1'b0;
+  end else begin
+    ulpi_error_q <= ulpi_rx_overflow;
+  end
+end
 
 
   // -- USB ULPI Bulk transfer endpoint (IN & OUT) -- //
@@ -270,6 +286,8 @@ end
       .m_axis_tlast_o (s_tlast),
       .m_axis_tdata_o (s_tdata)
   );
+
+assign ulpi_rx_overflow = ulpi_bulk_axis_inst.bulk_ep_axis_bridge_inst.usb_tlp_inst.ulpi_rx_overflow_o;
 
 
 `ifdef __stumpy
