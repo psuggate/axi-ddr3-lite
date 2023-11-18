@@ -206,10 +206,10 @@ end
   reg [13:0] count;
   wire usb_sof, fifo_in_full, fifo_out_full, fifo_has_data, configured;
 
-reg ulpi_error_q, ulpi_rx_overflow;
+reg ulpi_error_q, ulpi_rx_overflow, ulpi_usb_reset;
 wire flasher;
 
-assign flasher = ulpi_error_q ? count[11] & count[10] : ~count[13];
+assign flasher = ulpi_error_q ? count[11] & count[10] : ~count[13] & ulpi_usb_reset;
 
   assign leds = {~count[13], ~configured, ~fifo_in_full, ~fifo_out_full, 2'b11};
 
@@ -288,6 +288,7 @@ end
   );
 
 assign ulpi_rx_overflow = ulpi_bulk_axis_inst.bulk_ep_axis_bridge_inst.usb_tlp_inst.ulpi_rx_overflow_o;
+assign ulpi_usb_reset = ulpi_bulk_axis_inst.bulk_ep_axis_bridge_inst.usb_tlp_inst.usb_ulpi_inst.usb_reset_o;
 
 
 `ifdef __stumpy
