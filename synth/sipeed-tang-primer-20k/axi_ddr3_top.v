@@ -155,26 +155,26 @@ module axi_ddr3_top (
   );
 
 
-// -- Start-up -- //
+  // -- Start-up -- //
 
-reg rst_nq, ce_q, enab_q, enable;
+  reg rst_nq, ce_q, enab_q, enable;
 
-always @(posedge clk_26) begin
-  rst_nq <= rst_n;
-  ce_q   <= locked & rst_nq;
-end
+  always @(posedge clk_26) begin
+    rst_nq <= rst_n;
+    ce_q   <= locked & rst_nq;
+  end
 
-always @(posedge clock or negedge ce_q) begin
-  if (!ce_q) begin
-    enab_q <= 1'b0;
-    enable <= 1'b0;
-  end else begin
-    enab_q <= ce_q;
-    if (enab_q) begin
-      enable <= 1'b1;
+  always @(posedge clock or negedge ce_q) begin
+    if (!ce_q) begin
+      enab_q <= 1'b0;
+      enable <= 1'b0;
+    end else begin
+      enab_q <= ce_q;
+      if (enab_q) begin
+        enable <= 1'b1;
+      end
     end
   end
-end
 
 
   wire s_tvalid, s_tready, s_tlast;
@@ -206,10 +206,11 @@ end
   reg [13:0] count;
   wire usb_sof, fifo_in_full, fifo_out_full, fifo_has_data, configured;
 
-reg ulpi_error_q, ulpi_rx_overflow, ulpi_usb_reset;
-wire flasher;
+  reg ulpi_error_q, ulpi_rx_overflow, ulpi_usb_reset;
+  wire flasher;
 
-assign flasher = ulpi_error_q ? count[11] & count[10] : ~count[13] & ulpi_usb_reset;
+  // todo: does not work, as I need cross-domain clocking
+  assign flasher = ulpi_error_q ? count[11] & count[10] : ~count[13] & ulpi_usb_reset;
 
   assign leds = {~count[13], ~configured, ~fifo_in_full, ~fifo_out_full, 2'b11};
 
@@ -222,15 +223,15 @@ assign flasher = ulpi_error_q ? count[11] & count[10] : ~count[13] & ulpi_usb_re
   end
 
 
-// -- Some Errors -- //
+  // -- Some Errors -- //
 
-always @(posedge usb_clk) begin
-  if (!rst_n) begin
-    ulpi_error_q <= 1'b0;
-  end else begin
-    ulpi_error_q <= ulpi_rx_overflow;
+  always @(posedge usb_clk) begin
+    if (!rst_n) begin
+      ulpi_error_q <= 1'b0;
+    end else begin
+      ulpi_error_q <= ulpi_rx_overflow;
+    end
   end
-end
 
 
   // -- USB ULPI Bulk transfer endpoint (IN & OUT) -- //
@@ -287,28 +288,29 @@ end
       .m_axis_tdata_o (s_tdata)
   );
 
-assign ulpi_rx_overflow = ulpi_bulk_axis_inst.bulk_ep_axis_bridge_inst.usb_tlp_inst.ulpi_rx_overflow_o;
-assign ulpi_usb_reset = ulpi_bulk_axis_inst.bulk_ep_axis_bridge_inst.usb_tlp_inst.usb_ulpi_inst.usb_reset_o;
+  assign ulpi_rx_overflow = ulpi_bulk_axis_inst.bulk_ep_axis_bridge_inst.usb_tlp_inst.ulpi_rx_overflow_o;
+  assign ulpi_usb_reset = ulpi_bulk_axis_inst.bulk_ep_axis_bridge_inst.usb_tlp_inst.usb_ulpi_inst.usb_reset_o;
 
 
 `ifdef __stumpy
-//
-//  Cut out the DDR3 controller, and just use a SRAM for the USB-connected RAM.
-//  Note: we can use AXI packets, if we like ??
-///
-reg rx_q;
+  //
+  //  Cut out the DDR3 controller, and just use a SRAM for the USB-connected RAM.
+  //  Note: we can use AXI packets, if we like ??
+  ///
+  reg rx_q;
 
-assign configured = rx_q;
+  assign configured = rx_q;
 
-always @(posedge usb_clk or negedge ce_q) begin
-  if (!ce_q) begin
-    rx_q <= 1'b0;
-  end else begin
-    rx_q <= fifo_has_data;
+  always @(posedge usb_clk or negedge ce_q) begin
+    if (!ce_q) begin
+      rx_q <= 1'b0;
+    end else begin
+      rx_q <= fifo_has_data;
+    end
   end
-end
 
-generate if (PACKET_FIFO) begin : g_packet_fifo
+  generate
+    if (PACKET_FIFO) begin : g_packet_fifo
 
 /*
 axis_fifo #(
@@ -363,6 +365,7 @@ UUT (
 );
 */
 
+      // fixme: does this core even work ??
       packet_fifo #(
           .WIDTH (8),
           .ABITS (11),
@@ -383,14 +386,12 @@ UUT (
           .data_o (m_tdata)
       );
 
-end else begin : g_sync_fifo
+    end else begin : g_sync_fifo
 
       sync_fifo #(
           .WIDTH (9),
           .ABITS (11),
           .OUTREG(3)
-          // .ABITS (4),
-          // .OUTREG(0)
       ) rddata_fifo_inst (
           .clock(usb_clk),
           .reset(~rst_n),
@@ -404,25 +405,25 @@ end else begin : g_sync_fifo
           .data_o ({m_tlast, m_tdata})
       );
 
-end
-endgenerate
+    end
+  endgenerate
 
 
-// Just set these signals in order to configure the IOBs of the FPGA.
-assign dfi_rst_n = 1'b0;
-assign dfi_cke = 1'b0;
-assign dfi_cs_n = 1'b1;
-assign dfi_ras_n = 1'b1;
-assign dfi_cas_n = 1'b1;
-assign dfi_we_n = 1'b1;
-assign dfi_odt = 1'b0;
-assign dfi_bank = 3'b111;
-assign dfi_addr = 13'h1fff;
-assign dfi_wstb = 1'b0;
-assign dfi_wren = 1'b0;
-assign dfi_mask = 2'b00;
-assign dfi_wdata = 16'hffff;
-assign dfi_rden = 1'b0;
+  // Just set these signals in order to configure the IOBs of the FPGA.
+  assign dfi_rst_n = 1'b0;
+  assign dfi_cke   = 1'b0;
+  assign dfi_cs_n  = 1'b1;
+  assign dfi_ras_n = 1'b1;
+  assign dfi_cas_n = 1'b1;
+  assign dfi_we_n  = 1'b1;
+  assign dfi_odt   = 1'b0;
+  assign dfi_bank  = 3'b111;
+  assign dfi_addr  = 13'h1fff;
+  assign dfi_wstb  = 1'b0;
+  assign dfi_wren  = 1'b0;
+  assign dfi_mask  = 2'b00;
+  assign dfi_wdata = 16'hffff;
+  assign dfi_rden  = 1'b0;
 
 `else
 
