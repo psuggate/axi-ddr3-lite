@@ -37,8 +37,9 @@
         <File path="/home/patrick/dev/axis_usbd/rtl/usb/bulk_ep_control.v" type="file.verilog" enable="1"/>
         <File path="/home/patrick/dev/axis_usbd/rtl/usb/bulk_ep_in.v" type="file.verilog" enable="1"/>
         <File path="/home/patrick/dev/axis_usbd/rtl/usb/bulk_ep_out.v" type="file.verilog" enable="1"/>
+        <File path="/home/patrick/dev/axis_usbd/rtl/usb/decode_packet.v" type="file.verilog" enable="1"/>
+        <File path="/home/patrick/dev/axis_usbd/rtl/usb/encode_packet.v" type="file.verilog" enable="1"/>
         <File path="/home/patrick/dev/axis_usbd/rtl/usb/ulpi_bulk_axis.v" type="file.verilog" enable="1"/>
-        <File path="/home/patrick/dev/axis_usbd/rtl/usb/usb_packet.v" type="file.verilog" enable="1"/>
         <File path="/home/patrick/dev/axis_usbd/rtl/usb/usb_std_request.v" type="file.verilog" enable="1"/>
         <File path="/home/patrick/dev/axis_usbd/rtl/usb/usb_tlp.v" type="file.verilog" enable="1"/>
         <File path="/home/patrick/dev/axis_usbd/rtl/usb/usb_ulpi.v" type="file.verilog" enable="1"/>

@@ -241,6 +241,7 @@ module axi_ddr3_top (
 
   assign ulpi_rst  = usb_rst_n;
   assign usb_clk   = ~ulpi_clk;
+
   assign ulpi_data = ulpi_data_t ? {8{1'bz}} : ulpi_data_o;
 
   ulpi_bulk_axis #(
