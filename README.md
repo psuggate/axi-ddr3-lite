@@ -8,6 +8,8 @@ fontsize: 11pt
 
 # Overview of `axi-ddr3-lite`
 
+Note: incomplete, and is currently being developed in another repository (https://github.com/psuggate/misc-verilog-cores).
+
 AXI DDR3 SDRAM Memory Controller for Xilinx GoWin Altera Intel Lattice FPGAs, written in Verilog.
 
 ## Design
