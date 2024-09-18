@@ -8,31 +8,27 @@ fontsize: 11pt
 
 # Overview of `axi-ddr3-lite`
 
-Note: incomplete, and is currently being developed in another repository (https://github.com/psuggate/misc-verilog-cores).
+**Note**: incomplete, and is currently being developed in another repository (https://github.com/psuggate/misc-verilog-cores).
+
+The core has [nearly been completed](https://github.com/psuggate/misc-verilog-cores), and just needs READ- & WRITE- CALIBRATION to be finished.
 
 AXI DDR3 SDRAM Memory Controller for Xilinx GoWin Altera Intel Lattice FPGAs, written in Verilog.
 
 ## Design
 
-There are essentially four "layers," somewhat structured like the [OSI model](https://en.wikipedia.org/wiki/OSI_model) -- except for a memory device, so reads and writes are the different "sides" of a transaction, at each level of abstraction. The abstractions can roughly be described as:
+Medium-size (about 1300 logic elements, when targeting LUT4-based FPGAs), and medium-speed (upto 125 MHz, 250 Mbps, per DQ-pin), DDR3 controller that operates the DDR3 SDRAMs in DLL=off mode. The reason for operating in DLL=off mode is so that the DDR3 clock frequency can be chosen per-application, to minimise the area- and timing- requirements, when the full DDR3 bandwidth is not required.
 
-1. `TRANSPORT`: AXI4 in this case, and this layer handles alignment, burst-sizes, ordering, and buffering.
-
-2. `NETWORK`: Issues & receives DDR3 memory-controller "packets", and schedules these in order to achieve throughput and latency goals.
-
-3. `DATA LINK`: Low-level DDR3 protocol commands, where all operations are correctly sized (BL8) and meeting the timing requirements of the DDR3 specifications, and the current configuration.
-
-4. `PHYSICAL`: Vendor- and device- specific IO blocks, clock-resources, etc., in order to communicate with a physical DDR3 SDRAM IC (or module).
+The controller presents an AXI3 or AXI4 interface, and has an optional "bypass" port (an additional read-port) that takes priority -- with the intent being that this can be connected to CPU caches for lower average access latencies, while the DMA controllers and other bus devices use the standard read-port.
 
 ## Tasks to Complete
 
 These include:
 
-+ synthesise for a GoWin GW2A FPGA, and check area & performance
++ finish READ- & WRITE- CALIBRATION;
 
-+ top-level module, with AXI4 data-paths, and testbenches
++ ~~synthesise for a GoWin GW2A FPGA, and check area & performance~~ Clock frequency exceeds 150 MHz, on a GoWin GW2A-18C FPGA.
 
-+ check the timings for all of the supported FSM transitions
++ ~~top-level module, with AXI4 data-paths, and testbenches~~ Demo exists, 'usb_ddr3_top.v'.
 
 Somewhat optional:
 
