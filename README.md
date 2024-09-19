@@ -1,11 +1,3 @@
----
-title: README for an AXI DDR3 SRAM Memory Controller
-author: Patrick Suggate <<patrick.suggate@gmail.com>>
-date: 21^st^ October, 2023
-colorlinks: true
-fontsize: 11pt
----
-
 # Overview of `axi-ddr3-lite`
 
 **Note**: incomplete, and is currently being developed in another repository (https://github.com/psuggate/misc-verilog-cores).
@@ -13,6 +5,14 @@ fontsize: 11pt
 The core has [nearly been completed](https://github.com/psuggate/misc-verilog-cores), and just needs READ- & WRITE- CALIBRATION to be finished.
 
 AXI DDR3 SDRAM Memory Controller for Xilinx GoWin Altera Intel Lattice FPGAs, written in Verilog.
+
+As long as GNU Make is installed, along with Bash, Git, and Icarus Verilog, then issue:
+```bash
+$ make
+```
+This will fetch dependencies, as well.
+
+**Note**: Build system and scripts have not been tested on Windows, only Ubuntu LTS. But it should work if Windows Subsystem for Linux (WSL 2) is used, for an Ubuntu image with the dependencies (above) installed.
 
 ## Design
 
