@@ -9,7 +9,7 @@ LIBDIR	?= ../lib/misc-verilog-cores
 BENCH	:= ../bench
 
 IVC	?= iverilog
-OPT	:= -g2005-sv -D__icarus -Wall -I. -I../bench -I$(LIBDIR)/axis
+OPT	:= -g2005-sv -D__icarus -Wall -I. -I$(BENCH) -I$(LIBDIR)/axis
 
 SRC	:= $(wildcard *.v)
 INC	:= $(wildcard *.vh $(BENCH)/*.vh $(LIBDIR)/axis/*.vh)
