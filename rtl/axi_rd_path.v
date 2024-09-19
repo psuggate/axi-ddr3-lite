@@ -1,85 +1,58 @@
 `timescale 1ns / 100ps
-module axi_rd_path (
-    clock,
-    reset,
+module axi_rd_path #(
+    parameter  ADDRS = 32,
+    localparam ASB   = ADDRS - 1,
 
-    axi_arvalid_i,
-    axi_arready_o,
-    axi_araddr_i,
-    axi_arid_i,
-    axi_arlen_i,
-    axi_arburst_i,
+    parameter  WIDTH = 32,
+    localparam MSB   = WIDTH - 1,
 
-    axi_rready_i,
-    axi_rvalid_o,
-    axi_rlast_o,
-    axi_rresp_o,
-    axi_rid_o,
-    axi_rdata_o,
+    parameter  MASKS = WIDTH / 8,
+    localparam SSB   = MASKS - 1,
+    localparam KZERO = {MASKS{1'b0}},
 
-    mem_fetch_o,
-    mem_accept_i,
-    mem_rseq_o,
-    mem_reqid_o,
-    mem_addr_o,
+    parameter AXI_ID_WIDTH = 4,
+    localparam ISB = AXI_ID_WIDTH - 1,
 
-    mem_valid_i,
-    mem_ready_o,
-    mem_last_i,
-    mem_reqid_i,
-    mem_data_i
+    parameter CTRL_FIFO_DEPTH = 16,
+    parameter CTRL_FIFO_BLOCK = 0,
+    localparam CBITS = $clog2(CTRL_FIFO_DEPTH),
+
+    parameter DATA_FIFO_BYPASS = 0,
+    parameter DATA_FIFO_DEPTH = 512,
+    parameter DATA_FIFO_BLOCK = 1,
+    localparam DBITS = $clog2(DATA_FIFO_DEPTH),
+
+    parameter USE_SYNC_FIFO = 0
+) (
+    input clock,
+    input reset,
+
+    input axi_arvalid_i,  // AXI4 Read Address Port
+    output axi_arready_o,
+    input [ISB:0] axi_arid_i,
+    input [7:0] axi_arlen_i,
+    input [1:0] axi_arburst_i,
+    input [ASB:0] axi_araddr_i,
+
+    input axi_rready_i,  // AXI4 Read Data Port
+    output axi_rvalid_o,
+    output [MSB:0] axi_rdata_o,
+    output [1:0] axi_rresp_o,
+    output [ISB:0] axi_rid_o,
+    output axi_rlast_o,
+
+    output mem_fetch_o,
+    input mem_accept_i,
+    output mem_rseq_o,
+    output [ISB:0] mem_reqid_o,
+    output [ASB:0] mem_addr_o,
+
+    input mem_valid_i,
+    output mem_ready_o,
+    input mem_last_i,
+    input [ISB:0] mem_reqid_i,
+    input [MSB:0] mem_data_i
 );
-
-  parameter ADDRS = 32;
-  localparam ASB = ADDRS - 1;
-
-  parameter WIDTH = 32;
-  localparam MSB = WIDTH - 1;
-
-  parameter MASKS = WIDTH / 8;
-  localparam SSB = MASKS - 1;
-
-  parameter AXI_ID_WIDTH = 4;
-  localparam ISB = AXI_ID_WIDTH - 1;
-
-  parameter CTRL_FIFO_DEPTH = 16;
-  parameter CTRL_FIFO_BLOCK = 0;
-  localparam CBITS = $clog2(CTRL_FIFO_DEPTH);
-
-  parameter DATA_FIFO_DEPTH = 512;
-  parameter DATA_FIFO_BLOCK = 1;
-  localparam DBITS = $clog2(DATA_FIFO_DEPTH);
-
-
-  input clock;
-  input reset;
-
-  input axi_arvalid_i;  // AXI4 Read Address Port
-  output axi_arready_o;
-  input [ISB:0] axi_arid_i;
-  input [7:0] axi_arlen_i;
-  input [1:0] axi_arburst_i;
-  input [ASB:0] axi_araddr_i;
-
-  input axi_rready_i;  // AXI4 Read Data Port
-  output axi_rvalid_o;
-  output [MSB:0] axi_rdata_o;
-  output [1:0] axi_rresp_o;
-  output [ISB:0] axi_rid_o;
-  output axi_rlast_o;
-
-  output mem_fetch_o;
-  input mem_accept_i;
-  output mem_rseq_o;
-  output [ISB:0] mem_reqid_o;
-  output [ASB:0] mem_addr_o;
-
-  input mem_valid_i;
-  output mem_ready_o;
-  input mem_last_i;
-  input [ISB:0] mem_reqid_i;
-  input [MSB:0] mem_data_i;
-
 
   // -- Constants -- //
 
@@ -94,6 +67,10 @@ module axi_rd_path (
   localparam ST_READ = 4'b0010;
   localparam ST_BUSY = 4'b0100;
 
+  localparam USELIB = USE_SYNC_FIFO == 0 && DATA_FIFO_BLOCK > 0;
+
+  wire rvalid_w, rlast_w;
+  wire [MSB:0] rdata_w;
 
   reg aready;
   reg [3:0] state;
@@ -103,13 +80,15 @@ module axi_rd_path (
   wire [ISB:0] xid;
   wire [ASB:0] xaddr;
 
-
   assign axi_arready_o = cmd_ready;
   assign axi_rresp_o   = rrf_ready ? AXI_RESP_OKAY : 2'bxx;
 
-  assign mem_fetch_o   = rcf_valid;
-  assign mem_ready_o   = rdf_ready;
+  assign axi_rvalid_o  = DATA_FIFO_BYPASS ? mem_valid_i : rvalid_w;
+  assign axi_rlast_o   = DATA_FIFO_BYPASS ? mem_last_i : rlast_w;
+  assign axi_rdata_o   = DATA_FIFO_BYPASS ? mem_data_i : rdata_w;
 
+  assign mem_fetch_o   = rcf_valid;
+  assign mem_ready_o   = DATA_FIFO_BYPASS ? axi_rready_i : rdf_ready;
 
   // -- Chunker for Large Bursts -- //
 
@@ -134,7 +113,6 @@ module axi_rd_path (
       .xaddr_o(xaddr)
   );
 
-
   // -- Read-Data Command FIFO -- //
 
   // todo: the output 'data_o' is combinational/async (by default), which could
@@ -144,9 +122,10 @@ module axi_rd_path (
       .WIDTH (COMMAND_WIDTH),
       .ABITS (CBITS),
       .OUTREG(CTRL_FIFO_BLOCK)
-  ) command_fifo_inst (
-      .clock(clock),
-      .reset(reset),
+  ) U_FIFO1 (
+      .clock  (clock),
+      .reset  (reset),
+      .level_o(),
 
       .valid_i(xvalid),
       .ready_o(xready),
@@ -156,7 +135,6 @@ module axi_rd_path (
       .ready_i(mem_accept_i),
       .data_o ({mem_addr_o, mem_reqid_o, mem_rseq_o})
   );
-
 
   // -- Read-Data Response FIFO -- //
 
@@ -169,9 +147,10 @@ module axi_rd_path (
       .WIDTH (AXI_ID_WIDTH),
       .ABITS (CBITS),
       .OUTREG(CTRL_FIFO_BLOCK)
-  ) response_fifo_inst (
-      .clock(clock),
-      .reset(reset),
+  ) U_FIFO2 (
+      .clock  (clock),
+      .reset  (reset),
+      .level_o(),
 
       .valid_i(mem_accept_i),
       .ready_o(),
@@ -182,30 +161,43 @@ module axi_rd_path (
       .data_o (axi_rid_o)
   );
 
-
   // -- Synchronous, 2 kB, Read-Data FIFO -- //
 
-  // todo: use a packet FIFO, so we only bother the AXI bus when we have a full
-  //   frame of data to transfer ??
-  sync_fifo #(
-      .WIDTH (WIDTH + 1),
-      .ABITS (DBITS),
-      .OUTREG(DATA_FIFO_BLOCK)
-  ) rddata_fifo_inst (
-      .clock(clock),
-      .reset(reset),
+  //
+  // Todo:
+  //  - not required if the data flows directly to a 'Bulk EP IN' core, as these
+  //    already contain sufficient buffering ??
+  //  - use a packet FIFO, so we only bother the AXI bus when we have a full
+  //    frame of data to transfer ??
+  //  - pad end of bursts ??
+  //
+  axis_sfifo #(
+      .WIDTH (WIDTH),
+      .DEPTH (DATA_FIFO_DEPTH),
+      .OUTREG(DATA_FIFO_BLOCK),
+      .TKEEP (0),
+      .TLAST (1),
+      .USELIB(USELIB)
+  ) U_FIFO3 (
+      .clock  (clock),
+      .reset  (reset),
+      .level_o(),
 
-      .valid_i(mem_valid_i),
-      .ready_o(rdf_ready),
-      .data_i ({mem_last_i, mem_data_i}), // todo: pad end of bursts ??
+      .s_tvalid(mem_valid_i),
+      .s_tready(rdf_ready),
+      .s_tkeep (KZERO),
+      .s_tlast (mem_last_i),
+      .s_tdata (mem_data_i),
 
-      .valid_o(axi_rvalid_o),
-      .ready_i(axi_rready_i),
-      .data_o ({axi_rlast_o, axi_rdata_o})
+      .m_tvalid(rvalid_w),
+      .m_tready(DATA_FIFO_BYPASS ? 1'b0 : axi_rready_i),
+      .m_tkeep (),
+      .m_tlast (rlast_w),
+      .m_tdata (rdata_w)
   );
 
-
 `ifdef __icarus
+
   always @(posedge clock) begin
     if (reset);
     else begin
@@ -215,7 +207,8 @@ module axi_rd_path (
       end
     end
   end
-`endif
+
+`endif  /* __icarus */
 
 
-endmodule  // axi_rd_path
+endmodule  /* axi_rd_path */

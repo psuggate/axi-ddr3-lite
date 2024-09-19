@@ -12,86 +12,88 @@
  * Copyright 2023, Patrick Suggate.
  *
  */
-module ddr3_ddl (
-    clock,
-    reset,
+module ddr3_ddl #(
+    // DDR3 SDRAM Timings and Parameters //
+    parameter DDR_FREQ_MHZ = 100,
 
-    ddr_cke_i,
-    ddr_cs_ni,
+    // Trims an additional clock-cycle of latency, if '1'
+    parameter LOW_LATENCY = 1'b1,  // 0 or 1
 
-    ctl_run_o,  // Memory controller signals
-    ctl_req_i,
-    ctl_seq_i,
-    ctl_rdy_o,
-    ctl_cmd_i,
-    ctl_ba_i,
-    ctl_adr_i,
+    // Uses an the 'wr_strob' signal to clock out the WRITE data from the upstream
+    // FIFO, when enabled (vs. the 'wr_ready' signal, which has one more cycle of
+    // delay).
+    // Note: the 'gw2a_ddr3_phy' requires this to be enabled
+    parameter WR_PREFETCH = 1'b0,
 
-    mem_wvalid_i,  // WRITE data-path
-    mem_wready_o,
-    mem_wlast_i,
-    mem_wrmask_i,
-    mem_wrdata_i,
+    // Data-path and address settings
+    parameter DDR_ROW_BITS = 13,
+    localparam RSB = DDR_ROW_BITS - 1,
 
-    mem_rvalid_o,  // READ data-path
-    mem_rready_i,
-    mem_rlast_o,
-    mem_rddata_o,
+    parameter DDR_COL_BITS = 10,
+    localparam CSB = DDR_COL_BITS - 1,
 
-    dfi_ras_no,  // DDL <-> PHY signals
-    dfi_cas_no,
-    dfi_we_no,
-    dfi_odt_o,
-    dfi_bank_o,
-    dfi_addr_o,
-    dfi_wstb_o,
-    dfi_wren_o,
-    dfi_mask_o,
-    dfi_data_o,
-    dfi_rden_o,
-    dfi_rvld_i,
-    dfi_last_i,
-    dfi_data_i
+    parameter DFI_DQ_WIDTH = 32,
+    localparam MSB = DFI_DQ_WIDTH - 1,
+
+    parameter DFI_DM_WIDTH = DFI_DQ_WIDTH / 8,
+    localparam SSB = DFI_DM_WIDTH - 1,
+
+    // Note: these latencies are due to the registers and IOBs in the PHY for the
+    //   commands, addresses, and the data-paths.
+    parameter PHY_WR_DELAY = 1,
+    parameter PHY_RD_DELAY = 1
+) (
+    input clock,
+    input reset,
+
+    input ddr_cke_i,
+    input ddr_cs_ni,
+
+    // From/to DDR3 Controller
+    // Note: all state-transitions are gated by the 'ctl_rdy_o' signal
+    input ctl_req_i,
+    input ctl_seq_i,  // Todo: Burst-sequence indicator, use to assert 'AP' ??
+    output ctl_rdy_o,
+    input [2:0] ctl_cmd_i,
+    input [2:0] ctl_ba_i,
+    input [RSB:0] ctl_adr_i,
+
+    // AXI4-ish write and read ports (in order to de-/en- queue data from/to FIFOs,
+    // efficiently)
+    input mem_wvalid_i,  // Write port
+    output mem_wready_o,
+    input mem_wlast_i,  // todo: a good idea ??
+    input [SSB:0] mem_wrmask_i,
+    input [MSB:0] mem_wrdata_i,
+
+    output mem_rvalid_o,  // Read port
+    input mem_rready_i,
+    output mem_rlast_o,  // todo: a good idea ??
+    output [MSB:0] mem_rddata_o,
+
+    // (Pseudo-) DDR3 PHY Interface (-ish)
+    output dfi_ras_no,
+    output dfi_cas_no,
+    output dfi_we_no,
+    output dfi_odt_o,
+    output [2:0] dfi_bank_o,
+    output [RSB:0] dfi_addr_o,
+
+    output dfi_wstb_o,
+    output dfi_wren_o,
+    output [SSB:0] dfi_mask_o,
+    output [MSB:0] dfi_data_o,
+
+    output dfi_rden_o,
+    input dfi_rvld_i,
+    input dfi_last_i,
+    input [MSB:0] dfi_data_i
 );
 
   //
   //  DDL Settings
   ///
-
-  // -- DDR3 SDRAM Timings and Parameters -- //
-
-  parameter DDR_FREQ_MHZ = 100;
   `include "ddr3_settings.vh"
-
-  // Trims an additional clock-cycle of latency, if '1'
-  parameter LOW_LATENCY = 1'b1;  // 0 or 1
-
-  // Uses an the 'wr_strob' signal to clock out the WRITE data from the upstream
-  // FIFO, when enabled (vs. the 'wr_ready' signal, which has one more cycle of
-  // delay).
-  // Note: the 'gw2a_ddr3_phy' requires this to be enabled
-  parameter WR_PREFETCH = 1'b0;
-
-  // Data-path and address settings
-  parameter DDR_ROW_BITS = 13;
-  localparam RSB = DDR_ROW_BITS - 1;
-
-  parameter DDR_COL_BITS = 10;
-  localparam CSB = DDR_COL_BITS - 1;
-
-  parameter DFI_DQ_WIDTH = 32;
-  localparam MSB = DFI_DQ_WIDTH - 1;
-
-  parameter DFI_DM_WIDTH = DFI_DQ_WIDTH / 8;
-  localparam SSB = DFI_DM_WIDTH - 1;
-
-
-  // -- PHY Settings -- //
-
-  // Note: these latencies are due to the registers and IOBs in the PHY for the
-  //   commands, addresses, and the data-paths.
-  parameter PHY_WR_DELAY = 1;
-  parameter PHY_RD_DELAY = 1;
 
   localparam [WSB:0] WR_SHIFTS = DDR_CWL - PHY_WR_DELAY - LOW_LATENCY - 2;
   localparam [WSB:0] RD_SHIFTS = DDR_CL + PHY_RD_DELAY - LOW_LATENCY - 4;
@@ -99,58 +101,6 @@ module ddr3_ddl (
   // A DDR3 burst has length of 8 transfers (DDR), so four clock/memory cycles
   // todo: ...
   localparam PHY_BURST_LEN = 4;
-
-
-  input clock;
-  input reset;
-
-  input ddr_cke_i;
-  input ddr_cs_ni;
-
-  // From/to DDR3 Controller
-  // Note: all state-transitions are gated by the 'ctl_rdy_o' signal
-  output ctl_run_o;
-  input ctl_req_i;
-  input ctl_seq_i;  // Burst-sequence indicator
-  output ctl_rdy_o;
-  input [2:0] ctl_cmd_i;
-  input [2:0] ctl_ba_i;
-  input [RSB:0] ctl_adr_i;
-
-
-  // AXI4-ish write and read ports (in order to de-/en- queue data from/to FIFOs,
-  // efficiently)
-  input mem_wvalid_i;  // Write port
-  output mem_wready_o;
-  input mem_wlast_i;  // todo: a good idea ??
-  input [SSB:0] mem_wrmask_i;
-  input [MSB:0] mem_wrdata_i;
-
-  output mem_rvalid_o;  // Read port
-  input mem_rready_i;
-  output mem_rlast_o;  // todo: a good idea ??
-  output [MSB:0] mem_rddata_o;
-
-  // (Pseudo-) DDR3 PHY Interface (-ish)
-  output dfi_ras_no;
-  output dfi_cas_no;
-  output dfi_we_no;
-  output dfi_odt_o;
-  output [2:0] dfi_bank_o;
-  output [RSB:0] dfi_addr_o;
-
-  output dfi_wstb_o;
-  output dfi_wren_o;
-  output [SSB:0] dfi_mask_o;
-  output [MSB:0] dfi_data_o;
-
-  output dfi_rden_o;
-  input dfi_rvld_i;
-  input dfi_last_i;
-  input [MSB:0] dfi_data_i;
-
-
-  // -- Constants -- //
 
   localparam DELAY = CYCLES_CKE_TO_CMD + 1;
   localparam DSB = DELAY - 1;
@@ -186,20 +136,19 @@ module ddr3_ddl (
   // localparam DELAY_WRA_TO_ACT = 1 << (CYCLES_WRA_TO_ACT - 1);
   localparam DELAY_WRA_TO_ACT = 1 << (CYCLES_WRA_TO_ACT + 1);  // todo
 
+  // -- Local Wires & Registers -- //
 
   reg [WSB:0] wr_delay, rd_delay;
   reg wr_strob, wr_ready, rd_ready;
-  reg run_q, ready, busy;
+  reg ready, busy;
   reg [XSB:0] count;
   reg [DSB:0] delay;
 
   wire precharge, nop_w;
   wire [XSB:0] cnext;
 
-
   // -- Connect to Upstream Controller & Data-paths -- //
 
-  assign ctl_run_o = run_q;
   assign ctl_rdy_o = ready;
   assign precharge = ctl_adr_i[10];
 
@@ -208,14 +157,12 @@ module ddr3_ddl (
   assign mem_rlast_o = dfi_last_i;
   assign mem_rddata_o = dfi_data_i;
 
-
   // -- Internal Control Signals -- //
 
   assign nop_w = ~ctl_req_i | ~ready;
   assign cnext = count - 1;
 
-
-  // -- Connect to the DDR PHY IOB's -- //
+  // -- Connection to the DDR PHY IOB's -- //
 
   assign dfi_odt_o = 1'b0;
   assign dfi_wstb_o = wr_strob;
@@ -261,15 +208,6 @@ module ddr3_ddl (
 
     end
   endgenerate
-
-
-  // -- Upstream-enable Logic -- //
-
-  // todo: this can be used to bring a SDRAM out of power-down mode ??
-  always @(posedge clock) begin
-    run_q <= run_q | delay[0] & ~ddr_cke_i;
-  end
-
 
   // -- Main DDR3 PHY-control State Machine -- //
 
@@ -596,12 +534,14 @@ module ddr3_ddl (
       );
 
     end
-  endgenerate
+  endgenerate  /* g_two_srl */
 
-
-  // -- Simulation Only -- //
 
 `ifdef __icarus
+  //
+  //  Simulation Only
+  ///
+
   // Make some noise during simulation ...
   always @(posedge clock) begin
     if (!reset && ddr_cke_i && !busy && ctl_req_i && ready) begin
@@ -623,7 +563,7 @@ module ddr3_ddl (
             end
             default: begin
               $error("%10t: DDL: Unexpected command (0x%1x) in 'ST_ACTV'", $time, ctl_cmd_i);
-              $fatal;
+              #100 $fatal;
             end
           endcase
         end
@@ -635,7 +575,7 @@ module ddr3_ddl (
             end
             default: begin
               $error("%10t: DDL: Unexpected command (0x%1x) in 'ST_READ'", $time, ctl_cmd_i);
-              $fatal;
+              #100 $fatal;
             end
           endcase
         end
@@ -647,7 +587,7 @@ module ddr3_ddl (
             end
             default: begin
               $error("%10t: DDL: Unexpected command (0x%1x) in 'ST_WRIT'", $time, ctl_cmd_i);
-              $fatal;
+              #100 $fatal;
             end
           endcase
         end
@@ -659,7 +599,7 @@ module ddr3_ddl (
             end
             default: begin
               $error("%10t: DDL: Unexpected command (0x%1x) in 'ST_PREC'", $time, ctl_cmd_i);
-              $fatal;
+              #100 $fatal;
             end
           endcase
         end
@@ -674,7 +614,7 @@ module ddr3_ddl (
             end
             default: begin
               $error("%10t: DDL: Unexpected command (0x%1x) in 'ST_REFR'", $time, ctl_cmd_i);
-              $fatal;
+              #100 $fatal;
             end
           endcase
         end
@@ -686,7 +626,7 @@ module ddr3_ddl (
             end
             default: begin
               $error("%10t: DDL: Unexpected command (0x%1x) in 'ST_MODE'", $time, ctl_cmd_i);
-              $fatal;
+              #100 $fatal;
             end
           endcase
         end
@@ -698,7 +638,7 @@ module ddr3_ddl (
             end
             default: begin
               $error("%10t: DDL: Unexpected command (0x%1x) in 'ST_ZQCL'", $time, ctl_cmd_i);
-              $fatal;
+              #100 $fatal;
             end
           endcase
         end
@@ -712,11 +652,10 @@ module ddr3_ddl (
     if (!reset && ddr_cke_i && !ddr_cs_ni) begin
       if (busy && ready) begin
         $error("%10t: Can not by BUSY && READY at the same time!", $time);
-        $fatal;
+        #100 $fatal;
       end
     end
   end
-
 
   // -- Pretty States in GtkWave -- //
 
@@ -754,7 +693,6 @@ module ddr3_ddl (
     endcase
   end
 
-`endif
+`endif  /* !__icarus */
 
-
-endmodule  // ddr3_ddl
+endmodule  /* ddr3_ddl */

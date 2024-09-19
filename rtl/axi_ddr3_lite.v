@@ -1,207 +1,157 @@
 `timescale 1ns / 100ps
-module axi_ddr3_lite (
-    clock,
-    reset,
+module axi_ddr3_lite #(
+    // Settings for DLL=off mode
+    parameter DDR_FREQ_MHZ = 100,
+    parameter DDR_CL = 6,
+    parameter DDR_CWL = 6,
+    parameter DDR_DLL_OFF = 1,
 
-    configured_o,
+    // These additional delays depend on how many registers are in the data-output
+    // and data-capture paths, of the DDR3 PHY being used.
+    // Note: the 'gw2a_ddr3_phy' requires these to be '3'
+    parameter PHY_WR_DELAY = 1,
+    parameter PHY_RD_DELAY = 1,
 
-    axi_awvalid_i,
-    axi_awready_o,
-    axi_awaddr_i,
-    axi_awid_i,
-    axi_awlen_i,
-    axi_awburst_i,
+    // Trims an additional clock-cycle of latency, if '1'
+    parameter LOW_LATENCY = 1'b1,  // 0 or 1
 
-    axi_wvalid_i,
-    axi_wready_o,
-    axi_wlast_i,
-    axi_wstrb_i,
-    axi_wdata_i,
+    // Uses an the 'wr_strob' signal to clock out the WRITE data from the upstream
+    // FIFO, when enabled (vs. the 'wr_ready' signal, which has one more cycle of
+    // delay).
+    // Note: the 'gw2a_ddr3_phy' requires this to be enabled
+    parameter WR_PREFETCH = 1'b0,
 
-    axi_bvalid_o,
-    axi_bready_i,
-    axi_bresp_o,
-    axi_bid_o,
+    // Enables the (read-) bypass port
+    parameter BYPASS_ENABLE = 1'b0,
 
-    axi_arvalid_i,
-    axi_arready_o,
-    axi_araddr_i,
-    axi_arid_i,
-    axi_arlen_i,
-    axi_arburst_i,
+    // Size of bursts from memory controller perspective
+    parameter PHY_BURSTLEN = 4,
 
-    axi_rvalid_o,
-    axi_rready_i,
-    axi_rlast_o,
-    axi_rresp_o,
-    axi_rid_o,
-    axi_rdata_o,
+    // Address widths
+    parameter DDR_ROW_BITS = 15,
+    localparam RSB = DDR_ROW_BITS - 1,
+    parameter DDR_COL_BITS = 10,
+    localparam CSB = DDR_COL_BITS - 1,
 
-    byp_arvalid_i,  // [optional] fast-read port
-    byp_arready_o,
-    byp_araddr_i,
-    byp_arid_i,
-    byp_arlen_i,
-    byp_arburst_i,
+    localparam ADDRS = DDR_ROW_BITS + DDR_COL_BITS + 4,  // todo ...
+    localparam ASB = ADDRS - 1,  // todo ...
 
-    byp_rready_i,
-    byp_rvalid_o,
-    byp_rlast_o,
-    byp_rresp_o,
-    byp_rid_o,
-    byp_rdata_o,
+    localparam FSM_ADDRS = ADDRS - $clog2(AXI_DAT_BITS / DDR_DQ_WIDTH),
+    localparam FSB = FSM_ADDRS - 1,
+    localparam ADDRS_LSB = ADDRS - FSM_ADDRS,
 
-    dfi_rst_no,
-    dfi_cke_o,
-    dfi_cs_no,
-    dfi_ras_no,
-    dfi_cas_no,
-    dfi_we_no,
-    dfi_odt_o,
-    dfi_bank_o,
-    dfi_addr_o,
-    dfi_wstb_o,
-    dfi_wren_o,
-    dfi_mask_o,
-    dfi_data_o,
-    dfi_rden_o,
-    dfi_rvld_i,
-    dfi_last_i,
-    dfi_data_i
+    // Data-path widths
+    parameter DDR_DQ_WIDTH = 16,
+    parameter DDR_DM_WIDTH = 2,
+
+    parameter PHY_DAT_BITS = DDR_DQ_WIDTH * 2,
+    localparam MSB = PHY_DAT_BITS - 1,
+    parameter PHY_STB_BITS = DDR_DM_WIDTH * 2,
+    localparam SSB = PHY_STB_BITS - 1,
+
+    // AXI4 interconnect properties
+    parameter AXI_ID_WIDTH = 4,
+    localparam ISB = AXI_ID_WIDTH - 1,
+
+    parameter MEM_ID_WIDTH = 4,
+    localparam TSB = AXI_ID_WIDTH - 1,
+
+    // todo: ...
+    localparam AXI_DAT_BITS = PHY_DAT_BITS,
+    localparam AXI_STB_BITS = PHY_STB_BITS,
+
+    // todo: ...
+    parameter  DATA_FIFO_BYPASS = 0,
+    localparam CTRL_FIFO_DEPTH  = 16,
+    localparam DATA_FIFO_DEPTH  = 512,
+
+    // Determines whether to wait for all of the write-data, before issuing a
+    // write command.
+    // Note: note required if upstream source is fast and reliable.
+    parameter USE_PACKET_FIFOS = 1
+) (
+    input arst_n,
+
+    input clock,
+    input reset,
+
+    output configured_o,
+
+    // Memory-Controller AXI4 Interface
+    input axi_awvalid_i,
+    output axi_awready_o,
+    input [ASB:0] axi_awaddr_i,
+    input [ISB:0] axi_awid_i,
+    input [7:0] axi_awlen_i,
+    input [1:0] axi_awburst_i,
+
+    input axi_wvalid_i,
+    output axi_wready_o,
+    input axi_wlast_i,
+    input [SSB:0] axi_wstrb_i,
+    input [MSB:0] axi_wdata_i,
+
+    output axi_bvalid_o,
+    input axi_bready_i,
+    output [1:0] axi_bresp_o,
+    output [ISB:0] axi_bid_o,
+
+    input axi_arvalid_i,
+    output axi_arready_o,
+    input [ASB:0] axi_araddr_i,
+    input [ISB:0] axi_arid_i,
+    input [7:0] axi_arlen_i,
+    input [1:0] axi_arburst_i,
+
+    output axi_rvalid_o,
+    input axi_rready_i,
+    output axi_rlast_o,
+    output [1:0] axi_rresp_o,
+    output [ISB:0] axi_rid_o,
+    output [MSB:0] axi_rdata_o,
+
+    input byp_arvalid_i,  // [optional] fast-read port
+    output byp_arready_o,
+    input [ASB:0] byp_araddr_i,
+    input [ISB:0] byp_arid_i,
+    input [7:0] byp_arlen_i,
+    input [1:0] byp_arburst_i,
+
+    input byp_rready_i,
+    output byp_rvalid_o,
+    output byp_rlast_o,
+    output [1:0] byp_rresp_o,
+    output [ISB:0] byp_rid_o,
+    output [MSB:0] byp_rdata_o,
+
+    output dfi_align_o,
+    input  dfi_calib_i,
+
+    // DDR3 PHY-Interface Signals
+    output dfi_rst_no,
+    output dfi_cke_o,
+    output dfi_cs_no,
+    output dfi_ras_no,
+    output dfi_cas_no,
+    output dfi_we_no,
+    output dfi_odt_o,
+    output [2:0] dfi_bank_o,
+    output [RSB:0] dfi_addr_o,
+    output dfi_wstb_o,
+    output dfi_wren_o,
+    output [SSB:0] dfi_mask_o,
+    output [MSB:0] dfi_data_o,
+    output dfi_rden_o,
+    input dfi_rvld_i,
+    input dfi_last_i,
+    input [MSB:0] dfi_data_i
 );
 
-  // Settings for DLL=off mode
-  parameter DDR_FREQ_MHZ = 100;
-  parameter DDR_CL = 6;
-  parameter DDR_CWL = 6;
-  parameter DDR_DLL_OFF = 1;
+  `include "axi_defs.vh"
 
-  // These additional delays depend on how many registers are in the data-output
-  // and data-capture paths, of the DDR3 PHY being used.
-  // Note: the 'gw2a_ddr3_phy' requires these to be '3'
-  parameter PHY_WR_DELAY = 1;
-  parameter PHY_RD_DELAY = 1;
+  // -- Global Signals and State -- //
 
-  // Trims an additional clock-cycle of latency, if '1'
-  parameter LOW_LATENCY = 1'b1;  // 0 or 1
-
-  // Uses an the 'wr_strob' signal to clock out the WRITE data from the upstream
-  // FIFO, when enabled (vs. the 'wr_ready' signal, which has one more cycle of
-  // delay).
-  // Note: the 'gw2a_ddr3_phy' requires this to be enabled
-  parameter WR_PREFETCH = 1'b0;
-
-  // Enables the (read-) bypass port
-  parameter BYPASS_ENABLE = 1'b0;
-
-  // Size of bursts from memory controller perspective
-  parameter PHY_BURSTLEN = 4;
-
-  // Address widths
-  parameter DDR_ROW_BITS = 15;
-  localparam RSB = DDR_ROW_BITS - 1;
-  parameter DDR_COL_BITS = 10;
-  localparam CSB = DDR_COL_BITS - 1;
-
-  localparam ADDRS = DDR_ROW_BITS + DDR_COL_BITS + 4;  // todo ...
-  localparam ASB = ADDRS - 1;  // todo ...
-
-  localparam FSM_ADDRS = ADDRS - $clog2(AXI_DAT_BITS / DDR_DQ_WIDTH);
-  localparam FSB = FSM_ADDRS - 1;
-  localparam ADDRS_LSB = ADDRS - FSM_ADDRS;
-
-  // Data-path widths
-  parameter DDR_DQ_WIDTH = 16;
-  parameter DDR_DM_WIDTH = 2;
-
-  parameter PHY_DAT_BITS = DDR_DQ_WIDTH * 2;
-  localparam MSB = PHY_DAT_BITS - 1;
-  parameter PHY_STB_BITS = DDR_DM_WIDTH * 2;
-  localparam SSB = PHY_STB_BITS - 1;
-
-  // AXI4 interconnect properties
-  parameter AXI_ID_WIDTH = 4;
-  localparam ISB = AXI_ID_WIDTH - 1;
-
-  parameter MEM_ID_WIDTH = 4;
-  localparam TSB = AXI_ID_WIDTH - 1;
-
-  // todo: ...
-  localparam AXI_DAT_BITS = PHY_DAT_BITS;
-  localparam AXI_STB_BITS = PHY_STB_BITS;
-
-  // todo: ...
-  localparam CTRL_FIFO_DEPTH = 16;
-  localparam DATA_FIFO_DEPTH = 512;
-
-
-  input clock;
-  input reset;
-
-  output configured_o;
-
-  input axi_awvalid_i;  // AXI4 Write Address Port
-  output axi_awready_o;
-  input [ASB:0] axi_awaddr_i;
-  input [ISB:0] axi_awid_i;
-  input [7:0] axi_awlen_i;
-  input [1:0] axi_awburst_i;
-  input axi_wvalid_i;  // AXI4 Write Data Port
-  output axi_wready_o;
-  input [MSB:0] axi_wdata_i;
-  input [SSB:0] axi_wstrb_i;
-  input axi_wlast_i;
-  output axi_bvalid_o;  // AXI4 Write Response
-  input axi_bready_i;
-  output [1:0] axi_bresp_o;
-  output [ISB:0] axi_bid_o;
-
-  input axi_arvalid_i;  // AXI4 Read Address Port
-  output axi_arready_o;
-  input [ASB:0] axi_araddr_i;
-  input [ISB:0] axi_arid_i;
-  input [7:0] axi_arlen_i;
-  input [1:0] axi_arburst_i;
-  input axi_rready_i;  // AXI4 Read Data Port
-  output axi_rvalid_o;
-  output [MSB:0] axi_rdata_o;
-  output [1:0] axi_rresp_o;
-  output [ISB:0] axi_rid_o;
-  output axi_rlast_o;
-
-  input byp_arvalid_i;  // AXI4 Fast-Read Address Port
-  output byp_arready_o;
-  input [ASB:0] byp_araddr_i;
-  input [ISB:0] byp_arid_i;
-  input [7:0] byp_arlen_i;
-  input [1:0] byp_arburst_i;
-  input byp_rready_i;  // AXI4 Fast-Read Data Port
-  output byp_rvalid_o;
-  output [MSB:0] byp_rdata_o;
-  output [1:0] byp_rresp_o;
-  output [ISB:0] byp_rid_o;
-  output byp_rlast_o;
-
-  output dfi_rst_no;
-  output dfi_cke_o;
-  output dfi_cs_no;
-  output dfi_ras_no;
-  output dfi_cas_no;
-  output dfi_we_no;
-  output dfi_odt_o;
-  output [2:0] dfi_bank_o;
-  output [RSB:0] dfi_addr_o;
-  output dfi_wstb_o;
-  output dfi_wren_o;
-  output [SSB:0] dfi_mask_o;
-  output [MSB:0] dfi_data_o;
-  output dfi_rden_o;
-  input dfi_rvld_i;
-  input dfi_last_i;
-  input [MSB:0] dfi_data_i;
-
-
-  reg enable;
+  reg en_q;
 
   // AXI <-> FSM signals
   wire fsm_wrreq, fsm_wrlst, fsm_wrack, fsm_wrerr;
@@ -231,13 +181,11 @@ module axi_ddr3_lite (
   wire by_valid, by_ready, by_last;
   wire [MSB:0] by_data;
 
-
-  assign configured_o = enable;
+  assign configured_o = en_q;
 
   always @(posedge clock) begin
-    enable <= ~reset & cfg_run;
+    en_q <= ~reset & cfg_run;
   end
-
 
   // -- AXI Requests to DDR3 Requests -- //
 
@@ -248,18 +196,19 @@ module axi_ddr3_lite (
       .AXI_ID_WIDTH(AXI_ID_WIDTH),
       .MEM_ID_WIDTH(MEM_ID_WIDTH),
       .CTRL_FIFO_DEPTH(CTRL_FIFO_DEPTH),
-      .DATA_FIFO_DEPTH(DATA_FIFO_DEPTH)
-  ) ddr3_axi_ctrl_inst (
+      .DATA_FIFO_BYPASS(DATA_FIFO_BYPASS),
+      .DATA_FIFO_DEPTH(DATA_FIFO_DEPTH),
+      .USE_PACKET_FIFOS(USE_PACKET_FIFOS)
+  ) U_AXI_CTRL (
       .clock(clock),
       .reset(reset),
-      // .reset(~enable),
 
       .axi_awvalid_i(axi_awvalid_i),  // AXI4 Write Address Port
       .axi_awready_o(axi_awready_o),
       .axi_awid_i(axi_awid_i),
       .axi_awlen_i(axi_awlen_i),
       .axi_awburst_i(axi_awburst_i),
-      .axi_awsize_i(3'b010),
+      .axi_awsize_i(BURST_SIZE_4B),
       .axi_awaddr_i(axi_awaddr_i[ASB:ADDRS_LSB]),
 
       .axi_wvalid_i(axi_wvalid_i),  // AXI4 Write Data Port
@@ -278,7 +227,7 @@ module axi_ddr3_lite (
       .axi_arid_i(axi_arid_i),
       .axi_arlen_i(axi_arlen_i),
       .axi_arburst_i(axi_arburst_i),
-      .axi_arsize_i(3'b010),
+      .axi_arsize_i(BURST_SIZE_4B),
       .axi_araddr_i(axi_araddr_i[ASB:ADDRS_LSB]),
 
       .axi_rvalid_o(axi_rvalid_o),
@@ -314,16 +263,23 @@ module axi_ddr3_lite (
       .mem_rdata_i(rd_data)
   );
 
+  // -- DDR3 Memory Controller FSM -- //
 
-  // -- DDR3 Memory Controller -- //
+  wire [4:0] fsm_state_w, fsm_snext_w;
+
   ddr3_fsm #(
       .DDR_ROW_BITS(DDR_ROW_BITS),
       .DDR_COL_BITS(DDR_COL_BITS),
       .DDR_FREQ_MHZ(DDR_FREQ_MHZ),
       .ADDRS(FSM_ADDRS)
-  ) ddr3_fsm_inst (
+  ) U_DDR3_FSM (
+      .arst_n(arst_n),
+
       .clock(clock),
-      .reset(~enable),
+      .reset(~en_q),
+
+      .state_o(fsm_state_w),
+      .snext_o(fsm_snext_w),
 
       .mem_wrreq_i(fsm_wrreq),  // Bus -> Controller requests
       .mem_wrlst_i(fsm_wrlst),
@@ -362,9 +318,9 @@ module axi_ddr3_lite (
       .ADDRS(FSM_ADDRS),
       .REQID(AXI_ID_WIDTH),
       .BYPASS_ENABLE(BYPASS_ENABLE)
-  ) ddr3_bypass_inst (
+  ) U_BYPASS (
       .clock(clock),
-      .reset(~enable),
+      .reset(~en_q),
 
       .axi_arvalid_i(byp_arvalid_i),  // AXI4 fast-path, read-only port
       .axi_arready_o(byp_arready_o),
@@ -385,9 +341,9 @@ module axi_ddr3_lite (
       .ddl_rlast_i (by_last),
       .ddl_rdata_i (by_data),
 
-      .byp_run_i(ctl_run),  // Connects to the DDL
+      .byp_run_i(cfg_run),  // Connects to the DDL
       .byp_req_o(ctl_req),
-      .byp_seq_o(ctl_seq),
+      .byp_seq_o(ctl_seq),  // Todo ...
       .byp_ref_i(cfg_ref),
       .byp_rdy_i(ctl_rdy),
       .byp_cmd_o(ctl_cmd),
@@ -409,7 +365,6 @@ module axi_ddr3_lite (
       .ctl_rdata_o (rd_data)
   );
 
-
   // -- Coordinate with the DDR3 to PHY Interface -- //
 
   ddr3_ddl #(
@@ -422,16 +377,14 @@ module axi_ddr3_lite (
       .LOW_LATENCY (LOW_LATENCY),
       .DFI_DQ_WIDTH(PHY_DAT_BITS),
       .DFI_DM_WIDTH(PHY_STB_BITS)
-  ) ddr3_ddl_inst (
+  ) U_DDL1 (
       .clock(clock),
       .reset(reset),
 
       .ddr_cke_i(dfi_cke_o),
       .ddr_cs_ni(dfi_cs_no),
 
-      .ctl_run_o(ctl_run),
       .ctl_req_i(ctl_req),
-      .ctl_seq_i(ctl_seq),
       .ctl_rdy_o(ctl_rdy),
       .ctl_cmd_i(ctl_cmd),
       .ctl_ba_i (ctl_ba),
@@ -466,7 +419,7 @@ module axi_ddr3_lite (
   ddr3_cfg #(
       .DDR_FREQ_MHZ(DDR_FREQ_MHZ),
       .DDR_ROW_BITS(DDR_ROW_BITS)
-  ) ddr3_cfg_inst (
+  ) U_DDR3_CFG (
       .clock(clock),
       .reset(reset),
 
@@ -474,6 +427,9 @@ module axi_ddr3_lite (
       .dfi_cke_o (dfi_cke_o),
       .dfi_cs_no (dfi_cs_no),
       .dfi_odt_o (dfi_odt_o),
+
+      .dfi_align_o(dfi_align_o),
+      .dfi_calib_i(dfi_calib_i),
 
       .ctl_req_o(cfg_req),  // Memory controller signals
       .ctl_run_o(cfg_run),  // When initialisation has completed
@@ -485,4 +441,4 @@ module axi_ddr3_lite (
   );
 
 
-endmodule  // axi_ddr3_lite
+endmodule  /* axi_ddr3_lite */
