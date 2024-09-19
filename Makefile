@@ -1,5 +1,6 @@
 .PHONY:	all sim simall doc clean
 all:
+	@make -C lib all
 	@make -C bench all
 	@make -C rtl all
 	@make -C rtl/fifo all

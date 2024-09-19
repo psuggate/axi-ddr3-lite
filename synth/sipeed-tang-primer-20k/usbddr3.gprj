@@ -24,26 +24,26 @@
         <File path="../../rtl/misc/axis_skid.v" type="file.verilog" enable="1"/>
         <File path="../../rtl/misc/shift_register.v" type="file.verilog" enable="1"/>
         <File path="../../rtl/misc/skid_loader.v" type="file.verilog" enable="1"/>
+        <File path="../../lib/misc-verilog-cores/rtl/arch/gowin_rpll.v" type="file.verilog" enable="1"/>
+        <File path="../../lib/misc-verilog-cores/rtl/fifo/afifo16.v" type="file.verilog" enable="1"/>
+        <File path="../../lib/misc-verilog-cores/rtl/fifo/afifo_gray.v" type="file.verilog" enable="1"/>
+        <File path="../../lib/misc-verilog-cores/rtl/fifo/axis_afifo.v" type="file.verilog" enable="1"/>
+        <File path="../../lib/misc-verilog-cores/rtl/fifo/axis_sfifo.v" type="file.verilog" enable="1"/>
+        <File path="../../lib/misc-verilog-cores/rtl/fifo/fifo_dc_gray.v" type="file.verilog" enable="1"/>
+        <File path="../../lib/misc-verilog-cores/rtl/usb/ep_bulk_in.v" type="file.verilog" enable="1"/>
+        <File path="../../lib/misc-verilog-cores/rtl/usb/ep_bulk_out.v" type="file.verilog" enable="1"/>
+        <File path="../../lib/misc-verilog-cores/rtl/usb/ulpi_decoder.v" type="file.verilog" enable="1"/>
+        <File path="../../lib/misc-verilog-cores/rtl/usb/ulpi_encoder.v" type="file.verilog" enable="1"/>
+        <File path="../../lib/misc-verilog-cores/rtl/usb/ulpi_reset.v" type="file.verilog" enable="1"/>
+        <File path="../../lib/misc-verilog-cores/rtl/usb/stdreq.v" type="file.verilog" enable="1"/>
+        <File path="../../lib/misc-verilog-cores/rtl/usb/protocol.v" type="file.verilog" enable="1"/>
+        <File path="../../lib/misc-verilog-cores/rtl/usb/line_state.v" type="file.verilog" enable="1"/>
+        <File path="../../lib/misc-verilog-cores/rtl/usb/usb_ulpi_top.v" type="file.verilog" enable="1"/>
+        <File path="../../lib/misc-verilog-cores/rtl/axis/axis_async_fifo.v" type="file.verilog" enable="1"/>
+        <File path="../../lib/misc-verilog-cores/rtl/axis/rtl/axis/axis_fifo.v" type="file.verilog" enable="1"/>
         <File path="memreq.v" type="file.verilog" enable="1"/>
         <File path="ddr3_top.v" type="file.verilog" enable="1"/>
         <File path="usb_ddr3_top.v" type="file.verilog" enable="1"/>
-        <File path="../../lib/axis_usbd/rtl/arch/gowin_rpll.v" type="file.verilog" enable="1"/>
-        <File path="../../lib/axis_usbd/rtl/fifo/afifo16.v" type="file.verilog" enable="1"/>
-        <File path="../../lib/axis_usbd/rtl/fifo/afifo_gray.v" type="file.verilog" enable="1"/>
-        <File path="../../lib/axis_usbd/rtl/fifo/axis_afifo.v" type="file.verilog" enable="1"/>
-        <File path="../../lib/axis_usbd/rtl/fifo/axis_sfifo.v" type="file.verilog" enable="1"/>
-        <File path="../../lib/axis_usbd/rtl/fifo/fifo_dc_gray.v" type="file.verilog" enable="1"/>
-        <File path="../../lib/axis_usbd/rtl/usb/ep_bulk_in.v" type="file.verilog" enable="1"/>
-        <File path="../../lib/axis_usbd/rtl/usb/ep_bulk_out.v" type="file.verilog" enable="1"/>
-        <File path="../../lib/axis_usbd/rtl/usb/ulpi_decoder.v" type="file.verilog" enable="1"/>
-        <File path="../../lib/axis_usbd/rtl/usb/ulpi_encoder.v" type="file.verilog" enable="1"/>
-        <File path="../../lib/axis_usbd/rtl/usb/ulpi_reset.v" type="file.verilog" enable="1"/>
-        <File path="../../lib/axis_usbd/rtl/usb/stdreq.v" type="file.verilog" enable="1"/>
-        <File path="../../lib/axis_usbd/rtl/usb/protocol.v" type="file.verilog" enable="1"/>
-        <File path="../../lib/axis_usbd/rtl/usb/line_state.v" type="file.verilog" enable="1"/>
-        <File path="../../lib/axis_usbd/rtl/usb/usb_ulpi_top.v" type="file.verilog" enable="1"/>
-        <File path="/home/patrick/git/verilog-axis/rtl/axis_async_fifo.v" type="file.verilog" enable="1"/>
-        <File path="/home/patrick/git/verilog-axis/rtl/axis_fifo.v" type="file.verilog" enable="1"/>
         <File path="gw2a-tang-primer.cst" type="file.cst" enable="1"/>
         <File path="gw2a-tang-primer.sdc" type="file.sdc" enable="1"/>
     </FileList>

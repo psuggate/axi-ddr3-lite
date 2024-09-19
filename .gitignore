@@ -3,3 +3,4 @@
 *.pdf
 impl/
 *.user
+lib/misc-verilog-cores/
