@@ -7,10 +7,11 @@ upload:
 DIR	:= ../../rtl
 OPT	:= -g2005-sv -D__icarus -Wall -I$(DIR)/ -I../../bench/
 
-LIB	:= $(wildcard $(DIR)/*.v $(DIR)/arch/*.v $(DIR)/misc/*.v $(DIR)/fifo/*.v)
+LIB	:= $(wildcard $(DIR)/*.v $(DIR)/arch/*.v $(DIR)/misc/*.v $(DIR)/extra/*.v)
+
 SIM	:= $(wildcard ../../bench/arch/*.v) $(wildcard ../../bench/*.v)
 SRC	:= $(wildcard *.v)
-RTL	:= $(filter-out %_tb.v, $(SRC)) $(filter-out %_tb.v, $(LIB)) $(filter-out %_tb.v, $(SIM))
+RTL	:= $(filter-out %_tb.v, $(SRC) $(LIB) $(SIM))
 TB	:= $(filter %_tb.v, $(SRC))
 OUT	:= $(TB:%.v=%.out)
 VCD	:= $(OUT:%.out=%.vcd)

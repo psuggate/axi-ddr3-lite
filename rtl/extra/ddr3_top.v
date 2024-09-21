@@ -7,16 +7,17 @@
 `define __gowin_for_the_win
 `endif  /* !__icarus */
 module ddr3_top #(
-    parameter SRAM_BYTES = 2048,
-    parameter DATA_WIDTH = 32,
-    parameter DATA_FIFO_BYPASS = 0,
+    parameter SRAM_BYTES   = 2048,
+    parameter DATA_WIDTH   = 32,
+    parameter DFIFO_BYPASS = 0,
 
-    // Capture telemetry for the DDR3 core state, if enabled
-    parameter TELEMETRY = 1,
-    parameter TELE_UART = 1,
-    parameter TELE_SIZE = 1024,
-    localparam TBITS = $clog2(TELE_SIZE),
-    parameter ENDPOINT = 2,
+    // Default clock-setup for 125 MHz DDR3 clock, from 27 MHz source
+    parameter CLK_IN_FREQ  = "27",
+    parameter CLK_IDIV_SEL = 3,   // in  / 4
+    parameter CLK_FBDV_SEL = 36,  //     x37
+    parameter CLK_ODIV_SEL = 4,   // out / 4 (x2 DDR3 clock)
+    parameter CLK_SDIV_SEL = 2,   //     / 2
+    parameter DDR_FREQ_MHZ = 125, // out: 249.75 / 2 MHz
 
     // Settings for DLL=off mode
     parameter DDR_CL = 6,
@@ -25,37 +26,24 @@ module ddr3_top #(
     parameter PHY_RD_DELAY = 3,
 
     // Trims an additional clock-cycle of latency, if '1'
-    parameter LOW_LATENCY = 1'b0,   // 0 or 1
-    parameter WR_PREFETCH = 1'b0,   // 0 or 1
-    parameter INVERT_MCLK = 0,
-    parameter INVERT_DCLK = 0,
+    parameter LOW_LATENCY = 1'b0,  // 0 or 1
+    parameter WR_PREFETCH = 1'b0,  // 0 or 1
+    parameter RD_FASTPATH = 1'b0,  // 0 or 1
+    parameter INVERT_MCLK = 0,  // Todo: unfinished, and to allow extra shifts
+    parameter INVERT_DCLK = 0,  // Todo: unfinished, and to allow extra shifts
     parameter WRITE_DELAY = 2'b00,
     parameter CLOCK_SHIFT = 2'b10
 ) (
-    input clk_26,
+    input osc_in,  // Default: 27.0 MHz
     input arst_n,  // 'S2' button for async-reset
 
     input bus_clock,
     input bus_reset,
 
-    // Transaction Logger & Telemetry [optional]
-    input tele_select_i,
-    input tele_start_i,
-    output [TBITS:0] tele_level_o,
-    output tele_tvalid_o,
-    input tele_tready_i,
-    output tele_tlast_o,
-    output tele_tkeep_o,
-    output [7:0] tele_tdata_o,
-
-    // Debug UART signals [optional]
-    input  send_ni,
-    input  uart_rx_i,
-    output uart_tx_o,
-
     output ddr3_conf_o,
-    output ddr_clock_o,
     output ddr_reset_o,
+    output ddr_clock_o,
+    output ddr_clkx2_o,
 
     // From USB or SPI
     input s_tvalid,
@@ -89,13 +77,6 @@ module ddr3_top #(
     inout [15:0] ddr_dq
 );
 
-  localparam DDR_FREQ_MHZ = 100;
-
-  localparam IDIV_SEL = 3;
-  localparam FBDIV_SEL = 28;
-  localparam ODIV_SEL = 4;
-  localparam SDIV_SEL = 2;
-
   // -- Constants -- //
 
   // Data-path widths
@@ -128,12 +109,12 @@ module ddr3_top #(
   // -- DDR3 Core and AXI Interconnect Signals -- //
 
   // AXI4 Signals to/from the Memory Controller
-  wire awvalid, wvalid, wlast, bready, arvalid, rready_w;
-  wire awready, wready, bvalid, arready, rvalid_w, rlast_w;
-  wire [ISB:0] awid, arid, bid, rid_w;
-  wire [7:0] awlen, arlen;
-  wire [1:0] awburst, arburst;
-  wire [ASB:0] awaddr, araddr;
+  wire awvalid, wvalid, wlast, bready, arvalid_w, rready_w;
+  wire awready, wready, bvalid, arready_w, rvalid_w, rlast_w;
+  wire [ISB:0] awid, arid_w, bid, rid_w;
+  wire [7:0] awlen, arlen_w;
+  wire [1:0] awburst, arburst_w;
+  wire [ASB:0] awaddr, araddr_w;
   wire [BSB:0] wstrb;
   wire [1:0] bresp, rresp_w;
   wire [MSB:0] rdata_w, wdata;
@@ -149,8 +130,8 @@ module ddr3_top #(
   wire dfi_calib, dfi_align;
   wire [2:0] dfi_shift;
 
-  wire clk_200, clk_100, locked;
-  wire ddr_clk, clock, reset;
+  wire clk_x2, clk_x1, locked;
+  wire clock, reset;
 
   // TODO: set up this clock, as the DDR3 timings are quite fussy ...
 
@@ -160,12 +141,14 @@ module ddr3_top #(
   ///
   reg dclk = 1, mclk = 0, lock_q = 0;
 
-  assign clk_200 = dclk;
-  assign clk_100 = mclk;
-  assign locked  = lock_q;
+  assign clk_x2 = dclk;
+  assign clk_x1 = mclk;
+  assign locked = lock_q;
 
-  always #2.5 dclk <= ~dclk;
-  always #5.0 mclk <= ~mclk;
+  always #2 dclk <= ~dclk;
+  always #4 mclk <= ~mclk;
+  // always #2.5 dclk <= ~dclk;
+  // always #5.0 mclk <= ~mclk;
   initial #20 lock_q = 0;
 
   always @(posedge mclk or negedge arst_n) begin
@@ -180,26 +163,27 @@ module ddr3_top #(
 
   // So 27.0 MHz divided by 4, then x29 = 195.75 MHz.
   gw2a_rpll #(
-      .FCLKIN("27"),
-      .IDIV_SEL(IDIV_SEL),
-      .FBDIV_SEL(FBDIV_SEL),
-      .ODIV_SEL(ODIV_SEL),
-      .DYN_SDIV_SEL(SDIV_SEL)
+      .FCLKIN(CLK_IN_FREQ),
+      .IDIV_SEL(CLK_IDIV_SEL),
+      .FBDIV_SEL(CLK_FBDV_SEL),
+      .ODIV_SEL(CLK_ODIV_SEL),
+      .DYN_SDIV_SEL(CLK_SDIV_SEL)
   ) U_rPLL1 (
-      .clkout(clk_200),  // 200 MHz
-      .clockd(clk_100),  // 100 MHz
+      .clkout(clk_x2),  // Default: 249.75  MHz
+      .clockd(clk_x1),  // Default: 124.875 MHz
       .lock  (locked),
-      .clkin (clk_26),
+      .clkin (osc_in),
       .reset (~arst_n)
   );
 
 `endif  /* !__icarus */
 
-  assign ddr_clock_o = clock;
-  assign ddr_reset_o = reset;
+  assign ddr_reset_o = ~locked;
+  assign ddr_clock_o = clk_x1;
+  assign ddr_clkx2_o = clk_x2;
 
-  assign ddr_clk = clk_200;
-  assign clock = clk_100;
+  // Internal clock assigments
+  assign clock = clk_x1;
   assign reset = ~locked;
 
   // -- Processes & Dispatches Memory Requests -- //
@@ -250,12 +234,12 @@ module ddr3_top #(
       .bid_i(bid),
 
       // Read -address & -data ports(), to/from the DDR3 controller
-      .arvalid_o(arvalid),
-      .arready_i(arready),
-      .araddr_o(araddr),
-      .arid_o(arid),
-      .arlen_o(arlen),
-      .arburst_o(arburst),
+      .arvalid_o(arvalid_w),
+      .arready_i(arready_w),
+      .araddr_o(araddr_w),
+      .arid_o(arid_w),
+      .arlen_o(arlen_w),
+      .arburst_o(arburst_w),
 
       .rvalid_i(rvalid_w),
       .rready_o(rready_w),
@@ -270,9 +254,42 @@ module ddr3_top #(
   //  DDR Core Under New Test
   ///
 
+  localparam BYPASS_ENABLE = RD_FASTPATH;
+
   wire [QSB:0] dfi_dqs_p, dfi_dqs_n;
   wire [1:0] dfi_wrdly;
   wire [2:0] dfi_rddly;
+
+  wire crvalid, crready, cvalid, cready, clast;
+  wire [1:0] crburst, cresp;
+  wire [  7:0] crlen;
+  wire [ASB:0] craddr;
+  wire [ISB:0] crid, cid;
+  wire [MSB:0] cdata;
+
+  wire arvalid, arready, rvalid, rready, rlast;
+  wire [1:0] arburst, rresp;
+  wire [  7:0] arlen;
+  wire [ASB:0] araddr;
+  wire [ISB:0] arid, rid;
+  wire [MSB:0] rdata;
+
+  assign crvalid = BYPASS_ENABLE ? arvalid_w : 1'b0;
+  assign crid    = BYPASS_ENABLE ? arid_w : {REQID{1'bx}};
+  assign crlen   = BYPASS_ENABLE ? arlen_w : 8'bx;
+  assign crburst = BYPASS_ENABLE ? arburst_w : 2'bx;
+  assign craddr  = BYPASS_ENABLE ? araddr_w : {ADDRS{1'bx}};
+
+  assign arvalid = BYPASS_ENABLE ? 1'b0 : arvalid_w;
+  assign arid    = BYPASS_ENABLE ? {REQID{1'bx}} : arid_w;
+  assign arlen   = BYPASS_ENABLE ? 8'bx : arlen_w;
+  assign arburst = BYPASS_ENABLE ? 2'bx : arburst_w;
+  assign araddr  = BYPASS_ENABLE ? {ADDRS{1'bx}} : araddr_w;
+
+  assign arready_w = BYPASS_ENABLE ? crready : arready;
+
+  assign rready  = BYPASS_ENABLE ? 1'b0 : rready_w;
+  assign cready  = BYPASS_ENABLE ? rready_w : 1'b0;
 
   axi_ddr3_lite #(
       .DDR_FREQ_MHZ    (DDR_FREQ_MHZ),
@@ -285,8 +302,8 @@ module ddr3_top #(
       .LOW_LATENCY     (LOW_LATENCY),
       .AXI_ID_WIDTH    (REQID),
       .MEM_ID_WIDTH    (REQID),
-      .DATA_FIFO_BYPASS(DATA_FIFO_BYPASS),
-      .BYPASS_ENABLE   (0),
+      .DFIFO_BYPASS    (DFIFO_BYPASS),
+      .BYPASS_ENABLE   (BYPASS_ENABLE),
       .USE_PACKET_FIFOS(0)
   ) U_LITE (
       .arst_n(arst_n),  // Global, asynchronous reset
@@ -328,19 +345,19 @@ module ddr3_top #(
       .axi_rid_o(rid_w),
       .axi_rdata_o(rdata_w),
 
-      .byp_arvalid_i(1'b0),  // [optional] fast-read port
-      .byp_arready_o(),
-      .byp_araddr_i('bx),
-      .byp_arid_i('bx),
-      .byp_arlen_i('bx),
-      .byp_arburst_i('bx),
+      .byp_arvalid_i(crvalid),  // [optional] fast-read port
+      .byp_arready_o(crready),
+      .byp_araddr_i(craddr),
+      .byp_arid_i(crid),
+      .byp_arlen_i(crlen),
+      .byp_arburst_i(crburst),
 
-      .byp_rready_i(1'b0),
-      .byp_rvalid_o(),
-      .byp_rlast_o(),
-      .byp_rresp_o(),
-      .byp_rid_o(),
-      .byp_rdata_o(),
+      .byp_rready_i(cready),
+      .byp_rvalid_o(cvalid),
+      .byp_rlast_o(clast),
+      .byp_rresp_o(cresp),
+      .byp_rid_o(cid),
+      .byp_rdata_o(cdata),
 
       .dfi_align_o(dfi_align),
       .dfi_calib_i(dfi_calib),
@@ -374,20 +391,6 @@ module ddr3_top #(
   // GoWin Global System Reset signal tree.
   GSR GSR (.GSRI(1'b1));
 
-  /*
-  reg cal_q;
-
-  assign dfi_align = cal_q; // ddr3_conf_o;
-
-  always @(posedge clock) begin
-    if (reset) begin
-      cal_q <= 1'b0;
-    end else if (ddr3_conf_o && !dfi_calib) begin
-      cal_q <= 1'b1;
-    end
-  end
-  */
-
   gw2a_ddr3_phy #(
       .WR_PREFETCH(WR_PREFETCH),
       .DDR3_WIDTH (16),
@@ -399,7 +402,7 @@ module ddr3_top #(
   ) U_PHY1 (
       .clock  (clock),
       .reset  (reset),
-      .clk_ddr(ddr_clk),
+      .clk_ddr(clk_x2),
 
       .dfi_rst_ni(dfi_rst_n),
       .dfi_cke_i (dfi_cke),
@@ -453,7 +456,7 @@ module ddr3_top #(
   ) U_PHY1 (
       .clock  (clock),
       .reset  (reset),
-      .clk_ddr(ddr_clk),
+      .clk_ddr(clk_x2),
 
       .dfi_rst_ni(dfi_rst_n),
       .dfi_cke_i (dfi_cke),
@@ -493,175 +496,6 @@ module ddr3_top #(
   );
 
 `endif  /* !__gowin_for_the_win */
-
-
-  //
-  //  [Optional] DDR3 Telemetry Capture
-  ///
-  reg estart_q;
-  wire ecycle_w, estart_w, evalid_w, eready_w, elast_w, ekeep_w;
-  wire [TBITS:0] elevel_w;
-  wire [7:0] edata_w;
-
-  generate
-    if (TELEMETRY) begin : g_ddr3_telemetry
-
-      wire [2:0] ddl_state_w = U_LITE.U_DDL1.state;
-      wire [4:0] fsm_state_w = U_LITE.fsm_state_w;
-      wire [4:0] fsm_snext_w = U_LITE.fsm_snext_w;
-      wire cfg_run = U_LITE.cfg_run;
-      wire cfg_req = U_LITE.cfg_req;
-      wire cfg_ref = U_LITE.cfg_ref;
-      wire [2:0] cfg_cmd = U_LITE.cfg_cmd;
-
-      ddr3_telemetry #(
-          .ENDPOINT(ENDPOINT),
-          .FIFO_DEPTH(TELE_SIZE),
-          .PACKET_SIZE(8)  // Note: 8x 16b words per USB (BULK IN) packet
-      ) U_TELEMETRY3 (
-          .clock(clock),
-          .reset(reset),
-
-          .enable_i(1'b1),
-          .select_i(ecycle_w),
-          .start_i (estart_q),
-          .endpt_i (ENDPOINT),
-          .level_o (elevel_w),
-
-          .fsm_state_i(fsm_state_w),
-          .fsm_snext_i(fsm_snext_w),
-          .ddl_state_i(ddl_state_w),
-          .cfg_rst_ni (dfi_rst_n),
-          .cfg_run_i  (cfg_run),
-          .cfg_req_i  (cfg_req),
-          .cfg_ref_i  (cfg_ref),
-          .cfg_cmd_i  (cfg_cmd),
-
-          .m_tvalid(evalid_w),
-          .m_tready(eready_w),
-          .m_tlast (elast_w),
-          .m_tkeep (ekeep_w),
-          .m_tdata (edata_w)
-      );
-
-    end
-  endgenerate
-
-  generate
-    if (!TELEMETRY || TELE_UART) begin : g_ddr3_no_telem
-
-      assign tele_level_o  = TELEMETRY ? elevel_w : 0;
-      assign tele_tvalid_o = 1'b0;
-      assign tele_tkeep_o  = 1'b0;
-      assign tele_tlast_o  = 1'b0;
-      assign tele_tdata_o  = 1'b0;
-
-    end else begin : g_telem_no_uart
-
-      assign eready_w = tele_tready_i;
-      assign estart_w = tele_start_i;
-      assign ecycle_w = tele_select_i;
-
-      assign tele_level_o = elevel_w;
-      assign tele_tvalid_o = evalid_w;
-      assign tele_tkeep_o = ekeep_w;
-      assign tele_tlast_o = elast_w;
-      assign tele_tdata_o = edata_w;
-
-    end
-  endgenerate  /* g_telem_no_uart */
-
-  generate
-    if (TELEMETRY && TELE_UART) begin : g_uart_telemetry
-      //
-      //  Telemetry Read-Back via UART
-      ///
-
-      // USB UART settings
-      // localparam [15:0] UART_PRESCALE = 16'd33;  // For: 60.0 MHz / (230400 * 8)
-      localparam [15:0] UART_PRESCALE = 16'd54;  // For: 100.0 MHz / (230400 * 8)
-
-      reg send_q, ecycle_q;
-      wire xvalid, xready, xlast, gvalid, gready, uvalid, uready, tx_busy_w, select_w;
-      wire [7:0] xdata, gdata, udata;
-
-      assign ecycle_w = ecycle_q;
-
-      always @(posedge clock) begin
-        if (reset) begin
-          estart_q <= 1'b0;
-          ecycle_q <= 1'b0;
-          send_q   <= 1'b0;
-        end else begin
-          send_q <= ~send_ni & ~ecycle_w & ~tx_busy_w;
-
-          if (!ecycle_w && (send_q || uvalid && udata == "a")) begin
-            estart_q <= 1'b1;
-            ecycle_q <= 1'b1;
-          end else begin
-            estart_q <= select_w ? 1'b0 : estart_q;
-            ecycle_q <= estart_q || select_w;
-          end
-        end
-      end
-
-      // Convert 32b telemetry captures to ASCII hexadecimal //
-      hex_dump #(
-          .UNICODE(0),
-          .BLOCK_SRAM(1)
-      ) U_HEXDUMP1 (
-          .clock(clock),
-          .reset(reset),
-
-          .start_dump_i(estart_q),
-          .is_dumping_o(select_w),
-          .fifo_level_o(),
-
-          .s_tvalid(evalid_w),
-          .s_tready(eready_w),
-          .s_tkeep (ekeep_w),
-          .s_tlast (elast_w),
-          .s_tdata (edata_w),
-
-          .m_tvalid(xvalid),
-          .m_tready(xready),
-          .m_tkeep (),
-          .m_tlast (xlast),
-          .m_tdata (xdata)
-      );
-
-      assign gvalid = xvalid && !tx_busy_w;
-      assign xready = gready;
-      assign gdata  = xdata;
-
-      // Use the FTDI USB UART for dumping the telemetry (as ASCII hex) //
-      uart #(
-          .DATA_WIDTH(8)
-      ) U_UART1 (
-          .clk(clock),
-          .rst(reset),
-
-          .s_axis_tvalid(gvalid),
-          .s_axis_tready(gready),
-          .s_axis_tdata (gdata),
-
-          .m_axis_tvalid(uvalid),
-          .m_axis_tready(uready),
-          .m_axis_tdata (udata),
-
-          .rxd(uart_rx_i),
-          .txd(uart_tx_o),
-
-          .rx_busy(),
-          .tx_busy(tx_busy_w),
-          .rx_overrun_error(),
-          .rx_frame_error(),
-
-          .prescale(UART_PRESCALE)
-      );
-
-    end
-  endgenerate  /* TELEMETRY && TELE_UART */
 
 
 endmodule  /* ddr3_top */

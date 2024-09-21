@@ -44,8 +44,8 @@
         <File path="../../lib/misc-verilog-cores/usb/line_state.v" type="file.verilog" enable="1"/>
         <File path="../../lib/misc-verilog-cores/usb/usb_ulpi_top.v" type="file.verilog" enable="1"/>
         <File path="../../lib/misc-verilog-cores/usb/usb_ulpi_core.v" type="file.verilog" enable="1"/>
-        <File path="memreq.v" type="file.verilog" enable="1"/>
-        <File path="ddr3_top.v" type="file.verilog" enable="1"/>
+        <File path="../../rtl/extra/memreq.v" type="file.verilog" enable="1"/>
+        <File path="../../rtl/extra/ddr3_top.v" type="file.verilog" enable="1"/>
         <File path="usb_ddr3_top.v" type="file.verilog" enable="1"/>
         <File path="gw2a-tang-primer.cst" type="file.cst" enable="1"/>
         <File path="gw2a-tang-primer.sdc" type="file.sdc" enable="1"/>
