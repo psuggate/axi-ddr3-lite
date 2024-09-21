@@ -1,4 +1,12 @@
 `timescale 1ns / 100ps
+/**
+ * DDR3 controller with a simple AXI-Stream interface. Mostly just a demo, and
+ * for testing the DDR3 controller.
+ *
+ * Copyright 2023, Patrick Suggate.
+ *
+ */
+
 // Comment this out to speed up Icarus Verilog simulations
 `define __gowin_for_the_win
 
@@ -6,6 +14,7 @@
 // Slower simulation performance, as the IOB's have to be simulated
 `define __gowin_for_the_win
 `endif  /* !__icarus */
+
 module ddr3_top #(
     parameter SRAM_BYTES   = 2048,
     parameter DATA_WIDTH   = 32,
