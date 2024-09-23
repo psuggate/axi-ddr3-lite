@@ -1,7 +1,7 @@
 `timescale 1ns / 100ps
 /**
  * Converts simple memory-controller commands into DFI commands.
- * 
+ *
  * Notes:
  *  - assumes that the AXI4 interface converts write-data into 128-bit chunks,
  *    (written as 4x 32-bit sequential transfers) padding as required;
@@ -10,111 +10,91 @@
  *    required;
  *  - assumes that the memory controller and the AXI4 bus are within the same
  *    clock-domain;
- * 
+ *
+ * Todo:
+ *  - extend the CLOCK_SHIFT range (via parameter or AUTO-READ-CALIBRATION), to
+ *    use 3-bits (requiring an extra layer of pipeline registers) ??
+ *
  * Copyright 2023, Patrick Suggate.
- * 
+ *
  */
-module gw2a_ddr3_phy (
-    clock,
-    reset,
+module gw2a_ddr3_phy #(
+    parameter DDR3_WIDTH = 16,
+    parameter DDR3_MASKS = DDR3_WIDTH / 8,
 
-    clk_ddr,
+    localparam MSB = DDR3_WIDTH - 1,
+    localparam QSB = DDR3_MASKS - 1,
 
-    dfi_cke_i,
-    dfi_rst_ni,
-    dfi_cs_ni,
-    dfi_ras_ni,
-    dfi_cas_ni,
-    dfi_we_ni,
-    dfi_odt_i,
-    dfi_bank_i,
-    dfi_addr_i,
+    localparam DSB = DDR3_WIDTH + MSB,
+    localparam SSB = DDR3_MASKS + QSB,
 
-    dfi_wstb_i,
-    dfi_wren_i,
-    dfi_mask_i,
-    dfi_data_i,
+    parameter ADDR_BITS = 14,
+    localparam ASB = ADDR_BITS - 1,
 
-    dfi_rden_i,
-    dfi_rvld_o,
-    dfi_last_o,
-    dfi_data_o,
+    parameter INVERT_MCLK = 0,
+    parameter INVERT_DCLK = 0,
+    parameter READ_CALIB  = 1,
+    parameter WR_PREFETCH = 1'b0,
+    parameter WRITE_DELAY = 2'b00,
+    parameter CLOCK_SHIFT = 2'b10
+) (
+    input clock,
+    input reset,
 
-    ddr_ck_po,
-    ddr_ck_no,
-    ddr_cke_o,
-    ddr_rst_no,
-    ddr_cs_no,
-    ddr_ras_no,
-    ddr_cas_no,
-    ddr_we_no,
-    ddr_odt_o,
-    ddr_ba_o,
-    ddr_a_o,
-    ddr_dm_o,
-    ddr_dqs_pio,
-    ddr_dqs_nio,
-    ddr_dq_io
+    input clk_ddr,  // Same phase, but twice freq of 'clock'
+
+    input dfi_cke_i,
+    input dfi_rst_ni,
+    input dfi_cs_ni,
+    input dfi_ras_ni,
+    input dfi_cas_ni,
+    input dfi_we_ni,
+    input dfi_odt_i,
+
+    input [  2:0] dfi_bank_i,
+    input [ASB:0] dfi_addr_i,
+
+    input dfi_wstb_i,
+    input dfi_wren_i,
+    input [SSB:0] dfi_mask_i,
+    input [DSB:0] dfi_data_i,
+
+    input dfi_rden_i,
+    output dfi_rvld_o,
+    output dfi_last_o,
+    output [DSB:0] dfi_data_o,
+
+    // For WRITE- & READ- CALIBRATION
+    input dfi_align_i,
+    output dfi_calib_o,
+    output [2:0] dfi_shift_o,
+
+    output ddr_ck_po,
+    output ddr_ck_no,
+    output ddr_cke_o,
+    output ddr_rst_no,
+    output ddr_cs_no,
+    output ddr_ras_no,
+    output ddr_cas_no,
+    output ddr_we_no,
+    output ddr_odt_o,
+    output [2:0] ddr_ba_o,
+    output [ASB:0] ddr_a_o,
+    output [QSB:0] ddr_dm_o,
+    inout [QSB:0] ddr_dqs_pio,
+    inout [QSB:0] ddr_dqs_nio,
+    inout [MSB:0] ddr_dq_io
 );
 
-  parameter DDR3_WIDTH = 16;
-  parameter DDR3_MASKS = DDR3_WIDTH / 8;
+`ifdef __icarus
+  // The GoWin GW2A TLVDS instance is not directly available/visible, for the
+  // DQS/DQS# signals, but we use them in simulations.
+  localparam USE_TLVDS = 1'b1;
+`else  /* !__icarus */
+  localparam USE_TLVDS = 1'b0;
+`endif  /* !__icarus */
 
-  localparam MSB = DDR3_WIDTH - 1;
-  localparam QSB = DDR3_MASKS - 1;
-
-  localparam DSB = DDR3_WIDTH + MSB;
-  localparam SSB = DDR3_MASKS + QSB;
-
-  parameter ADDR_BITS = 14;
-  localparam ASB = ADDR_BITS - 1;
-
-  parameter WR_PREFETCH = 1'b0;
-  parameter CLOCK_SHIFT = 3'b100;
-
-
-  input clock;
-  input reset;
-
-  input clk_ddr;  // Same phase, but twice freq of 'clock'
-
-  input dfi_cke_i;
-  input dfi_rst_ni;
-  input dfi_cs_ni;
-  input dfi_ras_ni;
-  input dfi_cas_ni;
-  input dfi_we_ni;
-  input dfi_odt_i;
-
-  input [2:0] dfi_bank_i;
-  input [ASB:0] dfi_addr_i;
-
-  input dfi_wstb_i;
-  input dfi_wren_i;
-  input [SSB:0] dfi_mask_i;
-  input [DSB:0] dfi_data_i;
-
-  input dfi_rden_i;
-  output dfi_rvld_o;
-  output dfi_last_o;
-  output [DSB:0] dfi_data_o;
-
-  output ddr_ck_po;
-  output ddr_ck_no;
-  output ddr_cke_o;
-  output ddr_rst_no;
-  output ddr_cs_no;
-  output ddr_ras_no;
-  output ddr_cas_no;
-  output ddr_we_no;
-  output ddr_odt_o;
-  output [2:0] ddr_ba_o;
-  output [ASB:0] ddr_a_o;
-  output [QSB:0] ddr_dm_o;
-  inout [QSB:0] ddr_dqs_pio;
-  inout [QSB:0] ddr_dqs_nio;
-  inout [MSB:0] ddr_dq_io;
-
+  // -- DDR3 PHY State & Signals -- //
 
   reg cke_q, rst_nq, cs_nq;
   reg ras_nq, cas_nq, we_nq, odt_q;
@@ -125,6 +105,12 @@ module gw2a_ddr3_phy (
   wire [SSB:0] mask_w;
   wire [DSB:0] data_w;
 
+  reg cyc_q, cal_q;
+  reg [3:0] cnt_q;
+  reg [2:0] rdcal;
+
+  assign dfi_calib_o = cnt_q[3];
+  assign dfi_shift_o = rdcal;
 
   // -- Write-Data Prefetch and Registering -- //
 
@@ -155,17 +141,15 @@ module gw2a_ddr3_phy (
     end
   endgenerate
 
-
   // -- DFI Read-Data Signal Assignments -- //
 
   assign dfi_rvld_o = valid_q;
   assign dfi_last_o = last_q;
 
-
   // -- DDR3 Signal Assignments -- //
 
-  assign ddr_ck_po  = ~clock;
-  assign ddr_ck_no  = clock;
+  assign ddr_ck_po  = INVERT_MCLK ? clock : ~clock;
+  assign ddr_ck_no  = INVERT_MCLK ? ~clock : clock;
 
   assign ddr_cke_o  = cke_q;
   assign ddr_rst_no = rst_nq;
@@ -176,7 +160,6 @@ module gw2a_ddr3_phy (
   assign ddr_odt_o  = odt_q;
   assign ddr_ba_o   = ba_q;
   assign ddr_a_o    = addr_q;
-
 
   // -- DDR3 Command Signals -- //
 
@@ -204,7 +187,6 @@ module gw2a_ddr3_phy (
     end
   end
 
-
   // -- Read Data Valid Signals -- //
 
   always @(posedge clock) begin
@@ -218,79 +200,112 @@ module gw2a_ddr3_phy (
     end
   end
 
+  //
+  //  WRITE Datapath, Masks, and Strobes
+  ///
 
-  // -- DDR3 Data Path IOBs -- //
+  wire [MSB:0] wdat_lo_w, wdat_hi_w, rdat_lo_w, rdat_hi_w;
+  wire [QSB:0] mask_hi_w, mask_lo_w, dm_w, en_w, dqs_pw, dqs_nw;
+  wire dqs_en_nw;
 
-  generate
-    for (genvar ii = 0; ii < DDR3_WIDTH; ii++) begin : gen_dq_iobs
+  assign {mask_hi_w, mask_lo_w} = mask_w;
+  assign dfi_data_o = {rdat_hi_w, rdat_lo_w};
+  assign {wdat_hi_w, wdat_lo_w} = data_w;
+  assign dqs_en_nw = ~dfi_wstb_i & ~dfi_wren_i;
 
-      gw2a_ddr_iob #(
-          .SHIFT(CLOCK_SHIFT)
-      ) u_gw2a_dq_iob (
-          .PCLK(clock),
-          .FCLK(~clk_ddr),
-          .RESET(reset),
-          .OEN(~dfi_wren_i),
-          .D0(data_w[ii]),
-          .D1(data_w[DDR3_WIDTH+ii]),
-          .Q0(dfi_data_o[ii]),
-          .Q1(dfi_data_o[DDR3_WIDTH+ii]),
-          .IO(ddr_dq_io[ii])
-      );
+  // -- IOBs for the DDR3 WRITE Data -- //
 
+  OSER4 u_gw2a_dm_oddr[QSB:0] (
+      .PCLK(clock),
+      .FCLK(INVERT_DCLK ? ~clk_ddr : clk_ddr),
+      .RESET(reset),
+      .TX0(~dfi_wren_i),
+      .TX1(~dfi_wren_i),
+      .D0(mask_lo_w),
+      .D1(mask_lo_w),
+      .D2(mask_hi_w),
+      .D3(mask_hi_w),
+      .Q0(ddr_dm_o),
+      .Q1()
+  );
+
+  // -- IOBs for the DDR3 WRITE Data-Masks -- //
+
+  gw2a_ddr_iob #(
+      .WRDLY(2'd0)
+  ) u_gw2a_dq_iob[MSB:0] (
+      .PCLK(clock),
+      .FCLK(INVERT_DCLK ? ~clk_ddr : clk_ddr),
+      .RESET(reset),
+      .OEN(~dfi_wren_i),
+      .SHIFT(READ_CALIB ? rdcal[1:0] : CLOCK_SHIFT),
+      .D0(wdat_lo_w),
+      .D1(wdat_hi_w),
+      .Q0(rdat_lo_w),
+      .Q1(rdat_hi_w),
+      .IO(ddr_dq_io)
+  );
+
+  // -- READ- & WRITE- Data Strobes -- //
+
+  gw2a_ddr_iob #(
+      .WRDLY(WRITE_DELAY),
+      .TLVDS(USE_TLVDS)
+  ) u_gw2a_dqs_iob[QSB:0] (
+      .PCLK(clock),
+      .FCLK(INVERT_DCLK ? ~clk_ddr : clk_ddr),
+      .RESET(reset),
+      .OEN(dqs_en_nw),
+      .SHIFT(READ_CALIB ? rdcal[1:0] : CLOCK_SHIFT),
+      .D0(1'b1),
+      .D1(1'b0),
+      .Q0(dqs_pw),
+      .Q1(dqs_nw),
+      .IO(ddr_dqs_pio),
+      .IOB(ddr_dqs_nio)
+  );
+
+  // -- READ-CALIBRATION -- //
+
+  reg rcv_q, err_q;
+  reg [2:0] pat_q;
+  reg [1:0] wcal, pre_q;
+  wire [2:0] pat_w;
+  wire err_w;
+
+  assign pat_w = {dqs_nw[0], dqs_pw[0], pat_q[2]};
+  assign err_w = (^dqs_nw) | (^dqs_pw);
+
+  always @(posedge clock) begin
+    // Bit-pattern representing the last 3x DQS/DQS# values
+    pat_q <= pat_w;
+
+    if (reset || !cyc_q) begin
+      rcv_q <= 1'b0;
+      err_q <= 1'b0;
+    end else if (cyc_q) begin
+      rcv_q <= pat_q == 3'd2 && !err_q;
+      err_q <= pat_q != 3'd2 || err_q || err_w;
     end
-  endgenerate
 
-
-  // -- Write-Data Masks Outputs -- //
-
-  generate
-    for (genvar ii = 0; ii < DDR3_MASKS; ii++) begin : gen_dm_iobs
-
-      ODDR u_gw2a_dm_oddr (
-          .CLK(~clock),
-          .TX (1'b0),
-          .D0 (mask_w[ii]),
-          .D1 (mask_w[DDR3_MASKS+ii]),
-          .Q0 (ddr_dm_o[ii]),
-          .Q1 ()
-      );
-
+    if (reset || err_q) begin
+      cnt_q <= 4'd0;
+    end else if (rcv_q && !cyc_q && !cnt_q[3]) begin
+      cnt_q <= cnt_q + 1;
     end
-  endgenerate
 
-
-  // -- Read- & Write- Data Strobes -- //
-
-  wire dqs_w;
-
-  assign dqs_w = ~dfi_wstb_i & ~dfi_wren_i;
-
-  generate
-    for (genvar ii = 0; ii < DDR3_MASKS; ii++) begin : gen_dqs_iobs
-
-      gw2a_ddr_iob #(
-          .SHIFT(CLOCK_SHIFT),
-`ifdef __icarus
-          .TLVDS(1'b1)
-`else
-          .TLVDS(1'b0)
-`endif
-      ) u_gw2a_dqs_iob (
-          .PCLK(clock),
-          .FCLK(clk_ddr),
-          .RESET(reset),
-          .OEN(dqs_w),
-          .D0(1'b1),
-          .D1(1'b0),
-          .Q0(),
-          .Q1(),
-          .IO(ddr_dqs_pio[ii]),
-          .IOB(ddr_dqs_nio[ii])
-      );
-
+    if (reset) begin
+      cyc_q <= 1'b0;
+      cal_q <= 1'b0;
+      rdcal <= {1'b0, CLOCK_SHIFT};
+    end else begin
+      cyc_q <= valid_q;
+      if (!cyc_q && err_q) begin
+        // Rx. error occurred, so advance the clock-shift value
+        rdcal <= rdcal + 1;
+      end
     end
-  endgenerate
+  end
 
 
-endmodule  // gw2a_ddr3_phy
+endmodule  /* gw2a_ddr3_phy */

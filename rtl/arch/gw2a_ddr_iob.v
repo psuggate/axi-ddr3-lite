@@ -1,55 +1,70 @@
 `timescale 1ns / 100ps
-module gw2a_ddr_iob (
-    PCLK,
-    FCLK,
-    RESET,
-    //  CALIB,
-    OEN,
-    D0,
-    D1,
-    Q0,
-    Q1,
-    IO,
-    IOB
+module gw2a_ddr_iob #(
+    parameter [1:0] WRDLY = 2'b00,
+    parameter TLVDS = 1'b0
+) (
+    input PCLK,
+    input FCLK,
+    input RESET,
+    input [1:0] SHIFT,
+    input OEN,
+    input D0,
+    input D1,
+    output Q0,
+    output Q1,
+    inout IO,
+    inout IOB
 );
 
-  parameter [2:0] SHIFT = 3'b000;
-  parameter TLVDS = 1'b0;
+  wire D0_w, D1_w, D2_w, D3_w, TX0_w, TX1_w;
+  wire d_iw, d_ow, t_w;
+  reg CALIB, D1_q, OEN_q;
+  reg [1:0] shift;
 
-  input PCLK;
-  input FCLK;
-  input RESET;
-  // input CALIB;
-  input OEN;
-  input D0;
-  input D1;
-  output Q0;
-  output Q1;
-  inout IO;
-  inout IOB;
+  assign D0_w  = WRDLY[0] ? D1_q : D0;
+  assign D1_w  = D0;
+  assign D2_w  = WRDLY[0] ? D0 : D1;
+  assign D3_w  = D1;
 
-
-  reg q0_r, q1_r, d0_q;
-  wire d_iw, di0_w, di1_w, di2_w, di3_w, d_ow, t_w;
-  wire CALIB = 1'b0;
-
-  assign Q0 = SHIFT[2] ? d0_q : q0_r;
-  assign Q1 = SHIFT[2] ? q0_r : q1_r;
-
-
-  always @* begin
-    case (SHIFT[1:0])
-      default: {q0_r, q1_r} = {di0_w, di2_w};
-      2'b01:   {q0_r, q1_r} = {di1_w, di3_w};
-      2'b10:   {q0_r, q1_r} = {di2_w, di0_w};
-      2'b11:   {q0_r, q1_r} = {di3_w, di1_w};
-    endcase
-  end
+  assign TX0_w = WRDLY[0] ? OEN_q : OEN;
+  assign TX1_w = OEN;
 
   always @(posedge PCLK) begin
-    d0_q <= q1_r;
+    D1_q  <= D1;
+    OEN_q <= OEN;
   end
 
+  OSER4 #(
+      .HWL(WRDLY[1] ? "true" : "false"),  // Causes output to be delayed half-PCLK
+      .TXCLK_POL(WRDLY[0])  // Advances OE by PCLK quadrant
+  ) u_oser4 (
+      .FCLK(FCLK),  // Fast (x2) clock
+      .PCLK(PCLK),  // Bus (x1) clock
+      .RESET(RESET),
+      .TX0(TX0_w),
+      .TX1(TX1_w),
+      .D0(D0_w),
+      .D1(D1_w),
+      .D2(D2_w),
+      .D3(D3_w),
+      .Q0(d_ow),
+      .Q1(t_w)
+  );
+
+  // Advance the internal shifter of the IDES4 until it matches the desired
+  // SHIFT-value.
+  always @(posedge PCLK or posedge RESET) begin
+    if (RESET) begin
+      CALIB <= 1'b0;
+      shift <= 2'd0;
+    end else if (CALIB) begin
+      CALIB <= 1'b0;
+      shift <= shift + 1;
+    end else if (shift != SHIFT[1:0]) begin
+      CALIB <= 1'b1;
+      shift <= shift;
+    end
+  end
 
   IDES4 u_ides4 (
       .FCLK(FCLK),
@@ -57,27 +72,11 @@ module gw2a_ddr_iob (
       .RESET(RESET),
       .CALIB(CALIB),
       .D(d_iw),
-      .Q0(di0_w),
-      .Q1(di1_w),
-      .Q2(di2_w),
-      .Q3(di3_w)
+      .Q0(Q0),
+      .Q1(),
+      .Q2(Q1),
+      .Q3()
   );
-
-
-  OSER4 u_oser4 (
-      .FCLK(FCLK),
-      .PCLK(PCLK),
-      .RESET(RESET),
-      .TX0(OEN),
-      .TX1(OEN),
-      .D0(D0),
-      .D1(D0),
-      .D2(D1),
-      .D3(D1),
-      .Q0(d_ow),
-      .Q1(t_w)
-  );
-
 
   generate
     if (TLVDS == 1'b1) begin : g_tlvds
@@ -104,5 +103,4 @@ module gw2a_ddr_iob (
     end  // !g_tlvds
   endgenerate
 
-
-endmodule  // gw2a_ddr_iob
+endmodule  /* gw2a_ddr_iob */
