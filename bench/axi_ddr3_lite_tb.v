@@ -361,8 +361,7 @@ module axi_ddr3_lite_tb;
       .WR_PREFETCH  (WR_PREFETCH),
       .LOW_LATENCY  (LOW_LATENCY),
       .AXI_ID_WIDTH (REQID),
-      .MEM_ID_WIDTH (REQID),
-      .BYPASS_ENABLE(BYPASS_ENABLE)
+      .MEM_ID_WIDTH (REQID)
   ) ddr_core_inst (
       .clock(clock),  // system clock
       .reset(reset),  // synchronous reset
@@ -398,20 +397,6 @@ module axi_ddr3_lite_tb;
       .axi_rresp_o(rresp),
       .axi_rid_o(rid),
       .axi_rdata_o(rdata),
-
-      .byp_arvalid_i(abvalid),  // [optional] fast-read port
-      .byp_arready_o(abready),
-      .byp_araddr_i(byaddr),
-      .byp_arid_i(byid),
-      .byp_arlen_i(bylen),
-      .byp_arburst_i(byburst),
-
-      .byp_rready_i(dbready),
-      .byp_rvalid_o(dbvalid),
-      .byp_rlast_o(dblast),
-      .byp_rresp_o(dbresp),
-      .byp_rid_o(dbid),
-      .byp_rdata_o(bdata),
 
       .dfi_rst_no(dfi_rst_n),
       .dfi_cke_o (dfi_cke),

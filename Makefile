@@ -37,8 +37,6 @@ PIC	:= $(SVG:.svg=.pdf) $(DOT:.dot=.pdf)
 
 # Pandoc settings:
 FLT	?= --citeproc
-# FLT	?= --filter=pandoc-include --filter=pandoc-fignos --filter=pandoc-citeproc
-#OPT	?= --number-sections --bibliography=$(REF)
 OPT	?= --number-sections
 
 doc:	$(PDF) $(PIC) $(PNG) $(INC)
